@@ -227,14 +227,14 @@ export const aggregateTool: ProcessingAlgorithm = {
 };
 
 /** Largest iteration count Smooth accepts; kept in sync with the backend. */
-export const SMOOTH_MAX_ITERATIONS = 10;
+const SMOOTH_MAX_ITERATIONS = 10;
 
 /**
  * Interpolate the point a fraction `wa` of the way from `a` toward `b` (so
  * `wa = 0.75` lands closer to `a`). Z/elevation is carried through and
  * interpolated when both endpoints are 3D; otherwise the result is 2D.
  */
-export function chaikinPoint(a: Position, b: Position, wa: number): Position {
+function chaikinPoint(a: Position, b: Position, wa: number): Position {
   const wb = 1 - wa;
   const x = a[0] * wa + b[0] * wb;
   const y = a[1] * wa + b[1] * wb;
@@ -253,7 +253,7 @@ export function chaikinPoint(a: Position, b: Position, wa: number): Position {
  * ``_chaikin`` so the "Sidecar (GeoPandas)" / "Python (Pyodide)" engines return
  * bit-identical coordinates.
  */
-export function chaikinOnce(points: Position[], closed: boolean): Position[] {
+function chaikinOnce(points: Position[], closed: boolean): Position[] {
   const n = points.length;
   if (n < (closed ? 3 : 2)) return points;
   const out: Position[] = [];
@@ -278,14 +278,14 @@ export function chaikinOnce(points: Position[], closed: boolean): Position[] {
 }
 
 /** Smooth an open line's coordinates with `iterations` Chaikin passes. */
-export function smoothLine(coords: Position[], iterations: number): Position[] {
+function smoothLine(coords: Position[], iterations: number): Position[] {
   let pts: Position[] = coords.map((p) => p.slice(0, 3));
   for (let k = 0; k < iterations; k += 1) pts = chaikinOnce(pts, false);
   return pts;
 }
 
 /** Smooth a closed polygon ring, keeping it closed (first === last). */
-export function smoothRing(ring: Position[], iterations: number): Position[] {
+function smoothRing(ring: Position[], iterations: number): Position[] {
   const closed =
     ring.length > 1 &&
     ring[0][0] === ring[ring.length - 1][0] &&
@@ -301,7 +301,7 @@ export function smoothRing(ring: Position[], iterations: number): Position[] {
 }
 
 /** Apply Chaikin smoothing to a single geometry; points pass through unchanged. */
-export function smoothGeometry(geometry: Geometry, iterations: number): Geometry {
+function smoothGeometry(geometry: Geometry, iterations: number): Geometry {
   switch (geometry.type) {
     case "LineString":
       return {
@@ -400,7 +400,7 @@ export const smoothTool: ProcessingAlgorithm = {
  * line of a (multi)linestring, or the single coordinate of a point. Used by
  * Extract vertices and Points along geometry to walk coordinates uniformly.
  */
-export function geometryParts(geometry: Geometry): Position[][] {
+function geometryParts(geometry: Geometry): Position[][] {
   switch (geometry.type) {
     case "Point":
       return [[geometry.coordinates]];
@@ -422,7 +422,7 @@ export function geometryParts(geometry: Geometry): Position[][] {
 }
 
 /** Line/polygon coordinate rings of a geometry, unwrapping GeometryCollections. */
-export function linearParts(geometry: Geometry): Position[][] {
+function linearParts(geometry: Geometry): Position[][] {
   if (geometry.type === "GeometryCollection") return geometry.geometries.flatMap(linearParts);
   return isFamily(geometry, "line") || isFamily(geometry, "polygon") ? geometryParts(geometry) : [];
 }
@@ -475,13 +475,13 @@ export const extractVerticesTool: ProcessingAlgorithm = {
 };
 
 /** Units accepted by Points along geometry; @turf/distance speaks all three. */
-export type AlongUnits = "kilometers" | "meters" | "miles";
+type AlongUnits = "kilometers" | "meters" | "miles";
 
 /**
  * Hard ceiling on generated points so a tiny interval on a long geometry
  * cannot freeze the tab (the same guard {@link GRID_HARD_CAP} gives the grid).
  */
-export const POINTS_ALONG_HARD_CAP = 1_000_000;
+const POINTS_ALONG_HARD_CAP = 1_000_000;
 
 /**
  * Forward-only cursor that yields a point every {@link interval} (in Turf's
@@ -493,7 +493,7 @@ export const POINTS_ALONG_HARD_CAP = 1_000_000;
  * segment is visited once, so a walk is O(points + vertices) rather than
  * re-scanning the ring from its first vertex for every point.
  */
-export function* walkAlong(
+function* walkAlong(
   positions: Position[],
   interval: number,
   units: AlongUnits,
@@ -546,7 +546,7 @@ export function* walkAlong(
 }
 
 /** Haversine lengths of an open coordinate ring's segments. */
-export function ringSegmentLengths(positions: Position[], units: AlongUnits): number[] {
+function ringSegmentLengths(positions: Position[], units: AlongUnits): number[] {
   const lengths: number[] = [];
   for (let i = 1; i < positions.length; i += 1) {
     lengths.push(distance(positions[i - 1], positions[i], { units }));
@@ -691,7 +691,7 @@ export const pointsAlongGeometryTool: ProcessingAlgorithm = {
 };
 
 /** Hard ceiling on grid cells so a tiny cell size cannot freeze the tab. */
-export const GRID_HARD_CAP = 1_000_000;
+const GRID_HARD_CAP = 1_000_000;
 
 export const gridTool: ProcessingAlgorithm = {
   id: "grid",

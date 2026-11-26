@@ -150,9 +150,9 @@ export function computeStat(nums: number[], statistic: string): number | null {
  * meant. Spelling the accepted words out keeps the two engines on one reading
  * and turns a typo into an error instead of a silent dissolve.
  */
-export const TRUE_STRINGS = new Set(["true", "1", "yes", "on"]);
+const TRUE_STRINGS = new Set(["true", "1", "yes", "on"]);
 
-export const FALSE_STRINGS = new Set(["", "false", "0", "no", "off"]);
+const FALSE_STRINGS = new Set(["", "false", "0", "no", "off"]);
 
 /**
  * Read a checkbox parameter the way `vector_ops._boolean_param` does.

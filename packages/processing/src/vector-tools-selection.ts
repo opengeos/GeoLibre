@@ -15,7 +15,7 @@ import {
 } from "./vector-tools-common";
 
 /** Comparison operators for the Select by value tool; kept in sync with the backend. */
-export const SELECT_VALUE_OPERATORS = new Set([
+const SELECT_VALUE_OPERATORS = new Set([
   "eq",
   "neq",
   "gt",
@@ -29,7 +29,7 @@ export const SELECT_VALUE_OPERATORS = new Set([
 ]);
 
 /** Render a GeoJSON property value as a string, matching the backend's `_value_to_string`. */
-export function valueToString(value: unknown): string {
+function valueToString(value: unknown): string {
   if (typeof value === "boolean") return value ? "true" : "false";
   // Arrays/objects: canonical JSON (sorted keys), matching json.dumps on the
   // Python side, so eq/contains agree across engines for non-scalar values.
@@ -44,7 +44,7 @@ export function valueToString(value: unknown): string {
  * string) match only the is-empty/is-not-empty operators (SQL-like). Mirrors
  * `_match_value` in the Python backend so all three engines agree.
  */
-export function matchesValue(value: unknown, operator: string, raw: string): boolean {
+function matchesValue(value: unknown, operator: string, raw: string): boolean {
   const isEmpty =
     value === null ||
     value === undefined ||

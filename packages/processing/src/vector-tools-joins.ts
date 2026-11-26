@@ -24,12 +24,12 @@ import {
   bboxesOverlap,
 } from "./vector-tools-common";
 
-export type SpatialJoinHow = "inner" | "left";
+type SpatialJoinHow = "inner" | "left";
 
 /** Valid spatial-join predicates/join-types; kept in sync with the backend guard. */
-export const SPATIAL_JOIN_PREDICATES: SpatialPredicate[] = ["intersects", "within", "contains"];
+const SPATIAL_JOIN_PREDICATES: SpatialPredicate[] = ["intersects", "within", "contains"];
 
-export const SPATIAL_JOIN_HOW: SpatialJoinHow[] = ["inner", "left"];
+const SPATIAL_JOIN_HOW: SpatialJoinHow[] = ["inner", "left"];
 
 /**
  * Like {@link rawPredicate} but treats an unevaluable pair as a non-match rather
@@ -37,11 +37,7 @@ export const SPATIAL_JOIN_HOW: SpatialJoinHow[] = ["inner", "left"];
  * (a pair that can't be evaluated simply doesn't match); the complement
  * (`disjoint`) must instead distinguish "no match" from "couldn't evaluate".
  */
-export function matchesPredicate(
-  input: Feature,
-  join: Feature,
-  predicate: SpatialPredicate,
-): boolean {
+function matchesPredicate(input: Feature, join: Feature, predicate: SpatialPredicate): boolean {
   try {
     return rawPredicate(input, join, predicate);
   } catch {
@@ -91,7 +87,7 @@ export function joinFieldOutputNames(
 }
 
 /** Copy `properties` with each key renamed through `names` (unmapped keys kept). */
-export function renameProperties(
+function renameProperties(
   properties: GeoJsonProperties,
   names: Map<string, string>,
 ): Record<string, unknown> {
@@ -228,13 +224,13 @@ export const spatialJoinTool: ProcessingAlgorithm = {
 };
 
 /** Statistics Summarize within adds for its optional numeric field. */
-export const SUMMARIZE_STATS = ["sum", "mean", "min", "max"] as const;
+const SUMMARIZE_STATS = ["sum", "mean", "min", "max"] as const;
 
 /**
  * Area in square metres of a Polygon or MultiPolygon on the active body: each
  * outer ring minus its holes, measured geodesically like the Measure tool.
  */
-export function polygonAreaM2(geometry: Polygon | MultiPolygon): number {
+function polygonAreaM2(geometry: Polygon | MultiPolygon): number {
   const polygons = geometry.type === "Polygon" ? [geometry.coordinates] : geometry.coordinates;
   let total = 0;
   for (const rings of polygons) {
@@ -250,7 +246,7 @@ export function polygonAreaM2(geometry: Polygon | MultiPolygon): number {
  * full polygon-clipping pass, which costs milliseconds on detailed parcels, so
  * the pair cap alone does not bound the runtime.
  */
-export const MAX_SUMMARIZE_CLIPS = 20_000;
+const MAX_SUMMARIZE_CLIPS = 20_000;
 
 /**
  * Area of the union of the overlap pieces inside one polygon, so two pieces of
@@ -258,7 +254,7 @@ export const MAX_SUMMARIZE_CLIPS = 20_000;
  * null when Turf cannot union them: summing the pieces instead would double
  * count exactly the overlaps the union exists to remove.
  */
-export function coveredAreaM2(pieces: Feature<Polygon | MultiPolygon>[]): number | null {
+function coveredAreaM2(pieces: Feature<Polygon | MultiPolygon>[]): number | null {
   if (!pieces.length) return 0;
   if (pieces.length === 1) return polygonAreaM2(pieces[0].geometry);
   try {
@@ -511,14 +507,14 @@ export const summarizeWithinTool: ProcessingAlgorithm = {
  * the persistent-join engine's key — so the two client-side joins cannot
  * drift; the backend's ``_attribute_join_key`` remains the Python mirror.
  */
-export const attributeJoinKey = layerJoinKey;
+const attributeJoinKey = layerJoinKey;
 
 /**
  * Join types accepted by the Attribute join tool. Kept local (rather than
  * reusing the spatial join's set) so a future spatial-join-only option cannot
  * silently become valid here; kept in sync with the backend's `_ATTRIBUTE_JOIN_HOW`.
  */
-export const ATTRIBUTE_JOIN_HOW = ["inner", "left"] as const;
+const ATTRIBUTE_JOIN_HOW = ["inner", "left"] as const;
 
 export const attributeJoinTool: ProcessingAlgorithm = {
   id: "attribute-join",

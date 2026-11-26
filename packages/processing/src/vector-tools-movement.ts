@@ -37,7 +37,7 @@ import {
  * non-numeric. Reuses the aggregate engine's coercion (numbers pass through,
  * numeric strings parse, booleans map to 1/0).
  */
-export function numberField(props: GeoJsonProperties, field: string | undefined): number | null {
+function numberField(props: GeoJsonProperties, field: string | undefined): number | null {
   if (!field) return null;
   return toNumeric(props?.[field]);
 }
@@ -76,7 +76,7 @@ export function parseTimestamp(value: unknown): number | null {
 }
 
 /** A point with a parsed timestamp, used by the movement tools. */
-export interface TimedPoint {
+interface TimedPoint {
   coord: Position;
   time: number;
   props: GeoJsonProperties;
@@ -90,7 +90,7 @@ export interface TimedPoint {
  * lumped under one anonymous trajectory (which would wrongly connect unrelated
  * targets). Both kinds are dropped.
  */
-export function collectTimedPoints(
+function collectTimedPoints(
   fc: FeatureCollection,
   timeField: string,
   idField: string | undefined,
@@ -282,7 +282,7 @@ export const cellSectorsTool: ProcessingAlgorithm = {
  * the literal unit strings (e.g. "m/s", not "ms") so the `speed_units` value in
  * the output GeoJSON is unambiguous to downstream consumers.
  */
-export const SPEED_FACTORS: Record<string, number> = {
+const SPEED_FACTORS: Record<string, number> = {
   "m/s": 1,
   "km/h": 3.6,
   mph: 2.2369362920544,
@@ -406,7 +406,7 @@ export const trajectorySpeedTool: ProcessingAlgorithm = {
  * formed stop jumps the anchor.
  * Larger inputs get a clear "split the layer" error rather than a frozen tab.
  */
-export const STOPS_MAX_POINTS = 5_000;
+const STOPS_MAX_POINTS = 5_000;
 
 export const detectStopsTool: ProcessingAlgorithm = {
   id: "detect-stops",
@@ -582,10 +582,10 @@ export const detectStopsTool: ProcessingAlgorithm = {
  * runs are far cheaper because the time-sorted loop breaks out once the gap is
  * exceeded; the cap only rejects layers whose worst case would freeze the tab.
  */
-export const PROXIMITY_MAX_PAIRS = 2_000_000;
+const PROXIMITY_MAX_PAIRS = 2_000_000;
 
 /** Multipliers from each supported time unit to milliseconds. */
-export const TIME_UNIT_MS: Record<string, number> = {
+const TIME_UNIT_MS: Record<string, number> = {
   seconds: 1000,
   minutes: 60_000,
   hours: 3_600_000,

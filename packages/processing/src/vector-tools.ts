@@ -1,18 +1,12 @@
 import { featureCollection } from "@turf/helpers";
 import type { Feature, LineString, MultiLineString } from "geojson";
 import {
-  decodePolyline,
   decodePolylineDetailed,
   encodePolyline,
   type GeoLibreLayer,
 } from "@geolibre/core/worker-safe";
 import type { ProcessingAlgorithm } from "./types";
-import {
-  MAX_CLIENT_PAIRS,
-  requireFeatures,
-  booleanParam,
-  hasPositions,
-} from "./vector-tools-common";
+import { requireFeatures } from "./vector-tools-common";
 export {
   parseTimestamp,
   cellSectorsTool,

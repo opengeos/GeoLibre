@@ -9,7 +9,6 @@ import simplify from "@turf/simplify";
 import intersect from "@turf/intersect";
 import difference from "@turf/difference";
 import union from "@turf/union";
-import distance from "@turf/distance";
 import bbox from "@turf/bbox";
 import { featureCollection } from "@turf/helpers";
 import type { Feature, FeatureCollection, GeoJsonProperties, Polygon, MultiPolygon } from "geojson";
@@ -35,7 +34,7 @@ import {
 } from "./vector-tools-common";
 
 /** Split Polygon/MultiPolygon features into single-part Polygon features. */
-export function explodeToPolygons(features: Feature[]): Feature<Polygon>[] {
+function explodeToPolygons(features: Feature[]): Feature<Polygon>[] {
   const result: Feature<Polygon>[] = [];
   for (const feature of features) {
     const geometry = feature.geometry;
@@ -55,7 +54,7 @@ export function explodeToPolygons(features: Feature[]): Feature<Polygon>[] {
 }
 
 /** Reassemble Turf dissolve parts into one Polygon/MultiPolygon per group. */
-export function collectDissolveParts(
+function collectDissolveParts(
   dissolved: FeatureCollection<Polygon>,
   field?: string,
   originalProperties?: ReadonlyMap<string, GeoJsonProperties>,
@@ -91,14 +90,14 @@ export function collectDissolveParts(
 }
 
 /** Which side of a feature's boundary {@link bufferTool} keeps. */
-export type BufferSide = "outside" | "inside" | "both";
+type BufferSide = "outside" | "inside" | "both";
 
-export const BUFFER_SIDES = new Set<BufferSide>(["outside", "inside", "both"]);
+const BUFFER_SIDES = new Set<BufferSide>(["outside", "inside", "both"]);
 
 /** Distance units {@link bufferTool} accepts, in turf's own vocabulary. */
-export type BufferUnits = "kilometers" | "meters" | "miles";
+type BufferUnits = "kilometers" | "meters" | "miles";
 
-export const BUFFER_UNITS = new Set<BufferUnits>(["kilometers", "meters", "miles"]);
+const BUFFER_UNITS = new Set<BufferUnits>(["kilometers", "meters", "miles"]);
 
 /**
  * Python's decimal-float grammar, which `Number()` does not share.
@@ -110,7 +109,7 @@ export const BUFFER_UNITS = new Set<BufferUnits>(["kilometers", "meters", "miles
  * the two grammars: it also rejects Python's digit separators (`float("1_000")`
  * is 1000, `Number("1_000")` is `NaN`), which both engines then refuse.
  */
-export const DECIMAL_NUMBER = /^\s*[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?\s*$/;
+const DECIMAL_NUMBER = /^\s*[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?\s*$/;
 
 /**
  * A buffered feature, or `null` when the operation left nothing behind.
@@ -121,7 +120,7 @@ export const DECIMAL_NUMBER = /^\s*[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?
  * polygon with zero rings — a shape no renderer can draw and every downstream
  * tool has to special-case. Drop those here instead.
  */
-export function nonEmptyBuffer(result: Feature | undefined | null): Feature | null {
+function nonEmptyBuffer(result: Feature | undefined | null): Feature | null {
   const geometry = result?.geometry as Polygon | MultiPolygon | undefined;
   if (!geometry || !hasPositions(geometry.coordinates)) return null;
   return result as Feature;
@@ -138,7 +137,7 @@ export function nonEmptyBuffer(result: Feature | undefined | null): Feature | nu
  * polygon thinner than twice the radius) the grown shape *is* the band, so it is
  * returned whole rather than treated as a failure.
  */
-export function bufferOneFeature(
+function bufferOneFeature(
   feature: Feature,
   radius: number,
   side: BufferSide,
@@ -191,7 +190,7 @@ export function bufferOneFeature(
  * @param features - The buffered polygons, at least one.
  * @returns The single merged feature, or `null` when nothing is left.
  */
-export function dissolveBuffers(features: Feature[]): Feature | null {
+function dissolveBuffers(features: Feature[]): Feature | null {
   const polys = features as Feature<Polygon | MultiPolygon>[];
   // turf's union throws on a single geometry ("Must have at least 2
   // geometries"), and one buffer is already its own dissolve.
