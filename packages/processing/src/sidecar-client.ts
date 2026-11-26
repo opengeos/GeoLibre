@@ -950,6 +950,12 @@ export interface ReadPostgisTableResult {
   srid: number;
   primary_key: string | null;
   feature_count: number;
+  /**
+   * Stringified primary key to a hash of the stored row, for optimistic
+   * concurrency: send the hashes back as `expected_row_hashes` and the write
+   * fails with HTTP 409 if any targeted row changed since this read.
+   */
+  row_hashes?: Record<string, string>;
 }
 
 export interface WritePostgisTableRequest {
@@ -968,6 +974,12 @@ export interface WritePostgisTableRequest {
   baseline_keys?: Array<string | number>;
   /** Optional layer capability overrides enforcing create/update/delete restrictions. */
   capabilities?: LayerCapabilities;
+  /**
+   * Row hashes from {@link ReadPostgisTableResult.row_hashes} for the rows this
+   * write updates or deletes. The sidecar rolls back with HTTP 409 when any of
+   * them changed since that read.
+   */
+  expected_row_hashes?: Record<string, string>;
 }
 
 export interface WritePostgisTableResult {
@@ -1034,12 +1046,34 @@ export async function readPostgisTable(
     throw sidecarConnectionError(baseUrl, error);
   }
   if (!res.ok) {
-    throw new Error(await responseErrorMessage(res, "Could not read PostGIS table"));
+    throw new PostgisRequestError(
+      await responseErrorMessage(res, "Could not read PostGIS table"),
+      res.status,
+    );
   }
   return (await res.json()) as ReadPostgisTableResult;
 }
 
-export class PostgisWriteRejectedError extends Error {
+/**
+ * The sidecar answered a PostGIS read with an HTTP error. `status` 503 means
+ * the database could not be reached; other statuses are definite refusals.
+ */
+export class PostgisRequestError extends Error {
+  override readonly name: string = "PostgisRequestError";
+  constructor(
+    message: string,
+    readonly status?: number,
+  ) {
+    super(message);
+  }
+}
+
+/**
+ * The sidecar answered a PostGIS write with an HTTP error, so its transaction
+ * rolled back. `status` 409 means a targeted row changed since it was read,
+ * 503 that the database could not be reached.
+ */
+export class PostgisWriteRejectedError extends PostgisRequestError {
   override readonly name = "PostgisWriteRejectedError";
 }
 
@@ -1066,6 +1100,7 @@ export async function writePostgisTable(
   if (!res.ok) {
     throw new PostgisWriteRejectedError(
       await responseErrorMessage(res, "Could not save edits to PostGIS"),
+      res.status,
     );
   }
   return (await res.json()) as WritePostgisTableResult;

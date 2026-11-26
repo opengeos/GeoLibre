@@ -273,6 +273,7 @@ export const RASTER_TOOL_COMMANDS: Array<{
   { kind: "sar-rgb", titleKey: "toolbar.rasterTool.sarRgb" },
   { kind: "flood-map", titleKey: "toolbar.rasterTool.floodMap" },
   { kind: "cut-fill", titleKey: "toolbar.rasterTool.cutFill" },
+  { kind: "building-shadows", titleKey: "toolbar.rasterTool.buildingShadows" },
 ];
 
 const RASTER_CHANGE_KINDS: ReadonlySet<RasterToolKind> = new Set<RasterToolKind>([
@@ -292,7 +293,10 @@ export const RASTER_CHANGE_TOOLS = RASTER_TOOL_COMMANDS.filter(({ kind }) =>
   RASTER_CHANGE_KINDS.has(kind),
 );
 
-const RASTER_3D_TERRAIN_KINDS: ReadonlySet<RasterToolKind> = new Set<RasterToolKind>(["cut-fill"]);
+const RASTER_3D_TERRAIN_KINDS: ReadonlySet<RasterToolKind> = new Set<RasterToolKind>([
+  "cut-fill",
+  "building-shadows",
+]);
 
 /** The Raster submenu's browser-only 3D terrain analysis group, in command-list order. */
 export const RASTER_3D_TERRAIN_TOOLS = RASTER_TOOL_COMMANDS.filter(({ kind }) =>

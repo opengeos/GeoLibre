@@ -200,6 +200,35 @@ class PostgisWriteRequest(BaseModel):
     expected_row_hashes: Optional[dict[str, str]] = None
 
 
+# Client-side libpq messages for a server that could not be reached. They are
+# produced by libpq, not by the server, and the psycopg binary wheels ship
+# libpq without translations, so they stay in English.
+_TRANSPORT_FAILURES = (
+    "connection refused",
+    "timeout expired",
+    "connection timed out",
+    "could not translate host name",
+    "name or service not known",
+    "temporary failure in name resolution",
+    "no route to host",
+    "network is unreachable",
+    "server closed the connection unexpectedly",
+    "could not connect to server",
+    # A server that answered but cannot take a session right now; retrying
+    # later is the right response (SQLSTATE 57P03 and 53300).
+    "the database system is starting up",
+    "the database system is shutting down",
+    "too many clients",
+    "remaining connection slots are reserved",
+)
+
+
+def _is_transport_failure(message: str) -> bool:
+    """Whether a libpq connect error means the server never answered."""
+    lowered = message.lower()
+    return any(phrase in lowered for phrase in _TRANSPORT_FAILURES)
+
+
 def _connect(connection: str) -> Any:
     """Open a psycopg connection with a bounded statement timeout.
 
@@ -238,8 +267,14 @@ def _connect(connection: str) -> Any:
     except HTTPException:
         raise
     except Exception as exc:  # noqa: BLE001 - surface a stable, scrubbed error
+        # Report a server that never answered (no route, refused, timed out)
+        # as 503 so clients can tell "unreachable, retry later" from a rejected
+        # login or an unknown database (400). libpq gives connect failures no
+        # SQLSTATE, so match the transport failures libpq itself reports, plus
+        # a server's (English) "not now" answers. A login refusal never matches.
+        unreachable = isinstance(exc, psycopg.OperationalError) and _is_transport_failure(str(exc))
         raise HTTPException(
-            status_code=400,
+            status_code=503 if unreachable else 400,
             detail=f"Could not connect to PostgreSQL: {scrub_secrets(str(exc))}",
         ) from exc
 
@@ -580,7 +615,20 @@ def postgis_write(request: PostgisWriteRequest) -> dict[str, Any]:
     psycopg = _import_psycopg()
     sql = psycopg.sql
 
-    features = require_features(request.geojson)
+    submitted = request.geojson.get("features") if request.geojson else None
+    # A delete-only change set from the offline edit outbox (it sends just the
+    # changed features, with a row hash for every row it deletes) is a valid
+    # save: the diff deletes exactly those rows. Any other empty payload stays
+    # an error, so the direct save still refuses to empty a table.
+    features = (
+        []
+        if request.baseline_keys
+        and request.expected_row_hashes
+        and all(str(key) in request.expected_row_hashes for key in request.baseline_keys)
+        and isinstance(submitted, list)
+        and not submitted
+        else require_features(request.geojson)
+    )
 
     with _connect(request.connection) as conn:
         info = _table_info(conn, request.schema_name, request.table, request.geometry_column)

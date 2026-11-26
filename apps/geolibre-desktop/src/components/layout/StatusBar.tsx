@@ -21,6 +21,7 @@ import { getIsCoarsePointer } from "../../hooks/useTouchUi";
 import { formatAccuracy, formatSpeedKmh } from "../../lib/gps-tracking";
 import { isMobile } from "../../lib/is-mobile";
 import { autosavePausedMessage } from "../../lib/autosave-status";
+import { EditOutboxStatus } from "./EditOutboxStatus";
 
 /**
  * Ground elevation for the readout, in the scale bar's unit family: feet for
@@ -175,6 +176,9 @@ export function StatusBar({
         compact ? "overflow-hidden" : "overflow-x-auto",
       )}
     >
+      {/* First in the compact footer, which clips its overflow: pending edits
+          must stay visible on a narrow screen. */}
+      {compact ? <EditOutboxStatus compact /> : null}
       {!compact && touchUiMode === "desktop" ? (
         <button
           type="button"
@@ -259,6 +263,7 @@ export function StatusBar({
         <Bug className="h-3 w-3" />
         {compact ? "Diag" : t("diagnostics.title")}: {diagnosticsCount}
       </button>
+      {compact ? null : <EditOutboxStatus />}
     </footer>
   );
 }

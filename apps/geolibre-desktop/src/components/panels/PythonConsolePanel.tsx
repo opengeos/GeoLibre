@@ -48,8 +48,25 @@ interface Entry {
   text: string;
 }
 
+/** The Pyodide runtime the console drives; tests substitute their own. */
+export interface PythonConsoleRuntime {
+  consoleDeps: typeof consoleDeps;
+  initConsoleRuntime: typeof initConsoleRuntime;
+  onConsoleProgress: typeof onConsoleProgress;
+  runConsoleCode: typeof runConsoleCode;
+}
+
+const DEFAULT_CONSOLE_RUNTIME: PythonConsoleRuntime = {
+  consoleDeps,
+  initConsoleRuntime,
+  onConsoleProgress,
+  runConsoleCode,
+};
+
 interface PythonConsolePanelProps {
   mapControllerRef: RefObject<MapEngine | null>;
+  /** Replaces the Pyodide runtime; tests only. */
+  runtime?: PythonConsoleRuntime;
 }
 
 /**
@@ -61,7 +78,10 @@ interface PythonConsolePanelProps {
  * @param mapControllerRef - Ref to the live map controller, read lazily by the
  *   Pyodide `geolibre` facade so Python can drive the current map.
  */
-export function PythonConsolePanel({ mapControllerRef }: PythonConsolePanelProps) {
+export function PythonConsolePanel({
+  mapControllerRef,
+  runtime = DEFAULT_CONSOLE_RUNTIME,
+}: PythonConsolePanelProps) {
   const { t } = useTranslation();
   const setPythonConsoleOpen = useAppStore((s) => s.setPythonConsoleOpen);
 
@@ -95,7 +115,10 @@ export function PythonConsolePanel({ mapControllerRef }: PythonConsolePanelProps
   const [status, setStatus] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
 
-  const deps = useMemo(() => consoleDeps(() => mapControllerRef.current), [mapControllerRef]);
+  const deps = useMemo(
+    () => runtime.consoleDeps(() => mapControllerRef.current),
+    [mapControllerRef, runtime],
+  );
 
   const completion = usePyCompletion({
     textareaRef: consoleInputRef,
@@ -110,9 +133,10 @@ export function PythonConsolePanel({ mapControllerRef }: PythonConsolePanelProps
   // download/setup phases. The runtime is a module singleton, so a later reopen
   // resolves immediately and keeps the user's variables.
   useEffect(() => {
-    const off = onConsoleProgress(setStatus);
+    const off = runtime.onConsoleProgress(setStatus);
     let cancelled = false;
-    initConsoleRuntime(deps)
+    runtime
+      .initConsoleRuntime(deps)
       .then(() => {
         if (cancelled) return;
         setReady(true);
@@ -127,7 +151,7 @@ export function PythonConsolePanel({ mapControllerRef }: PythonConsolePanelProps
       cancelled = true;
       off();
     };
-  }, [deps, t]);
+  }, [deps, runtime, t]);
 
   // Keep the latest output in view. Skip while collapsed: the output lives in a
   // `display: none` subtree where `scrollHeight` reads 0, which would otherwise
@@ -153,7 +177,7 @@ export function PythonConsolePanel({ mapControllerRef }: PythonConsolePanelProps
   const runSource = async (source: string) => {
     setRunning(true);
     try {
-      const { output, error } = await runConsoleCode(deps, source);
+      const { output, error } = await runtime.runConsoleCode(deps, source);
       setHistory((h) => [
         ...h,
         ...(output ? [{ kind: "output" as const, text: output }] : []),
