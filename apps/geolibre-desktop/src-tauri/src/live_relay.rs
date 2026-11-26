@@ -244,7 +244,10 @@ fn random_hex(bytes: usize) -> Result<String, String> {
 /// `~/.geolibre/runtime/live-relay.json` (inside the container when sandboxed).
 pub(crate) fn default_discovery_file() -> Option<PathBuf> {
     if let Some(path) = std::env::var_os(DISCOVERY_FILE_ENV).filter(|value| !value.is_empty()) {
-        return Some(PathBuf::from(path));
+        // Absolute, so the socket published beside it is absolute too: the
+        // client refuses a relative socket path.
+        let path = PathBuf::from(path);
+        return Some(std::path::absolute(&path).unwrap_or(path));
     }
     // Python's Path.home(), which the MCP client uses, reads USERPROFILE on
     // Windows and ignores HOME (which Git Bash may set to a POSIX path).
@@ -280,7 +283,8 @@ struct State {
     token: String,
     listeners: HashSet<String>,
     pending: HashMap<String, Pending>,
-    client_request_ids: HashSet<String>,
+    /// Client request id -> the dispatch id that reserved it.
+    client_request_ids: HashMap<String, String>,
     server: Option<Server>,
     /// What the discovery file says, so a later write can be skipped or a
     /// removal checked against this process.
@@ -338,7 +342,9 @@ impl RelayCore {
         if enabled {
             self.enable()
         } else {
-            self.disable();
+            // Access is off even when discovery cleanup fails; the error lets
+            // the webview retry, and a retry finishes only the cleanup.
+            self.disable()?;
             Ok(self.status())
         }
     }
@@ -393,13 +399,13 @@ impl RelayCore {
             state.published = Some(payload);
         }
         if let Err(error) = self.publish() {
-            self.disable();
+            let _ = self.disable();
             return Err(error);
         }
         Ok(self.status())
     }
 
-    fn disable(&self) {
+    fn disable(&self) -> Result<(), String> {
         let (server, pending) = {
             let mut state = self.lock();
             state.enabled = false;
@@ -420,7 +426,7 @@ impl RelayCore {
                 let _ = std::fs::remove_file(path);
             }
         }
-        self.unpublish();
+        self.unpublish()
     }
 
     /// Bind the listener and start its accept loop.
@@ -468,6 +474,12 @@ impl RelayCore {
                     .ok_or_else(|| "Live MCP discovery has no directory.".to_string())?;
                 create_private_dir(directory)?;
                 let path = socket_path_in(directory)?;
+                if path == discovery {
+                    return Err(format!(
+                        "The Live MCP discovery file cannot be named like its socket: {}",
+                        discovery.display()
+                    ));
+                }
                 let _ = std::fs::remove_file(&path);
                 let listener = UnixListener::bind(&path)
                     .map_err(|error| format!("Could not open the Live MCP relay: {error}"))?;
@@ -645,9 +657,12 @@ impl RelayCore {
             if !state.enabled {
                 return (404, json!({"detail": "Live relay is not enabled"}));
             }
-            if !state.client_request_ids.insert(request_id.clone()) {
+            if state.client_request_ids.contains_key(&request_id) {
                 return (409, json!({"detail": "Duplicate requestId."}));
             }
+            state
+                .client_request_ids
+                .insert(request_id.clone(), dispatch_id.clone());
             let labels: Vec<String> = state.listeners.iter().cloned().collect();
             state.pending.insert(
                 dispatch_id.clone(),
@@ -674,7 +689,11 @@ impl RelayCore {
         {
             let mut state = self.lock();
             state.pending.remove(&dispatch_id);
-            state.client_request_ids.remove(&request_id);
+            // A revocation and re-grant may have handed this id to a newer
+            // request meanwhile; release only our own reservation.
+            if state.client_request_ids.get(&request_id) == Some(&dispatch_id) {
+                state.client_request_ids.remove(&request_id);
+            }
         }
         match outcome {
             None => (200, json!({"delivered": 0})),
@@ -784,23 +803,39 @@ impl RelayCore {
     }
 
     /// Remove the discovery file if it still describes this process.
-    pub(crate) fn unpublish(&self) {
-        let published = self.lock().published.take();
+    ///
+    /// The ownership record is kept until the file is gone (or another process
+    /// replaced it), so a failed removal can be retried by a later disable.
+    pub(crate) fn unpublish(&self) -> Result<(), String> {
+        let published = self.lock().published.clone();
         let (Some(published), Some(path)) = (published, self.discovery_file.as_ref()) else {
-            return;
+            return Ok(());
         };
-        let Ok(text) = std::fs::read_to_string(path) else {
-            return;
+        let ours = match std::fs::read_to_string(path) {
+            Ok(text) => serde_json::from_str::<Value>(&text).is_ok_and(|current| {
+                // Another GeoLibre window may have replaced the file.
+                current.get("token") == published.get("token")
+                    && current.get("pid") == published.get("pid")
+            }),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => false,
+            Err(error) => {
+                return Err(format!(
+                    "Live MCP discovery could not be read for removal: {error}"
+                ))
+            }
         };
-        let Ok(current) = serde_json::from_str::<Value>(&text) else {
-            return;
-        };
-        // Another GeoLibre window or a sidecar may have replaced the file.
-        if current.get("token") == published.get("token")
-            && current.get("pid") == published.get("pid")
-        {
-            let _ = std::fs::remove_file(path);
+        if ours {
+            if let Err(error) = std::fs::remove_file(path) {
+                if error.kind() != std::io::ErrorKind::NotFound {
+                    return Err(format!("Live MCP discovery could not be removed: {error}"));
+                }
+            }
         }
+        let mut state = self.lock();
+        if state.published.as_ref() == Some(&published) {
+            state.published = None;
+        }
+        Ok(())
     }
 
     /// Stop serving and remove discovery at app exit.
@@ -809,7 +844,7 @@ impl RelayCore {
             .lifecycle
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
-        self.disable();
+        let _ = self.disable();
     }
 }
 
@@ -850,6 +885,8 @@ fn create_private_dir(directory: &Path) -> Result<(), String> {
 trait Connection: Read + Write + Send {
     /// Switch to blocking reads with the request deadline.
     fn prepare(&mut self) -> std::io::Result<()>;
+    /// Bound the next reads, so none outlives the whole-request deadline.
+    fn limit_reads(&mut self, timeout: Duration) -> std::io::Result<()>;
     /// Close both directions.
     fn close(&mut self);
 }
@@ -872,6 +909,9 @@ impl Write for TcpConnection {
 }
 
 impl Connection for TcpConnection {
+    fn limit_reads(&mut self, timeout: Duration) -> std::io::Result<()> {
+        self.0.set_read_timeout(Some(timeout))
+    }
     fn prepare(&mut self) -> std::io::Result<()> {
         self.0.set_nonblocking(false)?;
         self.0.set_read_timeout(Some(REQUEST_READ_TIMEOUT))?;
@@ -904,6 +944,9 @@ impl Write for UnixConnection {
 
 #[cfg(unix)]
 impl Connection for UnixConnection {
+    fn limit_reads(&mut self, timeout: Duration) -> std::io::Result<()> {
+        self.0.set_read_timeout(Some(timeout))
+    }
     fn prepare(&mut self) -> std::io::Result<()> {
         self.0.set_nonblocking(false)?;
         self.0.set_read_timeout(Some(REQUEST_READ_TIMEOUT))?;
@@ -940,10 +983,20 @@ fn read_request(
     let fail = |status: u16, message: &str| (status, json!({"detail": message}));
     let deadline = std::time::Instant::now() + REQUEST_DEADLINE;
     let late = || std::time::Instant::now() > deadline;
+    // Each read may stall for at most what is left of the deadline.
+    let budget = || {
+        deadline
+            .saturating_duration_since(std::time::Instant::now())
+            .clamp(Duration::from_millis(1), REQUEST_READ_TIMEOUT)
+    };
     let mut reader = BufReader::new(connection);
     let mut head = Vec::new();
     loop {
         let before = head.len();
+        reader
+            .get_mut()
+            .limit_reads(budget())
+            .map_err(|_| fail(400, "Could not read the request."))?;
         let read = reader
             .by_ref()
             .take((MAX_HEADER_BYTES + 1 - head.len()) as u64)
@@ -1014,11 +1067,18 @@ fn read_request(
         if late() {
             return Err(fail(408, "The request took too long."));
         }
+        reader
+            .get_mut()
+            .limit_reads(budget())
+            .map_err(|_| fail(400, "Could not read the request."))?;
         let want = chunk.len().min(length - body.len());
         match reader.read(&mut chunk[..want]) {
             Ok(0) | Err(_) => return Err(fail(400, "Incomplete request body.")),
             Ok(read) => body.extend_from_slice(&chunk[..read]),
         }
+    }
+    if late() {
+        return Err(fail(408, "The request took too long."));
     }
     Ok(Request {
         body,
@@ -1558,6 +1618,22 @@ mod tests {
         assert_ne!(discovery(&fixture)["token"], json!(token));
     }
 
+    #[cfg(unix)]
+    #[test]
+    fn a_discovery_file_named_like_the_socket_is_refused() {
+        let dir = tempdir::Dir::new();
+        let discovery = dir.0.join(SOCKET_FILE_NAME);
+        let dispatcher = Arc::new(EchoDispatcher {
+            core: Mutex::new(Weak::new()),
+            mode: Mutex::new("echo"),
+            seen: Mutex::new(Vec::new()),
+        });
+        let core = RelayCore::new(Box::new(dispatcher), Transport::Unix, Some(discovery));
+        let error = core.set_access(true).unwrap_err();
+        assert!(error.contains("named like its socket"), "{error}");
+        assert!(!core.status().enabled);
+    }
+
     #[test]
     fn unpublish_leaves_a_file_another_process_wrote() {
         let fixture = fixture(Transport::Tcp);
@@ -1583,7 +1659,7 @@ mod tests {
                     .trim_end_matches("/relay")
                     .to_string();
                 let body =
-                    json!({"method": "x", "requestId": "dup", "timeoutSeconds": 1}).to_string();
+                    json!({"method": "x", "requestId": "dup", "timeoutSeconds": 60}).to_string();
                 let mut stream = TcpStream::connect(&address).unwrap();
                 write!(
                     stream,
@@ -1602,8 +1678,11 @@ mod tests {
             }
             thread::sleep(Duration::from_millis(10));
         }
+        // The first request is still pending (its wait is a minute), so the
+        // duplicate conflicts; revoking access then releases the first.
         let (code, _) = post(&fixture, &json!({"method": "x", "requestId": "dup"}), None);
         assert_eq!(code, 409);
+        fixture.core.set_access(false).unwrap();
         first.join().unwrap();
     }
 }

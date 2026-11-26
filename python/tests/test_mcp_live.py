@@ -843,6 +843,21 @@ def test_unix_socket_must_sit_beside_its_discovery_file(short_dir, monkeypatch, 
             server.close()
 
 
+@unix_only
+def test_relative_discovery_override_finds_the_socket(short_dir, monkeypatch):
+    """Accept a relative discovery path naming the socket's directory."""
+    monkeypatch.delenv("GEOLIBRE_RELAY_URL", raising=False)
+    socket_path = short_dir / "live-relay.sock"
+    server = _UnixRelayServer(socket_path)
+    try:
+        _unix_discovery(short_dir, socket_path)
+        monkeypatch.chdir(short_dir.parent)
+        monkeypatch.setenv("GEOLIBRE_LIVE_RELAY_FILE", f"{short_dir.name}/live-relay.json")
+        assert require().listeners() == 1
+    finally:
+        server.close()
+
+
 def test_mac_app_store_container_is_searched(tmp_path, monkeypatch):
     """Look in the sandbox container's home when no override is set."""
     from geolibre.mcp import live

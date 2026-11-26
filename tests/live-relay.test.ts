@@ -76,25 +76,33 @@ describe("createLiveRelayAccessController", () => {
     controller.dispose();
   });
 
-  it("drops a stale result when the preference changed meanwhile", async () => {
+  it("drops a stale result when the preference changed while it was in flight", async () => {
     let enabled = true;
     let release!: () => void;
-    const first = new Promise<void>((resolve) => {
-      release = resolve;
+    let started!: () => void;
+    const firstStarted = new Promise<void>((resolve) => {
+      started = resolve;
     });
-    let calls = 0;
+    const sent: boolean[] = [];
     const controller = createLiveRelayAccessController({
       getEnabled: () => enabled,
-      send: async () => {
-        calls += 1;
-        if (calls === 1) await first;
+      send: async (value) => {
+        sent.push(value);
+        if (sent.length === 1) {
+          started();
+          await new Promise<void>((resolve) => {
+            release = resolve;
+          });
+        }
       },
     });
     const enabling = controller.sync();
+    await firstStarted;
     enabled = false;
     const disabling = controller.sync();
     release();
     await Promise.all([enabling, disabling]);
+    assert.deepEqual(sent, [true, false]);
     assert.equal(controller.getState().ready, false);
     controller.dispose();
   });
@@ -158,6 +166,7 @@ describe("connectLiveRelay", () => {
     ]);
 
     setReady(false);
+    await flush();
     assert.deepEqual(fake.calls, ["listen", "subscribe", "unlisten", "unsubscribe"]);
     fake.emit({ type: "geolibre:command", requestId: "d3", method: "getView", params: {} });
     await flush();
@@ -191,6 +200,41 @@ describe("connectLiveRelay", () => {
     finish("late");
     await flush();
     assert.deepEqual(fake.replies, []);
+    stop();
+  });
+
+  it("orders a stale unsubscribe before a newer subscription", async () => {
+    let setReady!: (ready: boolean) => void;
+    const fake = fakeTransport();
+    let releaseFirst!: () => void;
+    let subscribes = 0;
+    fake.transport.subscribe = () => {
+      subscribes += 1;
+      fake.calls.push(`subscribe${subscribes}`);
+      return subscribes === 1
+        ? new Promise<void>((resolve) => {
+            releaseFirst = resolve;
+          })
+        : Promise.resolve();
+    };
+    const stop = connectLiveRelay(
+      (listener) => {
+        setReady = listener;
+        return () => {};
+      },
+      {} as ScriptingHandlers,
+      fake.transport,
+    );
+    setReady(true);
+    await flush();
+    setReady(false);
+    setReady(true);
+    await flush();
+    releaseFirst();
+    await flush();
+    await flush();
+    const shell = fake.calls.filter((call) => call.startsWith("sub") || call === "unsubscribe");
+    assert.deepEqual(shell, ["subscribe1", "unsubscribe", "subscribe2"]);
     stop();
   });
 

@@ -185,7 +185,17 @@ export function connectLiveRelay(
 ): () => void {
   let generation = 0;
   let unlisten: UnlistenFn | null = null;
+  // A subscribe has been queued for the shell and not yet undone.
   let subscribed = false;
+  // The shell keys subscriptions by window label only, so subscribe and
+  // unsubscribe calls run strictly in order: a stale generation's unsubscribe
+  // must land before a newer generation subscribes, never after it.
+  let shellCalls: Promise<unknown> = Promise.resolve();
+  const inOrder = <T>(call: () => Promise<T>): Promise<T> => {
+    const next = shellCalls.then(call, call);
+    shellCalls = next.catch(() => {});
+    return next;
+  };
 
   const run = async (command: RelayCommand, mine: number) => {
     const result = await runRelayCommand(handlers, command);
@@ -204,7 +214,7 @@ export function connectLiveRelay(
     unlisten = null;
     if (subscribed) {
       subscribed = false;
-      transport.unsubscribe().catch(() => {
+      inOrder(transport.unsubscribe).catch(() => {
         // The shell drops every subscriber itself when access is revoked.
       });
     }
@@ -226,12 +236,10 @@ export function connectLiveRelay(
           return;
         }
         unlisten = remove;
-        await transport.subscribe();
-        if (mine !== generation) {
-          transport.unsubscribe().catch(() => {});
-          return;
-        }
+        // Marked before the call resolves, so a stop() meanwhile queues its
+        // unsubscribe right behind this subscribe, ahead of any newer one.
         subscribed = true;
+        await inOrder(transport.subscribe);
       } catch (error) {
         console.warn("Live MCP relay: could not subscribe this window", error);
       }

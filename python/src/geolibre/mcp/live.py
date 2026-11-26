@@ -447,7 +447,15 @@ def _unix_socket_beside(discovery: Path, value: Any) -> str | None:
     if os.name == "nt" or not isinstance(value, str) or not value:
         return None
     candidate = Path(value)
-    if not candidate.is_absolute() or candidate.parent != discovery.parent:
+    if not candidate.is_absolute():
+        return None
+    try:
+        # A relative GEOLIBRE_LIVE_RELAY_FILE names the same directory the
+        # app resolved to an absolute socket path.
+        same_dir = candidate.parent.resolve() == discovery.parent.resolve()
+    except OSError:
+        return None
+    if not same_dir:
         return None
     try:
         if not stat.S_ISSOCK(candidate.stat().st_mode):
