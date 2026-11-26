@@ -544,6 +544,8 @@ impl RelayCore {
                             503,
                             &json!({"detail": "Too many Live MCP connections."}),
                         );
+                        // A short drain only: this runs on the accept loop.
+                        finish_reply(connection.as_mut(), Duration::from_millis(50));
                         continue;
                     }
                     let core = Arc::clone(&self);
@@ -581,20 +583,7 @@ impl RelayCore {
                 Err(response) => response,
             };
         let _ = write_response(connection, status, &body);
-        // An early refusal leaves the announced body unread; closing with
-        // unread data sends a reset that can discard the response. Signal
-        // the end of the reply and drain a bounded amount first.
-        connection.finish_write();
-        let _ = connection.limit_reads(Duration::from_secs(1));
-        let mut sink = [0u8; 16 * 1024];
-        let mut drained = 0usize;
-        let drain_until = std::time::Instant::now() + Duration::from_secs(2);
-        while drained < MAX_COMMAND_BYTES && std::time::Instant::now() < drain_until {
-            match connection.read(&mut sink) {
-                Ok(0) | Err(_) => break,
-                Ok(read) => drained += read,
-            }
-        }
+        finish_reply(connection, Duration::from_secs(2));
     }
 
     /// Decide from the request line and headers whether to serve a request.
@@ -1148,6 +1137,31 @@ fn read_request(
         body,
         ..request_headers
     })
+}
+
+/// End a reply without a reset: close the write side, then drain what the
+/// client still sends (an early refusal leaves the announced body unread, and
+/// closing with unread data resets the connection, which can discard the
+/// response) for at most `budget`.
+fn finish_reply(connection: &mut dyn Connection, budget: Duration) {
+    connection.finish_write();
+    let deadline = std::time::Instant::now() + budget;
+    let mut sink = [0u8; 16 * 1024];
+    let mut drained = 0usize;
+    while drained < MAX_COMMAND_BYTES {
+        let left = deadline.saturating_duration_since(std::time::Instant::now());
+        if left.is_zero()
+            || connection
+                .limit_reads(left.min(Duration::from_secs(1)))
+                .is_err()
+        {
+            break;
+        }
+        match connection.read(&mut sink) {
+            Ok(0) | Err(_) => break,
+            Ok(read) => drained += read,
+        }
+    }
 }
 
 fn reason(status: u16) -> &'static str {

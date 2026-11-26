@@ -194,7 +194,10 @@ export function connectLiveRelay(
   // must land before a newer generation subscribes, never after it.
   let shellCalls: Promise<unknown> = Promise.resolve();
   const inOrder = <T>(call: () => Promise<T>): Promise<T> => {
-    const next = shellCalls.then(call, call);
+    const next = shellCalls.then(
+      () => call(),
+      () => call(),
+    );
     shellCalls = next.catch(() => {});
     return next;
   };
