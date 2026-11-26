@@ -19,7 +19,10 @@ const REUSE_MARGIN_MS = 60_000;
 
 let cached: { issuer: string; accessToken: string; token: string; expiresAt: number } | null = null;
 
-/** Forget the reusable token (tests). Signing out needs no call: without an access token the cache is never consulted. */
+/**
+ * Forget the reusable token, so the next lookup mints a fresh one. Signing out
+ * needs no call: without an access token the cache is never consulted.
+ */
 export function clearCollabIdentityCache(): void {
   cached = null;
 }
@@ -76,7 +79,7 @@ async function lookup(deps: CollabIdentityDeps): Promise<string | null> {
     const request = shareAuthorizedFetch(accessToken, issuer, deps.fetchImpl ?? getShareFetch());
     const response = await request(new URL("api/collab/identity-token", `${issuer}/`), {
       method: "POST",
-      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      signal: AbortSignal.timeout(deps.timeoutMs ?? REQUEST_TIMEOUT_MS),
     });
     if (!response.ok) return null;
     const body = (await response.json().catch(() => null)) as {
