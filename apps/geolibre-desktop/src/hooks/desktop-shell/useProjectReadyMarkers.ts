@@ -41,12 +41,9 @@ export function projectReadyGeneration(state: ProjectReadyState): string {
  * Args:
  *   state: The project, plugin and trust state to judge.
  */
-export function useProjectReadyMarkers({
-  projectGeneration,
-  externalPluginsReady,
-  pendingTrustCount,
-  restoredProjectGeneration,
-}: ProjectReadyState): void {
+export function useProjectReadyMarkers(state: ProjectReadyState): void {
+  const { projectGeneration, externalPluginsReady, pendingTrustCount, restoredProjectGeneration } =
+    state;
   useEffect(() => {
     const root = document.documentElement;
     root.dataset.geolibreProjectGeneration = String(projectGeneration);

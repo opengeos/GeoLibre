@@ -99,6 +99,11 @@ describe("map diagnostic events", () => {
       name: "Imagery",
       source: { tiles: ["https://tiles.example.com/v1/{z}/{x}/{y}.png"] },
     },
+    {
+      id: "xyz2",
+      name: "Imagery 2",
+      source: { tiles: ["https://tiles.example.com/v2/{z}/{x}/{y}.png"] },
+    },
   ] as unknown as GeoLibreLayer[];
   const notifications = () => useNotificationStore.getState().notifications;
 
@@ -143,9 +148,8 @@ describe("map diagnostic events", () => {
       assert.equal(notifications()[0]!.kind, "warning");
       unmount();
       clearNotifications();
-      // A fresh mount has a fresh "already told" record, so silence here means
-      // the unmounted hook's observer is gone.
-      await fetch("https://tiles.example.com/v1/1/0/1.png");
+      // "xyz2" has not been notified yet, so a retained observer would toast.
+      await fetch("https://tiles.example.com/v2/1/0/1.png");
       assert.equal(notifications().length, 0);
     } finally {
       uninstall();
@@ -180,9 +184,22 @@ describe("plugin registry prefetch", () => {
   });
 
   it("swallows a failed fetch", async () => {
-    mockFetch(async () => new Response("nope", { status: 500 }));
-    renderHook(() => usePluginRegistryPrefetch());
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    let calls = 0;
+    const unhandled: unknown[] = [];
+    const onUnhandled = (reason: unknown) => unhandled.push(reason);
+    process.on("unhandledRejection", onUnhandled);
+    try {
+      mockFetch(async () => {
+        calls += 1;
+        return new Response("nope", { status: 500 });
+      });
+      renderHook(() => usePluginRegistryPrefetch());
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      assert.equal(calls, 1);
+      assert.deepEqual(unhandled, []);
+    } finally {
+      process.off("unhandledRejection", onUnhandled);
+    }
   });
 });
 
