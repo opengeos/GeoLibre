@@ -4888,7 +4888,7 @@ def arcgis_vector_tile_layer(
         "sourceId": source_ids[0],
         "sourceIds": source_ids,
         "type": "vector",
-        "url": input_url,
+        "url": service_url,
         "arcgisSources": resolved["sources"],
         "arcgisLayers": resolved["layers"],
     }
@@ -4907,7 +4907,7 @@ def arcgis_vector_tile_layer(
         metadata["bounds"] = layer_bounds
     layer["source"] = source
     layer["metadata"] = metadata
-    layer["sourcePath"] = input_url
+    layer["sourcePath"] = service_url
     return layer
 
 

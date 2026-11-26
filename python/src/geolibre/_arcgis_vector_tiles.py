@@ -125,6 +125,8 @@ def _extent_bounds(extent: Any) -> list[float] | None:
             lat(ymax),
         ]
         return bounds if _is_geo_bounds(bounds) else None
+    if isinstance(wkid, float) and not math.isfinite(wkid):
+        return None
     if wkid is not None and not _is_geographic_wkid(int(wkid)):
         return None
     bounds = [xmin, ymin, xmax, ymax]
@@ -142,7 +144,7 @@ def _remote_text(value: Any) -> str:
     """
     if not isinstance(value, str):
         return ""
-    return " ".join(re.sub(r"<[^>]*>?", "", value).replace("<", "").split())
+    return " ".join(re.sub(r"<[^>]*>?", "", value).split())
 
 
 def layer_name_from_service_url(url: str) -> str:
@@ -274,8 +276,8 @@ def build_arcgis_vector_tile_style(
         if not all(all(f"{{{part}}}" in tile for part in "zxy") for tile in tiles):
             raise ValueError("ArcGIS vector tile URLs must contain {z}, {x} and {y}")
         source["tiles"] = tiles
-        # The SDK replaces any style attribution with the service credit, or
-        # an empty string when the service has none.
+        # The SDK's _getAttribution prefers the service credit, then the
+        # style source's own attribution, then an empty string.
         source["attribution"] = attribution or _remote_text(raw.get("attribution"))
         scoped = f"{layer_id}-source-{index}-{_sanitize_id_part(str(original_id))}"
         renamed[str(original_id)] = scoped

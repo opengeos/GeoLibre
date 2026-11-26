@@ -317,6 +317,43 @@ def test_absolute_tile_template_and_malformed_wkid(vts):
     assert "bounds" not in layer["metadata"]
 
 
+@pytest.mark.parametrize("wkid", [float("inf"), float("nan")])
+def test_non_finite_wkid_has_no_bounds(vts, wkid):
+    """Treat a non-finite WKID as an unknown extent.
+
+    Args:
+        vts: The mutable metadata transport fixture.
+        wkid: A non-finite WKID.
+    """
+    info, style, _ = vts
+    del style["sources"]["Santa_Monica_parcels_VTL"]["bounds"]
+    info["fullExtent"]["spatialReference"] = {"wkid": wkid}
+    assert "bounds" not in _build()["metadata"]
+
+
+def test_style_attribution_is_the_fallback_credit(vts):
+    """Use the style source's attribution when the service has no credit.
+
+    Args:
+        vts: The mutable metadata transport fixture.
+    """
+    _, style, _ = vts
+    style["sources"]["Santa_Monica_parcels_VTL"]["attribution"] = "Style credit"
+    (spec,) = _build()["source"]["arcgisSources"].values()
+    assert spec["attribution"] == "Style credit"
+
+
+def test_query_strings_are_not_saved(vts):
+    """Store the normalized service URL, never a caller's query string.
+
+    Args:
+        vts: The metadata transport fixture.
+    """
+    layer = _build(SERVICE + "/?apiKey=abc#frag")
+    assert layer["source"]["url"] == SERVICE
+    assert layer["sourcePath"] == SERVICE
+
+
 @pytest.mark.parametrize("ymax", [4.5e9, float("inf")])
 def test_out_of_range_service_extent_has_no_bounds(vts, ymax):
     """Treat an extent outside the Web Mercator square as unknown.
