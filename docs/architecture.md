@@ -85,6 +85,22 @@ before removing previews, preventing late GPS replies from moving the map or
 recreating a marker. Saved observations enter the core
 store, independent of whether a map is available.
 
+### Whitebox toolbox ownership
+
+`useWhiteboxToolboxController` owns the Whitebox toolbox's catalog load (WASM
+manifests or the sidecar, with the remote snapshot as a fallback), menu
+preselection, History re-runs, the parameter form, run dispatch, sidecar job
+polling and cancellation, History recording, output import, and the "Use map
+extent" / "Draw on map" shortcuts. `ProcessingDialog` keeps only the floating
+window's drag, resize, focus and Escape handling, and renders the view-model.
+Network and runtime calls go through an injectable `services` object
+(`WHITEBOX_TOOLBOX_SERVICES` in production), so tests drive the controller
+without a sidecar or the WASM runner. A WASM or sidecar job records the
+project it was dispatched in, and its GeoJSON outputs are dropped rather than
+imported if a different project has loaded since (#3665 tracks the Global DEM
+download and the raster/LiDAR import paths, which do not yet hold that
+guarantee).
+
 ### GPS session ownership
 
 `useGpsPositionSource` owns the device location watch, external NMEA receiver,
