@@ -75,6 +75,11 @@ export interface PostgisOutboxTarget {
    * looked for only above it, never among rows that existed at load.
    */
   maxBaseKey?: number;
+  /**
+   * The base keys when they are not all numeric (text or UUID keys), so a
+   * lost insert is never matched to a row that existed at load.
+   */
+  baseKeys?: string[];
 }
 
 /**
@@ -151,11 +156,17 @@ export function postgisOutboxTarget(layer: GeoLibreLayer): PostgisOutboxTarget |
   };
 }
 
-/** The largest base key when all are numeric (serial keys only grow). */
-function maxNumericKey(layer: GeoLibreLayer): { maxBaseKey?: number } {
+/**
+ * What a lost-insert lookup must skip: the largest base key when all keys are
+ * numeric (serial keys only grow), else the base keys themselves.
+ */
+function maxNumericKey(layer: GeoLibreLayer): { maxBaseKey?: number; baseKeys?: string[] } {
   const keys = databaseBaselineKeys(layer, "postgisBaselineKeys");
-  if (!keys?.length || !keys.every((key) => typeof key === "number")) return {};
-  return { maxBaseKey: Math.max(...(keys as number[])) };
+  if (!keys?.length) return {};
+  if (keys.every((key) => typeof key === "number")) {
+    return { maxBaseKey: keys.reduce((max, key) => Math.max(max, key as number), -Infinity) };
+  }
+  return { baseKeys: keys.map(String) };
 }
 
 /**
@@ -387,9 +398,10 @@ export function createPostgisSyncAdapter(
         const referenced = new Set(entry.ops.map((op) => op.key).filter(Boolean));
         // Rows that existed when the layer was loaded are not new inserts.
         const above = typeof target.maxBaseKey === "number" ? target.maxBaseKey : undefined;
+        const existed = new Set(Array.isArray(target.baseKeys) ? target.baseKeys : []);
         const candidates = new Map<string, Feature>();
         for (const [key, feature] of rows) {
-          if (referenced.has(key)) continue;
+          if (referenced.has(key) || existed.has(key)) continue;
           if (above !== undefined && !(Number(key) > above)) continue;
           candidates.set(key, feature);
         }

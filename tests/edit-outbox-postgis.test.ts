@@ -201,6 +201,13 @@ describe("PostGIS outbox target", () => {
     assert.ok(hasPostgisSyncBaseline(layer));
     assert.equal(postgisOutboxId(target, "a"), postgisOutboxId(postgisOutboxTarget(layer)!, "a"));
     assert.notEqual(postgisOutboxId(target, "a"), postgisOutboxId(target, "b"));
+    assert.equal(target.maxBaseKey, 1);
+    const textKeyed = {
+      ...layer,
+      metadata: { ...layer.metadata, postgisBaselineKeys: ["a1", "b2"] },
+    } as GeoLibreLayer;
+    // Text keys cannot be ordered, so the lost-insert lookup skips these rows.
+    assert.deepEqual(postgisOutboxTarget(textKeyed)!.baseKeys, ["a1", "b2"]);
     const legacy = {
       ...layer,
       metadata: { ...layer.metadata, [EDIT_SYNC_BASELINE_KEY]: undefined },

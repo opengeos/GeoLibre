@@ -24,7 +24,6 @@ import {
   type SyncOutcome,
 } from "./edit-outbox";
 import {
-  getOutboxEntry,
   getOutboxSnapshot,
   loadOutbox,
   putOutboxEntry,
