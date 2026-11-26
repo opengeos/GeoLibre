@@ -158,6 +158,7 @@ describe("ShareProjectDialog", () => {
     assert.equal(upload.auth, "Bearer glb_test");
     assert.equal((upload.body as { filename: string }).filename, "trail-map.geolibre.json");
     assert.equal((upload.body as { role?: string }).role, "view");
+    assert.equal((upload.body as { expiresIn?: string }).expiresIn, "7d");
     assert.equal(
       (screen.getByDisplayValue(PROJECT.projectUrl) as HTMLInputElement).value,
       PROJECT.projectUrl,
@@ -182,8 +183,9 @@ describe("ShareProjectDialog", () => {
       assert.equal(screen.getByRole("button", { name: "Share" }).hasAttribute("disabled"), false),
     );
     assert.equal(screen.queryByText("Your project is live at:"), null);
-    const text = document.body.textContent ?? "";
-    assert.ok(text.includes("boom") || /HTTP 500|Could not share/.test(text), text.slice(-400));
+    // The server's error message is shown as its own paragraph.
+    const messages = Array.from(document.querySelectorAll("p"), (p) => p.textContent);
+    assert.ok(messages.includes("boom"));
   });
 
   it("lists active shares and revokes one only after confirmation", async () => {

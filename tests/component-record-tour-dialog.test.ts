@@ -166,8 +166,7 @@ describe("RecordTourDialog", () => {
     const fps = screen.getByLabelText("Frames per second") as HTMLInputElement;
     fireEvent.change(fps, { target: { value: "500" } });
     fireEvent.blur(fps);
-    assert.notEqual(fps.value, "500");
-    assert.ok(Number(fps.value) <= 60);
+    assert.equal(fps.value, "60");
     fireEvent.change(fps, { target: { value: "" } });
     fireEvent.blur(fps);
     assert.ok(Number(fps.value) > 0);
