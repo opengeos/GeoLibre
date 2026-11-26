@@ -470,6 +470,12 @@ export class ProjectDoc {
   /**
    * Record the differences between `project` and the document in one
    * transaction tagged with `origin` (which an undo manager filters on).
+   *
+   * The diff is against the document, not against what the writer last saw,
+   * so a key or layer missing from `project` is deleted. A client must
+   * therefore write only once it holds the session's state (after its first
+   * sync), or into an empty document; writing a stale or empty project
+   * otherwise deletes what it lacks.
    */
   write(project: ProjectRecord, origin: unknown = null, options: ProjectWriteOptions = {}): void {
     const ignore = options.ignore;
@@ -737,6 +743,7 @@ export class UpdateAssembler {
       return { status: "error", reason: "out-of-order" };
     }
     if (chunk === undefined) {
+      if (bytes.length === 0) return { status: "error", reason: "malformed" };
       if (bytes.length > this.maxBytes) return { status: "error", reason: "too-large" };
       return { status: "complete", update: bytes };
     }

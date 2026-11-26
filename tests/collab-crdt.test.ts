@@ -94,6 +94,13 @@ describe("ProjectDoc", () => {
     assert.ok(deepEqual(doc.read(), source));
   });
 
+  it("deletes whatever a written project lacks (callers write only after syncing)", () => {
+    const doc = new ProjectDoc();
+    doc.write(project(), "local");
+    doc.write({ layers: [] }, "local");
+    assert.deepEqual(doc.read(), { layers: [] });
+  });
+
   it("leaves ignored top-level keys alone on write", () => {
     const doc = new ProjectDoc();
     doc.write(project({ mapView: { zoom: 3 } }), "local");
@@ -186,7 +193,7 @@ describe("ProjectDoc", () => {
       }));
     // A deletes features 0 and 2; B edits feature 1 at the same time.
     a.write(
-      edit(a.read(), (fs) => fs.filter((f) => f.properties.n % 2 === 1)),
+      edit(a.read(), (fs) => fs.filter((f) => (f.properties.n as number) % 2 === 1)),
       "local",
     );
     b.write(
@@ -445,6 +452,11 @@ describe("update framing", () => {
     });
     assert.deepEqual(small.push("s", { update: "%%%%" }), { status: "error", reason: "malformed" });
     assert.deepEqual(small.push("s", { update: "AAAA", chunk: { id: "", index: 0, count: 1 } }), {
+      status: "error",
+      reason: "malformed",
+    });
+    // A real update is never empty.
+    assert.deepEqual(new UpdateAssembler(10).push("s", { update: "" }), {
       status: "error",
       reason: "malformed",
     });
