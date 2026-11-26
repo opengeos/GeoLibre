@@ -69,7 +69,7 @@ function fakeServices(options: { existing?: number; inView?: number; ready?: boo
       exported.push(baseName);
       return `/tmp/${baseName}.geojson`;
     },
-  } as Services;
+  };
   return { services, loads, saves, exported };
 }
 
@@ -182,6 +182,8 @@ describe("LoadFeaturesIntoEditorDialog", () => {
       saves.map((s) => s.changedOnly),
       [false, true],
     );
+    // The panel hands over the name as typed; the save helper trims it into
+    // the change metadata.
     assert.equal(saves[0]!.editorName, "  Ana  ");
   });
 });
