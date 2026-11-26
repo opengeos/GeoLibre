@@ -1186,6 +1186,7 @@ export const cutFillTool: RasterTool = {
       id: "plane_elevation",
       label: "Plane elevation",
       type: "number",
+      required: true,
       default: 0,
       step: 0.1,
       visibleWhen: { param: "reference", in: ["plane"] },

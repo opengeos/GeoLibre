@@ -1336,12 +1336,18 @@ export async function runRasterToolClientAsync(
         if (resolved != null) metersPerUnit = resolved;
         if (definition) {
           // The projection's own area distortion, via its inverse.
-          const inverse = await crsTransform(definition, "EPSG:4326");
-          const projected = projectedAreaScale(existing, inverse, metersPerUnit);
-          areaScale = projected.scaleAt;
-          if (projected.failedNodes > 0) {
+          try {
+            const inverse = await crsTransform(definition, "EPSG:4326");
+            const projected = projectedAreaScale(existing, inverse, metersPerUnit);
+            areaScale = projected.scaleAt;
+            if (projected.failedNodes > 0) {
+              extra.push(
+                `Warning: ${projected.failedNodes} sample point(s) could not be inverse-projected (outside the projection's valid area?); cells near them use no area correction.`,
+              );
+            }
+          } catch {
             extra.push(
-              `Warning: ${projected.failedNodes} sample point(s) could not be inverse-projected (outside the projection's valid area?); cells near them use no area correction.`,
+              "Warning: the raster's CRS could not be inverse-projected; cell sizes are taken with no projection correction.",
             );
           }
         } else if (existing.resX <= 0.01 && existing.resY <= 0.01 && looksLikeLonLat(existing)) {
