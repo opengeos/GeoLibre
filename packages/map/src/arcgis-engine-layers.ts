@@ -237,7 +237,7 @@ function geojsonCompileKey(layer: GeoLibreLayer): string {
  * (instantiate, update, remove), baked markers and patterns, and reading
  * layer data back.
  */
-export class ArcgisEngineLayers extends ArcgisEngineIdentify {
+export abstract class ArcgisEngineLayers extends ArcgisEngineIdentify {
   protected controlHost: ArcgisControlHost | null = null;
 
   /** Store ids last seen as plugin layers, whose `layer:` error means "unsupported". */

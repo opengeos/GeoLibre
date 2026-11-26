@@ -9,7 +9,7 @@ import { ArcgisEngineLayers } from "./arcgis-engine-layers";
  * ArcgisEngine layer: the basemap (style, visibility, opacity, blank
  * background) and story-map layer opacity.
  */
-export class ArcgisEngineBasemap extends ArcgisEngineLayers {
+export abstract class ArcgisEngineBasemap extends ArcgisEngineLayers {
   private basemapPlan: ArcgisBasemapPlan | null = null;
 
   private basemapVisible = true;

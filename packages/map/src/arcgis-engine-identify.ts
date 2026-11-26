@@ -54,7 +54,7 @@ export function stripSyntheticFields(attributes: Record<string, unknown>): Recor
  * ArcgisEngine layer: identifying features under a point, native-layer
  * picking, and the selection highlight and search result.
  */
-export class ArcgisEngineIdentify extends ArcgisEngineCamera {
+export abstract class ArcgisEngineIdentify extends ArcgisEngineCamera {
   protected highlight: ArcgisLayer | null = null;
 
   /** Integer zoom the zoom-dependent plans were compiled at. */

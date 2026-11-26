@@ -48,7 +48,7 @@ export function reportGoToFailure(error: unknown): void {
  * ArcgisEngine layer: reading and applying the view, zoom and rotation,
  * navigation limits, and fitting bounds and layers.
  */
-export class ArcgisEngineCamera extends ArcgisEngineTerrain {
+export abstract class ArcgisEngineCamera extends ArcgisEngineTerrain {
   /**
    * The last centre `readView` could convert to longitude/latitude. A view in
    * another projection can fail to convert a point outside the projection's

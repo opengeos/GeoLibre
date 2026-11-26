@@ -220,7 +220,7 @@ export type ArcgisEngineOptions = {
  * bookkeeping, and the coordinate helpers (bearing, screen points, store ids)
  * every other layer builds on.
  */
-export class ArcgisEngineBase {
+export abstract class ArcgisEngineBase {
   readonly kind = "arcgis" as const;
 
   get capabilities(): MapEngineCapabilities {

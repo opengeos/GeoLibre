@@ -63,7 +63,7 @@ function createElevationLayer(scene: ArcgisSceneSdk, exaggeration: number): Arcg
  * ArcgisEngine layer: scene terrain, elevation layers, exaggeration and COG
  * DEM terrain.
  */
-export class ArcgisEngineTerrain extends ArcgisEngineBase {
+export abstract class ArcgisEngineTerrain extends ArcgisEngineBase {
   private terrain = false;
 
   private exaggeration = 1;
