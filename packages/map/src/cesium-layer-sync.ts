@@ -66,8 +66,8 @@ export { imageryColorAdjustments };
 // CesiumLayerSyncSelection (identify and highlight) <- CesiumLayerSyncAppearance
 // (in-place styling) <- CesiumLayerSyncImagery (imagery providers and order) <-
 // CesiumLayerSyncEntries (building each layer kind) <- CesiumLayerSync (the
-// public sync, fit, status and teardown API). A member another layer reads is
-// `protected`; everything else stays `private` to its layer.
+// public sync, fit, status and teardown API). A formerly private member another
+// layer reads is `protected`; the rest keep their visibility.
 
 export class CesiumLayerSync extends CesiumLayerSyncEntries {
   private scratchBoundingSphere?: BoundingSphere;
