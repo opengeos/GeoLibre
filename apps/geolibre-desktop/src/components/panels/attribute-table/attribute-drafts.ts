@@ -110,7 +110,7 @@ interface RowForm {
   selectorField?: string;
 }
 
-type RowFormResolver = (properties: Record<string, unknown>) => RowForm;
+export type RowFormResolver = (properties: Record<string, unknown>) => RowForm;
 
 const EMPTY_ROW_FORM: RowForm = { fields: new Map() };
 
