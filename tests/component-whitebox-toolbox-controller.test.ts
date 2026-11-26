@@ -317,7 +317,8 @@ it("drops a finished job's outputs after a different project loads", async () =>
   act(() => {
     run = hook.result.current.runSelectedTool();
   });
-  await waitFor(() => assert.ok(pending.release, "WASM stub did not start"));
+  await waitFor(() => assert.ok(pending.release, "the WASM stub has started"));
+  assert.equal(hook.result.current.running, true);
   act(() => useAppStore.getState().newProject());
   await act(async () => {
     pending.release?.(job({ id: "late", outputs: { output: POINTS } }));
