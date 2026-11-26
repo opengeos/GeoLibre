@@ -52,8 +52,8 @@ function fakeServices(
       if (options.modelFails) throw new Error("offline");
       return new ArrayBuffer(4);
     },
-    detectObjects: (async (_raster: unknown, _model: unknown, settings: unknown) => {
-      calls.push({ op: "detect", detail: settings });
+    detectObjects: (async (_raster: unknown, model: ArrayBuffer, settings: object) => {
+      calls.push({ op: "detect", detail: { ...settings, modelBytes: model.byteLength } });
       return (
         options.detections ?? [
           { bbox: [10, 10, 20, 20], classIndex: 2, score: 0.91 },
@@ -62,10 +62,14 @@ function fakeServices(
         ]
       );
     }) as unknown as Services["detectObjects"],
-    openLocalDataFile: (async () => ({
-      data: new ArrayBuffer(16),
-      path: `/imagery/${options.file ?? "parking.tif"}`,
-    })) as Services["openLocalDataFile"],
+    // The model picker hands back a distinct 32-byte file, the image picker 16 bytes.
+    openLocalDataFile: (async ({ accept }: { accept?: string }) =>
+      accept === ".onnx"
+        ? { data: new ArrayBuffer(32), path: "/models/custom.onnx" }
+        : {
+            data: new ArrayBuffer(16),
+            path: `/imagery/${options.file ?? "parking.tif"}`,
+          }) as Services["openLocalDataFile"],
     // Identity: the test raster's coordinates are kept as they are.
     reprojectToWgs84: async (collection) => {
       calls.push({ op: "reproject" });
@@ -174,7 +178,8 @@ describe("ObjectDetectionDialog", () => {
   });
 
   it("reports a model that cannot be downloaded, and needs a local model file when chosen", async () => {
-    renderDialog(fakeServices({ modelFails: true }).services);
+    const { services, calls } = fakeServices({ modelFails: true });
+    renderDialog(services);
     fireEvent.click(screen.getByTitle("Choose image"));
     await waitFor(() =>
       assert.equal(
@@ -191,6 +196,11 @@ describe("ObjectDetectionDialog", () => {
     await waitFor(() =>
       assert.equal(screen.getByRole("button", { name: "Detect" }).hasAttribute("disabled"), false),
     );
+    detect();
+    // The picked model file, not the image or a built-in download, reaches detection.
+    await waitFor(() => assert.ok(calls.some((c) => c.op === "detect")));
+    const detectCall = calls.find((c) => c.op === "detect")!;
+    assert.equal((detectCall.detail as { modelBytes: number }).modelBytes, 32);
   });
 
   it("explains when the ONNX runtime is unavailable", () => {
