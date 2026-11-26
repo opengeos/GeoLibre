@@ -26,6 +26,7 @@ const EXPECTED_IDS = [
   "speckle-filter",
   "sar-rgb",
   "flood-map",
+  "cut-fill",
 ];
 
 describe("raster tools registry", () => {
@@ -71,9 +72,10 @@ describe("raster tools registry", () => {
     }
   });
 
-  it("marks only the change detection and SAR tools as browser-only", () => {
+  it("marks only the change detection, SAR and 3D terrain tools as browser-only", () => {
     for (const tool of RASTER_TOOLS) {
-      const browserOnly = tool.group === "Change Detection" || tool.group === "SAR";
+      const browserOnly =
+        tool.group === "Change Detection" || tool.group === "SAR" || tool.group === "3D Terrain";
       assert.equal(Boolean(tool.clientOnly), browserOnly, `${tool.id} clientOnly`);
     }
   });

@@ -25,6 +25,12 @@ import {
   polygonizeRaster,
   zonalStatistics,
 } from "./raster-vector";
+import {
+  cutFill,
+  isGeographicRaster,
+  projectedMetersPerUnit,
+  type CutFillSummary,
+} from "./raster-volume";
 import { mosaicRasters, reprojectRaster, resampleRaster } from "./raster-warp";
 
 /**
@@ -107,6 +113,7 @@ export const CLIENT_RASTER_TOOL_IDS: ReadonlySet<RasterToolId> = new Set<RasterT
   "speckle-filter",
   "sar-rgb",
   "flood-map",
+  "cut-fill",
 ]);
 
 /** Whether a tool can run in the browser without the sidecar. */
@@ -1046,6 +1053,8 @@ export type ClientToolResult =
       detailMessages: string[];
       /** The transition matrix, for `transition-matrix`. */
       matrix?: TransitionMatrix;
+      /** The volume totals, for `cut-fill`. */
+      cutFill?: CutFillSummary;
     }
   | {
       kind: "vector";
@@ -1285,6 +1294,50 @@ export async function runRasterToolClientAsync(
         p as never,
       );
       return rasterResult(out.raster, out.messages);
+    }
+    case "cut-fill": {
+      let existing = requireRaster(inputs, toolId);
+      let surface =
+        p.reference === "surface"
+          ? requireSecondary(inputs, "surface_path", "reference surface")
+          : null;
+      const extra: string[] = [];
+      const boundary = inputs.vectors?.boundary_path;
+      if (boundary != null) {
+        // Both surfaces share a grid, so the same mask crops them to the same
+        // window and they stay aligned.
+        const clipped = await clipRasterByMask(existing, boundary, { crop: true });
+        existing = clipped.raster;
+        extra.push(...clipped.messages);
+        if (surface) surface = (await clipRasterByMask(surface, boundary, { crop: true })).raster;
+      }
+      let metersPerUnit = 1;
+      if (!isGeographicRaster(existing)) {
+        let definition: string | null = null;
+        try {
+          definition = await rasterCrsDefinition(existing, "cut-fill");
+        } catch {
+          definition = null;
+        }
+        const resolved = projectedMetersPerUnit(existing, definition);
+        if (resolved == null) {
+          extra.push(
+            "Warning: the raster's horizontal unit is unknown; cell sizes are assumed to be metres.",
+          );
+        } else {
+          metersPerUnit = resolved;
+        }
+      }
+      const out = cutFill(existing, surface, p as never, metersPerUnit);
+      messages.push(...extra, ...out.messages, `Computed "${toolId}" in the browser.`);
+      return {
+        kind: "raster",
+        raster: out.raster,
+        bytes: writeRasterBands(out.raster),
+        messages,
+        detailMessages: [...extra, ...out.messages],
+        cutFill: out.summary,
+      };
     }
     default:
       throw new Error(`"${toolId}" has no client-side implementation.`);

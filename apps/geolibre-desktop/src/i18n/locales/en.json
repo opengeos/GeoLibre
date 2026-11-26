@@ -4329,6 +4329,8 @@
       "speckleFilter": "Speckle filter",
       "sarRgb": "Dual-pol RGB composite",
       "floodMap": "Flood mapping (SAR threshold)",
+      "cutFill": "Cut and fill volume",
+      "inputExistingSurface": "Existing surface",
       "inputBefore": "Before raster",
       "inputVv": "VV raster",
       "inputPostEvent": "Post-event raster",
@@ -4516,6 +4518,7 @@
       "subGroupRasterToVector": "Raster to vector",
       "subGroupVectorToRaster": "Vector to raster",
       "subGroupAnalysis": "Analysis",
+      "subGroup3dTerrain": "3D terrain analysis",
       "subGroupChangeDetection": "Change detection",
       "subGroupSar": "SAR",
       "mapControls": "Map controls",
@@ -9225,10 +9228,48 @@
               "description": "With a pre-event image: how much darker a pixel must get to count as new flooding."
             }
           }
+        },
+        "cut-fill": {
+          "name": "Cut and fill volume",
+          "description": "Compare an existing surface with a reference plane or a second surface on the same grid, optionally inside a boundary polygon. Reports cut, fill and net volume (m³) and their areas, and writes the difference raster (existing - reference; positive = cut, negative = fill).",
+          "params": {
+            "reference": {
+              "label": "Reference",
+              "options": {
+                "plane": "Plane at a fixed elevation",
+                "surface": "Second surface (design or later survey)"
+              }
+            },
+            "plane_elevation": {
+              "label": "Plane elevation",
+              "description": "Elevation of the reference plane, in the raster's elevation units."
+            },
+            "surface_path": {
+              "label": "Reference surface",
+              "description": "A design surface or later survey on the same pixel grid as the existing surface (reproject or resample it first if needed)."
+            },
+            "boundary_path": {
+              "label": "Boundary polygon (optional)",
+              "description": "Only cells whose centres fall inside these polygons are counted, and the output is cropped to them."
+            },
+            "band": {
+              "label": "Band"
+            },
+            "z_units": {
+              "label": "Elevation units",
+              "description": "Volumes are always reported in cubic metres and areas in square metres.",
+              "options": {
+                "m": "Metres",
+                "ft": "Feet",
+                "us-ft": "US survey feet"
+              }
+            }
+          }
         }
       }
     },
     "toolGroup": {
+      "3dTerrain": "3D Terrain",
       "analysis": "Analysis",
       "changeDetection": "Change Detection",
       "clip": "Clip",

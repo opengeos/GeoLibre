@@ -187,7 +187,7 @@ See the [Vector Analysis tutorial](../tutorials/vector-analysis.md).
 
 ![The Raster tools dialog, with the tool list at the top and the engine picker above the parameters](https://assets.geolibre.app/images/geolibre-raster-tools.webp)
 
-Every raster tool also offers a **Client (browser)** engine that computes on the loaded raster with no sidecar at all. These computations are supported by the web and mobile runtimes. The engine picker in the dialog shows which engines a tool accepts, and the line beneath it says what the selected one will do. The browser engine follows the sidecar's algorithms (GDAL's warp kernels and output grid for Reproject and Resample, GDAL's rasterization rules for Clip by mask layer and Zonal statistics, ContourPy's marching squares for Contour, the same IDW and kriging pipeline for Interpolation), and a parity test replays sidecar outputs against it. A few inputs stay sidecar-only, and the browser engine says so when it meets them: a Reproject target that is not an EPSG code, Mosaic inputs on different pixel grids, zonal statistics over line zones, and a kriging system that is singular (for example, duplicate sample locations). The Change detection and SAR tools run in the browser only.
+Every raster tool also offers a **Client (browser)** engine that computes on the loaded raster with no sidecar at all. These computations are supported by the web and mobile runtimes. The engine picker in the dialog shows which engines a tool accepts, and the line beneath it says what the selected one will do. The browser engine follows the sidecar's algorithms (GDAL's warp kernels and output grid for Reproject and Resample, GDAL's rasterization rules for Clip by mask layer and Zonal statistics, ContourPy's marching squares for Contour, the same IDW and kriging pipeline for Interpolation), and a parity test replays sidecar outputs against it. A few inputs stay sidecar-only, and the browser engine says so when it meets them: a Reproject target that is not an EPSG code, Mosaic inputs on different pixel grids, zonal statistics over line zones, and a kriging system that is singular (for example, duplicate sample locations). The 3D terrain analysis, Change detection and SAR tools run in the browser only.
 
 Browser interpolation also enforces a 200-million-operation work estimate,
 including point/grid comparisons and the kriging dense solve. This can limit a
@@ -282,6 +282,14 @@ on mobile; the sidecar engine requires the desktop app and its permission.
 | **Reclassify** | Map pixel value ranges onto new values. |
 | **Mosaic / merge** | Combine several rasters into one. |
 | **Focal statistics** | Compute a moving-window statistic (mean, min, max, …) over a raster. |
+
+**3D terrain analysis** (browser only)
+
+| Tool | Description |
+| --- | --- |
+| **Cut and fill volume** | Compare an existing surface with a reference: a plane at a fixed elevation, or a second surface on the same pixel grid (a design surface or a later survey). An optional boundary polygon (GeoJSON) limits the comparison to cells whose centres fall inside it and crops the output to it. The log reports the cut, fill, and net volume in cubic metres, the cut, fill, and analysed areas in square metres and hectares, and the deepest cut and fill. The output raster is `existing - reference`: positive cells are cut, negative cells are fill. |
+
+Cell areas are true ground areas. A projected raster's cell size is converted from its linear unit to metres (from the GeoTIFF's unit key or its CRS definition), a Web Mercator (EPSG:3857) cell is scaled by the cosine squared of its latitude, since the projection inflates area away from the equator, and a geographic (degree) raster gets a per-row spherical area. Choose **Elevation units** when the heights are in feet. On a real DEM the totals match a NumPy/rasterio computation over the same cells exactly.
 
 **Change detection** (browser only; the two dates must share a pixel grid)
 

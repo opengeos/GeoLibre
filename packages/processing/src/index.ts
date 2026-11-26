@@ -242,6 +242,16 @@ export {
   type TransitionParams,
 } from "./raster-change";
 export {
+  cutFill,
+  cellAreasByRow,
+  formatCutFillSummary,
+  isGeographicRaster,
+  projectedMetersPerUnit,
+  CUT_FILL_NODATA,
+  type CutFillParams,
+  type CutFillSummary,
+} from "./raster-volume";
+export {
   sarDbConvert,
   speckleFilter,
   dualPolRgb,
