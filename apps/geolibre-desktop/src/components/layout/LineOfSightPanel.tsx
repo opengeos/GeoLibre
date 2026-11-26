@@ -6,8 +6,12 @@ import {
   DEFAULT_LOS_TARGET_HEIGHT_METERS,
   fetchLineOfSightProfile,
   greatCircleDistance,
+  MAX_EARTH_RADIUS_METERS,
   MAX_LINE_OF_SIGHT_METERS,
+  MAX_REFRACTION_COEFFICIENT,
+  MIN_EARTH_RADIUS_METERS,
   MIN_LINE_OF_SIGHT_METERS,
+  MIN_REFRACTION_COEFFICIENT,
   type LineOfSightPoint,
   type LineOfSightProfile,
   type LineOfSightResult,
@@ -31,6 +35,7 @@ import {
   type UnitFormatter,
 } from "../../lib/line-of-sight-chart";
 import { useLineOfSightTool } from "../../lib/line-of-sight-store";
+import { useTerrainVisibility } from "../../lib/terrain-visibility-settings";
 import { LineOfSightChart } from "./LineOfSightChart";
 
 /**
@@ -101,7 +106,16 @@ function LineOfSightTool({
   const [status, setStatus] = useState<Status>("idle");
   const [observerHeight, setObserverHeight] = useState(String(DEFAULT_LOS_OBSERVER_HEIGHT_METERS));
   const [targetHeight, setTargetHeight] = useState(String(DEFAULT_LOS_TARGET_HEIGHT_METERS));
-  const [curvature, setCurvature] = useState(true);
+  // The Earth model is shared with the right-click viewshed, so the two tools
+  // always agree on what is over the horizon.
+  const curvature = useTerrainVisibility((s) => s.curvature);
+  const refractionCoefficient = useTerrainVisibility((s) => s.refractionCoefficient);
+  const earthRadiusMeters = useTerrainVisibility((s) => s.earthRadiusMeters);
+  const updateTerrainVisibility = useTerrainVisibility((s) => s.update);
+  // Drafts so a half-typed value ("0.", "") does not snap back mid-edit; the
+  // store keeps the last valid value and the field shows it again on blur.
+  const [refractionDraft, setRefractionDraft] = useState(String(refractionCoefficient));
+  const [radiusDraft, setRadiusDraft] = useState(String(earthRadiusMeters / 1000));
   const [savedResult, setSavedResult] = useState<LineOfSightResult | null>(null);
   const ids = useId();
 
@@ -122,8 +136,10 @@ function LineOfSightTool({
       observerHeightMeters: parseHeight(observerHeight, DEFAULT_LOS_OBSERVER_HEIGHT_METERS),
       targetHeightMeters: parseHeight(targetHeight, DEFAULT_LOS_TARGET_HEIGHT_METERS),
       curvature,
+      refractionCoefficient,
+      earthRadiusMeters,
     }),
-    [observerHeight, targetHeight, curvature],
+    [observerHeight, targetHeight, curvature, refractionCoefficient, earthRadiusMeters],
   );
 
   // The terrain is fetched once per pair of points; the heights and the
@@ -309,10 +325,62 @@ function LineOfSightTool({
           <input
             type="checkbox"
             checked={curvature}
-            onChange={(event) => setCurvature(event.target.checked)}
+            onChange={(event) => updateTerrainVisibility({ curvature: event.target.checked })}
           />
           {t("lineOfSight.curvature")}
         </label>
+        {curvature && (
+          <div className="grid grid-cols-2 gap-2">
+            <div className="flex flex-col gap-1">
+              <Label htmlFor={`${ids}-refraction`} className="text-xs">
+                {t("lineOfSight.refractionCoefficient")}
+              </Label>
+              <Input
+                id={`${ids}-refraction`}
+                type="number"
+                min={MIN_REFRACTION_COEFFICIENT}
+                max={MAX_REFRACTION_COEFFICIENT}
+                step={0.01}
+                value={refractionDraft}
+                onChange={(event) => {
+                  setRefractionDraft(event.target.value);
+                  const value = Number.parseFloat(event.target.value);
+                  if (Number.isFinite(value)) {
+                    updateTerrainVisibility({ refractionCoefficient: value });
+                  }
+                }}
+                onBlur={() =>
+                  setRefractionDraft(String(useTerrainVisibility.getState().refractionCoefficient))
+                }
+                className="h-8"
+              />
+            </div>
+            <div className="flex flex-col gap-1">
+              <Label htmlFor={`${ids}-radius`} className="text-xs">
+                {t("lineOfSight.earthRadius")}
+              </Label>
+              <Input
+                id={`${ids}-radius`}
+                type="number"
+                min={MIN_EARTH_RADIUS_METERS / 1000}
+                max={MAX_EARTH_RADIUS_METERS / 1000}
+                step={1}
+                value={radiusDraft}
+                onChange={(event) => {
+                  setRadiusDraft(event.target.value);
+                  const value = Number.parseFloat(event.target.value);
+                  if (Number.isFinite(value)) {
+                    updateTerrainVisibility({ earthRadiusMeters: value * 1000 });
+                  }
+                }}
+                onBlur={() =>
+                  setRadiusDraft(String(useTerrainVisibility.getState().earthRadiusMeters / 1000))
+                }
+                className="h-8"
+              />
+            </div>
+          </div>
+        )}
         {result && (
           <LineOfSightSummary
             result={result}

@@ -6,7 +6,10 @@ import {
   viewshedToRgba,
   MAX_VIEWSHED_RADIUS_METERS,
   MIN_VIEWSHED_RADIUS_METERS,
+  resolveCurvature,
+  type CurvatureOptions,
 } from "@geolibre/processing";
+import { getTerrainVisibility } from "./terrain-visibility-settings";
 
 /**
  * Run a viewshed from a clicked map point and add the result as a layer
@@ -39,6 +42,11 @@ export interface RunViewshedOptions {
   layerName: string;
   /** Optional abort signal to cancel terrain fetching and viewshed computation. */
   signal?: AbortSignal;
+  /**
+   * The Earth model. Defaults to the shared terrain-visibility settings the
+   * Line of Sight panel edits, so both tools agree.
+   */
+  curvature?: CurvatureOptions;
 }
 
 export interface ViewshedRunResult {
@@ -99,6 +107,7 @@ export async function runViewshed(options: RunViewshedOptions): Promise<Viewshed
   });
   if (!dem) return null;
 
+  const curvature = resolveCurvature(options.curvature ?? getTerrainVisibility());
   const result = await computeViewshedAsync(
     dem,
     {
@@ -108,6 +117,7 @@ export async function runViewshed(options: RunViewshedOptions): Promise<Viewshed
     },
     radiusMeters,
     options.signal,
+    curvature,
   );
   if (options.signal?.aborted) return null;
   // Not checked for zero: computeViewshed always marks the observer's own cell,
@@ -146,6 +156,10 @@ export async function runViewshed(options: RunViewshedOptions): Promise<Viewshed
           radiusMeters,
           observerHeightMeters: options.observerHeightMeters ?? DEFAULT_OBSERVER_HEIGHT_METERS,
           observerGroundMeters: result.observerGroundMeters,
+          // Recorded so a saved result says which Earth model produced it.
+          curvature: curvature.curvature,
+          refractionCoefficient: curvature.refractionCoefficient,
+          earthRadiusMeters: curvature.earthRadiusMeters,
         },
       },
     },

@@ -2930,6 +2930,7 @@
     "viewshedLayerName": "Viewshed ({{radius}})",
     "viewshedToolName": "Viewshed",
     "viewshedNoResult": "No visible area could be computed here.",
+    "viewshedCurvature": "Viewshed: Earth curvature and refraction",
     "lineOfSightHere": "Line of sight from here",
     "cogoHere": "Start a COGO traverse here"
   },
@@ -2992,6 +2993,8 @@
     "observerHeight": "Observer height (m)",
     "targetHeight": "Target height (m)",
     "curvature": "Earth curvature and refraction",
+    "refractionCoefficient": "Refraction coefficient",
+    "earthRadius": "Earth radius (km)",
     "pickObserver": "Click the map to place the observer.",
     "pickTarget": "Click the map to place the target.",
     "pickAgain": "Click the map to start a new line.",

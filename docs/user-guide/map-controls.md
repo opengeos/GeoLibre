@@ -99,8 +99,15 @@ The same **Quick analysis** submenu also appears in each vector layer's actions 
 - **Radius** is one of the three presets, from 2 km to 15 km. The underlying tool accepts anything from 100 m up to a 50 km ceiling.
 - **The result is an image overlay layer** named `Viewshed (5 km)` or similar, so it gets opacity, reordering, zoom-to, and removal like any other layer, and it is saved with the project.
 
+- **Earth curvature and refraction** are modelled by default. Each elevation is lowered by the apparent drop `d²(1 - k) / 2R` before its slope from the observer is compared, where `d` is the distance, `k` the refraction coefficient (default 0.13) and `R` the Earth radius (default 6,371 km). From a 1.8 m eye over flat ground that puts the horizon about 5.1 km away; at the 50 km ceiling the drop reaches roughly 170 m. Untick **Viewshed: Earth curvature and refraction** in the Quick analysis menu for the flat-Earth answer.
+- **The curvature settings are shared with Line of sight.** The [Line of sight](#line-of-sight-between-two-points) panel edits the same switch plus the **Refraction coefficient** and **Earth radius (km)**, so both tools always agree on what is over the horizon. The settings are remembered on this device and are not saved with a project; each viewshed layer records the values it was computed with in its metadata.
+
 !!! note "What the quick viewshed does not model"
-    Earth curvature and atmospheric refraction are ignored. Over a few kilometres that is immaterial, but at the 50 km ceiling the curvature drop alone reaches roughly 180 m — enough to matter for a radio line-of-sight study, if not for "what can I see from this overlook". The public terrain tiles are also a global, generalized elevation model rather than a survey-grade DEM. For a rigorous analysis against your own DEM and your own station points, use the **Viewshed** tool under [Processing → Whitebox Toolbox](processing.md#whitebox-toolbox), which this quick action deliberately does not replace.
+    The public terrain tiles are a global, generalized elevation model rather than a survey-grade DEM, and they know nothing about buildings or trees. For a rigorous analysis against your own DEM and your own station points, use the **Viewshed** tool under [Processing → Whitebox Toolbox](processing.md#whitebox-toolbox), which this quick action deliberately does not replace.
+
+### Line of sight between two points
+
+**Quick analysis → Line of sight from here** opens a panel that draws the sight line from the clicked observer to a second clicked target, split into visible and obstructed stretches, with the first obstruction, the highest point, and an elevation profile. **Observer height (m)** and **Target height (m)** set the eye and the target top above the ground. With **Earth curvature and refraction** ticked, the panel also shows the **Refraction coefficient** (default 0.13; 0 is no refraction, around 0.25 is common for microwave radio) and the **Earth radius (km)**. These are the same settings the viewshed uses.
 
 ## Camera, overlay, and recording tools
 

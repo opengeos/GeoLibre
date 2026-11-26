@@ -575,14 +575,25 @@ export {
   type ViewshedResult,
 } from "./terrain-viewshed";
 export {
-  computeLineOfSight,
   curvatureDrop,
+  horizonDistance,
+  resolveCurvature,
+  DEFAULT_REFRACTION_COEFFICIENT,
+  EARTH_RADIUS_METERS,
+  MAX_EARTH_RADIUS_METERS,
+  MAX_REFRACTION_COEFFICIENT,
+  MIN_EARTH_RADIUS_METERS,
+  MIN_REFRACTION_COEFFICIENT,
+  type CurvatureOptions,
+  type ResolvedCurvature,
+} from "./earth-curvature";
+export {
+  computeLineOfSight,
   fetchLineOfSightProfile,
   greatCircleDistance,
   sampleGreatCircleProfile,
   DEFAULT_LOS_OBSERVER_HEIGHT_METERS,
   DEFAULT_LOS_TARGET_HEIGHT_METERS,
-  DEFAULT_REFRACTION_COEFFICIENT,
   MAX_LINE_OF_SIGHT_METERS,
   MIN_LINE_OF_SIGHT_METERS,
   type LineOfSightOptions,
