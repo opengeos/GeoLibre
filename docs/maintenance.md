@@ -167,9 +167,10 @@ composite that the current renderer integration does not elect.
 
 ### `mapbox-gl`
 
-Mapbox is pinned to 3.35.0 pending a provider-style smoke test with a valid
-access token. Keep the npm version, CDN version, and integrity hashes together
-when that check permits an upgrade.
+Mapbox is pinned to an exact version (3.35.2, checked against Mapbox Standard
+with a valid access token). Keep the npm version, CDN version, and integrity
+hashes together, and repeat the `e2e/mapbox-*.spec.ts` run with `MAPBOX_TOKEN`
+set before taking the next upgrade.
 
 Mapbox GL JS v2+ is proprietary, so it must never enter a build: the app loads
 it from Mapbox's CDN (`packages/map/src/mapbox-gl-loader.ts`) and the npm package
