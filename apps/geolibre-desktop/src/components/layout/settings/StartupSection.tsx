@@ -4,7 +4,6 @@ import { Crosshair, FolderOpen } from "lucide-react";
 import type { RefObject } from "react";
 import { useTranslation } from "react-i18next";
 import type { StartupSettings } from "../../../hooks/useDesktopSettings";
-import { IS_MAS_BUILD } from "../../../lib/build-flags";
 import { isTauri } from "../../../lib/is-tauri";
 import { pickLayerStylesFile } from "../../../lib/layer-style-files";
 import { pickLayersFile } from "../../../lib/startup-layers";
@@ -199,8 +198,9 @@ export function StartupSection({ mapControllerRef }: StartupSectionProps) {
           </span>
         </span>
       </label>
-      {/* The sidecar cannot run in the Mac App Store sandbox or on the web. */}
-      {isTauri() && !IS_MAS_BUILD && (
+      {/* The desktop shell hosts the Live MCP relay in every desktop build,
+          the Mac App Store one included; the web build has none. */}
+      {isTauri() && (
         <label className="flex items-start gap-3 rounded-md border p-3 text-sm">
           <input
             className="mt-0.5 h-4 w-4"

@@ -76,8 +76,11 @@ const MAX_COMMAND_BYTES: usize = 8 * 1024 * 1024;
 const MAX_HEADER_BYTES: usize = 16 * 1024;
 /// Simultaneous client connections; more are answered 503 at once.
 const MAX_CONNECTIONS: usize = 16;
-/// How long a client may take to send its request.
+/// How long one read of a client's request may stall.
 const REQUEST_READ_TIMEOUT: Duration = Duration::from_secs(15);
+/// How long a client may take to send its whole request, so a slow drip
+/// cannot hold a connection slot indefinitely.
+const REQUEST_DEADLINE: Duration = Duration::from_secs(30);
 /// Accept-loop poll interval, which bounds how long a disabled listener lingers.
 const ACCEPT_POLL: Duration = Duration::from_millis(50);
 /// Discovery file name, shared with the sidecar relay and `live.py`.
@@ -243,15 +246,19 @@ pub(crate) fn default_discovery_file() -> Option<PathBuf> {
     if let Some(path) = std::env::var_os(DISCOVERY_FILE_ENV).filter(|value| !value.is_empty()) {
         return Some(PathBuf::from(path));
     }
-    std::env::var_os("HOME")
-        .or_else(|| std::env::var_os("USERPROFILE"))
-        .filter(|value| !value.is_empty())
-        .map(|home| {
-            PathBuf::from(home)
-                .join(".geolibre")
-                .join("runtime")
-                .join(DISCOVERY_FILE_NAME)
-        })
+    // Python's Path.home(), which the MCP client uses, reads USERPROFILE on
+    // Windows and ignores HOME (which Git Bash may set to a POSIX path).
+    let home = if cfg!(windows) {
+        std::env::var_os("USERPROFILE").or_else(|| std::env::var_os("HOME"))
+    } else {
+        std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE"))
+    };
+    home.filter(|value| !value.is_empty()).map(|home| {
+        PathBuf::from(home)
+            .join(".geolibre")
+            .join("runtime")
+            .join(DISCOVERY_FILE_NAME)
+    })
 }
 
 /// One request waiting on the app.
@@ -287,6 +294,8 @@ pub(crate) struct RelayCore {
     transport: Transport,
     discovery_file: Option<PathBuf>,
     connections: AtomicUsize,
+    /// Serializes access changes so overlapping enables never bind twice.
+    lifecycle: Mutex<()>,
 }
 
 /// Snapshot returned to the webview after an access change.
@@ -310,6 +319,7 @@ impl RelayCore {
             transport,
             discovery_file,
             connections: AtomicUsize::new(0),
+            lifecycle: Mutex::new(()),
         })
     }
 
@@ -321,6 +331,10 @@ impl RelayCore {
 
     /// Apply the user's preference: start or stop serving clients.
     pub(crate) fn set_access(self: &Arc<Self>, enabled: bool) -> Result<AccessStatus, String> {
+        let _change = self
+            .lifecycle
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         if enabled {
             self.enable()
         } else {
@@ -528,19 +542,23 @@ impl RelayCore {
         if connection.prepare().is_err() {
             return;
         }
-        let (status, body) = match read_request(connection) {
-            Ok(request) => self.route(&request, expected_host),
-            Err((status, message)) => (status, json!({"detail": message})),
-        };
+        // Authenticate on the headers alone, so an unauthenticated client
+        // never makes the relay read (or allocate) a command body.
+        let (status, body) =
+            match read_request(connection, |request| self.admit(request, expected_host)) {
+                Ok(request) => self.handle(&request),
+                Err(response) => response,
+            };
         let _ = write_response(connection, status, &body);
     }
 
-    fn route(&self, request: &Request, expected_host: Option<&str>) -> (u16, Value) {
+    /// Decide from the request line and headers whether to serve a request.
+    fn admit(&self, request: &Request, expected_host: Option<&str>) -> Result<(), (u16, Value)> {
         // A browser always names its page's origin on a cross-site request. A
         // Live MCP client never does, so refusing any Origin keeps web pages out
         // even before the token check.
         if request.header("origin").is_some() {
-            return (403, json!({"detail": "Browser requests are not accepted."}));
+            return Err((403, json!({"detail": "Browser requests are not accepted."})));
         }
         if let Some(expected) = expected_host {
             // DNS-rebinding guard: only the loopback address we bound.
@@ -550,20 +568,22 @@ impl RelayCore {
                 .header("host")
                 .is_some_and(|host| allowed.iter().any(|item| item.eq_ignore_ascii_case(host)))
             {
-                return (403, json!({"detail": "Unexpected Host header."}));
+                return Err((403, json!({"detail": "Unexpected Host header."})));
             }
         }
         let route = (request.method.as_str(), request.path.as_str());
         if !matches!(route, ("POST", "/relay/command") | ("GET", "/relay/status")) {
-            return (404, json!({"detail": "Not found"}));
+            return Err((404, json!({"detail": "Not found"})));
         }
-        if let Err(response) = self.check_token(request) {
-            return response;
+        self.check_token(request)
+    }
+
+    /// Answer an admitted request.
+    fn handle(&self, request: &Request) -> (u16, Value) {
+        if request.method == "GET" {
+            return (200, json!({"listeners": self.lock().listeners.len()}));
         }
-        match route {
-            ("GET", _) => (200, json!({"listeners": self.lock().listeners.len()})),
-            _ => self.command(&request.body),
-        }
+        self.command(&request.body)
     }
 
     fn check_token(&self, request: &Request) -> Result<(), (u16, Value)> {
@@ -785,6 +805,10 @@ impl RelayCore {
 
     /// Stop serving and remove discovery at app exit.
     pub(crate) fn shutdown(&self) {
+        let _change = self
+            .lifecycle
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         self.disable();
     }
 }
@@ -909,7 +933,13 @@ impl Request {
 
 /// Read one request: headers up to [`MAX_HEADER_BYTES`], a `Content-Length`
 /// body up to [`MAX_COMMAND_BYTES`]. Chunked bodies are refused.
-fn read_request(connection: &mut dyn Connection) -> Result<Request, (u16, String)> {
+fn read_request(
+    connection: &mut dyn Connection,
+    admit: impl FnOnce(&Request) -> Result<(), (u16, Value)>,
+) -> Result<Request, (u16, Value)> {
+    let fail = |status: u16, message: &str| (status, json!({"detail": message}));
+    let deadline = std::time::Instant::now() + REQUEST_DEADLINE;
+    let late = || std::time::Instant::now() > deadline;
     let mut reader = BufReader::new(connection);
     let mut head = Vec::new();
     loop {
@@ -918,28 +948,31 @@ fn read_request(connection: &mut dyn Connection) -> Result<Request, (u16, String
             .by_ref()
             .take((MAX_HEADER_BYTES + 1 - head.len()) as u64)
             .read_until(b'\n', &mut head)
-            .map_err(|_| (400, "Could not read the request.".to_string()))?;
+            .map_err(|_| fail(400, "Could not read the request."))?;
         if read == 0 {
-            return Err((400, "Incomplete request.".to_string()));
+            return Err(fail(400, "Incomplete request."));
         }
         if head.len() > MAX_HEADER_BYTES {
-            return Err((431, "Request headers are too large.".to_string()));
+            return Err(fail(431, "Request headers are too large."));
+        }
+        if late() {
+            return Err(fail(408, "The request took too long."));
         }
         let line = &head[before..];
         if line == b"\r\n" || line == b"\n" {
             break;
         }
     }
-    let text = String::from_utf8(head).map_err(|_| (400, "Malformed request.".to_string()))?;
+    let text = String::from_utf8(head).map_err(|_| fail(400, "Malformed request."))?;
     let mut lines = text.lines();
     let request_line = lines.next().unwrap_or_default();
     let mut parts = request_line.split_whitespace();
     let (Some(method), Some(target), Some(version)) = (parts.next(), parts.next(), parts.next())
     else {
-        return Err((400, "Malformed request line.".to_string()));
+        return Err(fail(400, "Malformed request line."));
     };
     if !version.starts_with("HTTP/1.") {
-        return Err((505, "Only HTTP/1.x is supported.".to_string()));
+        return Err(fail(505, "Only HTTP/1.x is supported."));
     }
     let path = target
         .split(['?', '#'])
@@ -952,7 +985,7 @@ fn read_request(connection: &mut dyn Connection) -> Result<Request, (u16, String
             continue;
         }
         let Some((name, value)) = line.split_once(':') else {
-            return Err((400, "Malformed header.".to_string()));
+            return Err(fail(400, "Malformed header."));
         };
         headers.push((name.trim().to_ascii_lowercase(), value.trim().to_string()));
     }
@@ -963,21 +996,30 @@ fn read_request(connection: &mut dyn Connection) -> Result<Request, (u16, String
         body: Vec::new(),
     };
     if request_headers.header("transfer-encoding").is_some() {
-        return Err((411, "A Content-Length body is required.".to_string()));
+        return Err(fail(411, "A Content-Length body is required."));
     }
     let length = match request_headers.header("content-length") {
         None => 0,
         Some(value) => value
             .parse::<usize>()
-            .map_err(|_| (400, "Invalid Content-Length.".to_string()))?,
+            .map_err(|_| fail(400, "Invalid Content-Length."))?,
     };
     if length > MAX_COMMAND_BYTES {
-        return Err((413, "Live command exceeds the 8 MB limit.".to_string()));
+        return Err(fail(413, "Live command exceeds the 8 MB limit."));
     }
-    let mut body = vec![0u8; length];
-    reader
-        .read_exact(&mut body)
-        .map_err(|_| (400, "Incomplete request body.".to_string()))?;
+    admit(&request_headers)?;
+    let mut body = Vec::with_capacity(length.min(64 * 1024));
+    let mut chunk = [0u8; 64 * 1024];
+    while body.len() < length {
+        if late() {
+            return Err(fail(408, "The request took too long."));
+        }
+        let want = chunk.len().min(length - body.len());
+        match reader.read(&mut chunk[..want]) {
+            Ok(0) | Err(_) => return Err(fail(400, "Incomplete request body.")),
+            Ok(read) => body.extend_from_slice(&chunk[..read]),
+        }
+    }
     Ok(Request {
         body,
         ..request_headers
@@ -991,6 +1033,7 @@ fn reason(status: u16) -> &'static str {
         401 => "Unauthorized",
         403 => "Forbidden",
         404 => "Not Found",
+        408 => "Request Timeout",
         409 => "Conflict",
         411 => "Length Required",
         413 => "Payload Too Large",
@@ -1417,6 +1460,13 @@ mod tests {
             MAX_COMMAND_BYTES + 1
         );
         assert_eq!(send(&fixture, &huge).0, 413);
+        // A wrong token is refused from the headers alone: the client never
+        // sends the body it announced, and still gets its answer.
+        let unread = format!(
+            "POST /relay/command HTTP/1.1\r\nHost: {host}\r\nAuthorization: token wrong\r\n\
+             Content-Length: 4096\r\n\r\n"
+        );
+        assert_eq!(send(&fixture, &unread).0, 401);
         let missing = format!("GET /other HTTP/1.1\r\nHost: {host}\r\n\r\n");
         assert_eq!(send(&fixture, &missing).0, 404);
         assert_eq!(post(&fixture, &json!({"params": {}}), None).0, 400);

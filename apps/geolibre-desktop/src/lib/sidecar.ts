@@ -44,35 +44,11 @@ export async function startGeoLibreSidecar(): Promise<SidecarServerInfo> {
   // (which resolve the base URL themselves) are authenticated.
   if (generation === stopGeneration) {
     setSidecarAuthToken(info.token);
-    publishServer(info);
   }
   return info;
 }
 
 let stopGeneration = 0;
-let currentServer: SidecarServerInfo | null = null;
-const serverListeners = new Set<(info: SidecarServerInfo | null) => void>();
-
-function publishServer(info: SidecarServerInfo | null): void {
-  if (currentServer === info) return;
-  currentServer = info;
-  for (const listener of serverListeners) listener(info);
-}
-
-/**
- * Follow the sidecar this window started: its connection details while it runs,
- * null once it is stopped. Calls `listener` immediately with the current value.
- */
-export function subscribeSidecarServer(
-  listener: (info: SidecarServerInfo | null) => void,
-): () => void {
-  serverListeners.add(listener);
-  listener(currentServer);
-  return () => {
-    serverListeners.delete(listener);
-  };
-}
-
 /**
  * `catch` handler for a best-effort start whose follow-up status request
  * reports a missing runtime better than the start error does. A stale sidecar
@@ -91,7 +67,6 @@ export async function stopGeoLibreSidecar(): Promise<void> {
   stopGeneration += 1;
   await invoke("stop_geolibre_sidecar");
   setSidecarAuthToken(null);
-  publishServer(null);
 }
 
 function assertSidecarAllowed(): void {

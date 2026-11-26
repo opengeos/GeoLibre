@@ -5,8 +5,26 @@ import {
   startGeoLibreSidecar,
   StaleSidecarError,
   stopGeoLibreSidecar,
-  subscribeSidecarServer,
 } from "../apps/geolibre-desktop/src/lib/sidecar";
+import { checkSidecarHealth, setSidecarFetch } from "../packages/processing/src/sidecar-client";
+
+/**
+ * The token the sidecar client currently attaches: what a start publishes and a
+ * stop clears.
+ */
+async function currentSidecarToken(): Promise<string | null> {
+  let token: string | null = null;
+  setSidecarFetch(async (_input, init) => {
+    token = new Headers(init?.headers).get("X-GeoLibre-Token");
+    return new Response("{}", { status: 500 });
+  });
+  try {
+    await checkSidecarHealth("http://127.0.0.1:8765");
+  } finally {
+    setSidecarFetch(null);
+  }
+  return token;
+}
 
 // Tauri rejects a failed `Result<_, String>` command with the bare string. The
 // stale-sidecar case must become a StaleSidecarError so best-effort callers
@@ -82,17 +100,11 @@ it("does not republish a start response delivered after stop completes", async (
           : Promise.resolve(),
     },
   };
-  const seen: unknown[] = [];
-  const unsubscribe = subscribeSidecarServer((info) => seen.push(info));
-  try {
-    const starting = startGeoLibreSidecar();
-    await stopGeoLibreSidecar();
-    finishStart({ baseUrl: "http://127.0.0.1:8765", port: 8765, token: "obsolete" });
-    await starting;
-    assert.deepEqual(seen, [null]);
-  } finally {
-    unsubscribe();
-  }
+  const starting = startGeoLibreSidecar();
+  await stopGeoLibreSidecar();
+  finishStart({ baseUrl: "http://127.0.0.1:8765", port: 8765, token: "obsolete" });
+  await starting;
+  assert.equal(await currentSidecarToken(), null);
 });
 
 it("never touches Live MCP access: the desktop shell hosts that relay", async () => {
@@ -133,16 +145,13 @@ it("reports a failed stop without claiming the running sidecar stopped", async (
       },
     },
   };
-  const seen: unknown[] = [];
-  const unsubscribe = subscribeSidecarServer((state) => seen.push(state));
   try {
     await startGeoLibreSidecar();
     await assert.rejects(stopGeoLibreSidecar(), /stop failed/);
-    assert.equal(seen.at(-1), info);
+    assert.equal(await currentSidecarToken(), "still-running");
   } finally {
     failStop = false;
     await stopGeoLibreSidecar();
-    unsubscribe();
   }
 });
 
@@ -161,19 +170,16 @@ it("does not publish a start result while a requested stop is still pending", as
       invoke: (command: string) => (command === "start_geolibre_sidecar" ? startResult : stopped),
     },
   };
-  const states: unknown[] = [];
-  const unsubscribe = subscribeSidecarServer((state) => states.push(state));
   try {
     const starting = startGeoLibreSidecar();
     const stopping = stopGeoLibreSidecar();
     finishStart(info);
     await starting;
-    assert.equal(states.at(-1), null);
+    assert.equal(await currentSidecarToken(), null);
     finishStop();
     await stopping;
-    assert.equal(states.at(-1), null);
+    assert.equal(await currentSidecarToken(), null);
   } finally {
     finishStop();
-    unsubscribe();
   }
 });
