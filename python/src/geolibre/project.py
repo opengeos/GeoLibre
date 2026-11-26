@@ -4529,6 +4529,18 @@ ARCGIS_SERVICES: dict[str, tuple[str, str]] = {
 _ARCGIS_EXPORT_TILE_SIZE = 256
 
 
+def _refuse_non_json_number(token: str) -> Any:
+    """Refuse the ``NaN``/``Infinity`` literals Python's decoder accepts.
+
+    Args:
+        token: The non-standard literal.
+
+    Raises:
+        json.JSONDecodeError: Always, so the reader reports invalid JSON.
+    """
+    raise json.JSONDecodeError(f"non-JSON number {token}", token, 0)
+
+
 def _read_public_arcgis_json(url: str, label: str, limit: int = 2 * 1024 * 1024) -> Any:
     """Read one bounded public ArcGIS REST JSON document.
 
@@ -4570,7 +4582,7 @@ def _read_public_arcgis_json(url: str, label: str, limit: int = 2 * 1024 * 1024)
     if len(raw) > limit:
         raise ValueError(f"{label} exceeds the {limit // (1024 * 1024)} MiB size limit")
     try:
-        return json.loads(raw.decode("utf-8"))
+        return json.loads(raw.decode("utf-8"), parse_constant=_refuse_non_json_number)
     except RecursionError as exc:
         raise ValueError(f"{label} is too deeply nested") from exc
     except (UnicodeDecodeError, json.JSONDecodeError) as exc:
@@ -4852,6 +4864,8 @@ def arcgis_vector_tile_layer(
     if not re.search(r"/VectorTileServer$", service_url, re.IGNORECASE):
         raise ValueError("url must end in /VectorTileServer")
     resolved_bounds = _resolve_bounds(bounds)
+    if attribution is not None and not isinstance(attribution, str):
+        raise ValueError("attribution must be a string")
     info = _read_public_arcgis_json(f"{service_url}?f=json", "ArcGIS vector tile service metadata")
     if isinstance(info, dict) and isinstance(info.get("error"), dict):
         raise ValueError("ArcGIS vector tile service returned an error")

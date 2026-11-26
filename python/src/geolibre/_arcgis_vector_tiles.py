@@ -17,6 +17,8 @@ import re
 from typing import Any
 from urllib.parse import unquote, urljoin, urlsplit
 
+from ._arcgis_cache import remote_credit_text
+
 #: Style layer kinds ``arcgisVectorStyle`` draws from a vector source. A
 #: ``background`` needs no source and is also accepted.
 DRAWABLE_LAYER_TYPES = frozenset({"fill", "line", "circle", "symbol", "fill-extrusion", "heatmap"})
@@ -133,20 +135,6 @@ def _extent_bounds(extent: Any) -> list[float] | None:
     return bounds if _is_geo_bounds(bounds) else None
 
 
-def _remote_text(value: Any) -> str:
-    """Reduce a remote credit to plain text, as ``cached_arcgis_source`` does.
-
-    Args:
-        value: The service's ``copyrightText``.
-
-    Returns:
-        The credit without markup, or an empty string.
-    """
-    if not isinstance(value, str):
-        return ""
-    return " ".join(re.sub(r"<[^>]*>?", "", value).split())
-
-
 def layer_name_from_service_url(url: str) -> str:
     """Name a layer after its service, as ``layerNameFromArcGISInput``.
 
@@ -236,7 +224,7 @@ def build_arcgis_vector_tile_style(
         if isinstance(service_tiles, list) and service_tiles and isinstance(service_tiles[0], str)
         else None
     )
-    attribution = _remote_text(info.get("copyrightText"))
+    attribution = remote_credit_text(info.get("copyrightText"))
 
     sources: dict[str, Any] = {}
     renamed: dict[str, str] = {}
@@ -278,7 +266,7 @@ def build_arcgis_vector_tile_style(
         source["tiles"] = tiles
         # The SDK's _getAttribution prefers the service credit, then the
         # style source's own attribution, then an empty string.
-        source["attribution"] = attribution or _remote_text(raw.get("attribution"))
+        source["attribution"] = attribution or remote_credit_text(raw.get("attribution"))
         scoped = f"{layer_id}-source-{index}-{_sanitize_id_part(str(original_id))}"
         renamed[str(original_id)] = scoped
         sources[scoped] = source

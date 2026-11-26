@@ -317,18 +317,32 @@ def test_absolute_tile_template_and_malformed_wkid(vts):
     assert "bounds" not in layer["metadata"]
 
 
-@pytest.mark.parametrize("wkid", [float("inf"), float("nan")])
-def test_non_finite_wkid_has_no_bounds(vts, wkid):
-    """Treat a non-finite WKID as an unknown extent.
+@pytest.mark.parametrize("where", ["wkid", "paint"])
+def test_non_json_numbers_are_refused(vts, where):
+    """Refuse NaN/Infinity, which the project file could not store.
 
     Args:
         vts: The mutable metadata transport fixture.
-        wkid: A non-finite WKID.
+        where: Which document carries the non-finite number.
     """
     info, style, _ = vts
-    del style["sources"]["Santa_Monica_parcels_VTL"]["bounds"]
-    info["fullExtent"]["spatialReference"] = {"wkid": wkid}
-    assert "bounds" not in _build()["metadata"]
+    if where == "wkid":
+        info["fullExtent"]["spatialReference"] = {"wkid": float("inf")}
+    else:
+        style["layers"][0]["paint"]["fill-opacity"] = float("nan")
+    with pytest.raises(ValueError, match="not valid JSON"):
+        _build()
+
+
+def test_attribution_must_be_a_string(vts):
+    """Refuse a non-string attribution before any request.
+
+    Args:
+        vts: The metadata transport fixture.
+    """
+    with pytest.raises(ValueError, match="attribution"):
+        _build(attribution=5)
+    assert vts[2] == []
 
 
 def test_style_attribution_is_the_fallback_credit(vts):
@@ -354,7 +368,7 @@ def test_query_strings_are_not_saved(vts):
     assert layer["sourcePath"] == SERVICE
 
 
-@pytest.mark.parametrize("ymax", [4.5e9, float("inf")])
+@pytest.mark.parametrize("ymax", [4.5e9, 1e300])
 def test_out_of_range_service_extent_has_no_bounds(vts, ymax):
     """Treat an extent outside the Web Mercator square as unknown.
 
