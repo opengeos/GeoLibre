@@ -1,4 +1,4 @@
-import { fireEvent, screen, waitFor } from "./helpers/dom";
+import { cleanup, fireEvent, screen, waitFor } from "./helpers/dom";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { createElement } from "react";
@@ -169,7 +169,7 @@ describe("IcebergSource", () => {
         throw new Error("HTTP 403 reading metadata");
       },
     }).runtime;
-    document.body.innerHTML = "";
+    cleanup();
     renderAddDataSource(createElement(IcebergSource, { loadRuntime: async () => failing }));
     fireEvent.change(screen.getByLabelText("Table metadata location"), {
       target: { value: LOCATION },
