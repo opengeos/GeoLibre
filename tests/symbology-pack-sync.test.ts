@@ -503,6 +503,25 @@ describe("geometry generator sync", () => {
     // A hidden annotation must not leave its bounding box behind.
     syncLayer(map as never, annotation(false));
     assert.ok(!generated());
+    // One hidden, one visible: like a time or rule filter, the hidden feature
+    // turns derived symbology off for the whole layer, since it is built from
+    // the raw features and cannot honor a per-feature filter.
+    const mixed = annotation(undefined);
+    mixed.geojson = {
+      type: "FeatureCollection",
+      features: [
+        mixed.geojson!.features[0],
+        {
+          ...mixed.geojson!.features[0],
+          properties: { ...mixed.geojson!.features[0].properties, visible: false },
+        },
+      ],
+    };
+    syncLayer(map as never, mixed);
+    assert.ok(!generated());
+    // Unhiding it brings the generator back.
+    syncLayer(map as never, annotation(true));
+    assert.ok(generated());
   });
 
   it("suppresses generator layers while the layer renders as an extrusion", () => {

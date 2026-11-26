@@ -503,7 +503,11 @@ export abstract class ArcgisEngineLayers extends ArcgisEngineIdentify {
         } catch (error) {
           for (const native of built) {
             this.companions.delete(native);
-            native.destroy();
+            try {
+              native.destroy();
+            } catch {
+              // Keep destroying the rest; the construction error is what to report.
+            }
           }
           throw error;
         }
