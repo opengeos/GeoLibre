@@ -382,8 +382,9 @@ impl RelayCore {
             Some(path) => json!({
                 "kind": "desktop",
                 "transport": "unix",
+                // No `url`: a reader that ignores `transport` must fail
+                // closed rather than dial localhost:80 with the token.
                 "socket": path.to_string_lossy(),
-                "url": "http://localhost/relay",
                 "token": token,
                 "pid": std::process::id(),
             }),
@@ -1044,29 +1045,39 @@ fn read_request(
     };
     let mut reader = BufReader::new(connection);
     let mut head = Vec::new();
+    let mut line_start = 0usize;
+    // `fill_buf` makes at most one socket read, so setting the read timeout
+    // before each call keeps every read inside the whole-request deadline
+    // (`read_until` would loop over many reads under one timeout).
     loop {
-        let before = head.len();
+        if late() {
+            return Err(fail(408, "The request took too long."));
+        }
         reader
             .get_mut()
             .limit_reads(budget())
             .map_err(|_| fail(400, "Could not read the request."))?;
-        let read = reader
-            .by_ref()
-            .take((MAX_HEADER_BYTES + 1 - head.len()) as u64)
-            .read_until(b'\n', &mut head)
+        let available = reader
+            .fill_buf()
             .map_err(|_| fail(400, "Could not read the request."))?;
-        if read == 0 {
+        if available.is_empty() {
             return Err(fail(400, "Incomplete request."));
         }
+        let room = MAX_HEADER_BYTES + 1 - head.len();
+        let take = available.len().min(room);
+        let newline = available[..take].iter().position(|byte| *byte == b'\n');
+        let used = newline.map_or(take, |index| index + 1);
+        head.extend_from_slice(&available[..used]);
+        reader.consume(used);
         if head.len() > MAX_HEADER_BYTES {
             return Err(fail(431, "Request headers are too large."));
         }
-        if late() {
-            return Err(fail(408, "The request took too long."));
-        }
-        let line = &head[before..];
-        if line == b"\r\n" || line == b"\n" {
-            break;
+        if newline.is_some() {
+            let line = &head[line_start..];
+            if line == b"\r\n" || line == b"\n" {
+                break;
+            }
+            line_start = head.len();
         }
     }
     let text = String::from_utf8(head).map_err(|_| fail(400, "Malformed request."))?;

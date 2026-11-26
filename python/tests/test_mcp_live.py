@@ -774,7 +774,6 @@ def _unix_discovery(directory: Path, socket_path: Path, **overrides: object) -> 
         "kind": "desktop",
         "transport": "unix",
         "socket": str(socket_path),
-        "url": "http://localhost/relay",
         "token": "unix-secret",
         "pid": os.getpid(),
     }

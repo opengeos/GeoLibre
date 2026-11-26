@@ -411,15 +411,18 @@ def _relay_from_sidecar_file(path: Path) -> Relay | None:
         return None
     if not isinstance(info, dict):
         return None
-    url = info.get("url")
     token = info.get("token")
+    unix = info.get("transport") == "unix"
+    # A Unix-socket record carries no dialable URL, so an older reader that
+    # ignores `transport` skips it instead of sending the token to port 80.
+    url = "http://localhost/relay" if unix else info.get("url")
     if not isinstance(url, str) or not isinstance(token, str) or not token:
         return None
     pid = info.get("pid")
     if not isinstance(pid, int) or not _pid_alive(pid):
         return None
     socket_path: str | None = None
-    if info.get("transport") == "unix":
+    if unix:
         socket_path = _unix_socket_beside(path, info.get("socket"))
         if socket_path is None:
             return None
