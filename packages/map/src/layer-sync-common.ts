@@ -24,7 +24,6 @@ import {
   lineDecorationLayerId,
   lineLayerId,
   markerLayerId,
-  sourceId,
   textLayerId,
 } from "./geojson-loader";
 import {
@@ -165,7 +164,7 @@ export function managedZoomRangeLayerIdsFor(map: maplibregl.Map): Set<string> {
   return ids;
 }
 
-export const geoJsonSourceData = new WeakMap<maplibregl.GeoJSONSource, GeoJSON>();
+const geoJsonSourceData = new WeakMap<maplibregl.GeoJSONSource, GeoJSON>();
 
 export function rememberGeoJsonData(map: maplibregl.Map, sourceId: string, data: GeoJSON): void {
   const source = map.getSource(sourceId);
@@ -278,7 +277,7 @@ export function removeSourceIfExists(map: maplibregl.Map, id: string): void {
 // getStyle() deep-clones the whole style, and syncs can fire rapidly (e.g.
 // while dragging an opacity slider), so cache the resolved font per map and
 // invalidate when a new basemap style loads.
-export const textFontCache = new WeakMap<maplibregl.Map, string[]>();
+const textFontCache = new WeakMap<maplibregl.Map, string[]>();
 
 /** Invalidate before restoring labels in a persistent style-load listener. */
 export function invalidateTextFontForMapStyle(map: maplibregl.Map): void {
@@ -295,7 +294,7 @@ export function textFontForMapStyle(map: maplibregl.Map): string[] {
   return fonts;
 }
 
-export function resolveTextFontFromStyle(map: maplibregl.Map): string[] {
+function resolveTextFontFromStyle(map: maplibregl.Map): string[] {
   return resolveTextFontFromStyleLayers(map.getStyle().layers, ["Noto Sans Regular"]);
 }
 
@@ -419,12 +418,9 @@ export function removeIfExists(map: maplibregl.Map, id: string): void {
   if (map.getLayer(id)) map.removeLayer(id);
 }
 
-export type GeoJsonClusterState = { cluster: boolean; radius: number; maxZoom: number };
+type GeoJsonClusterState = { cluster: boolean; radius: number; maxZoom: number };
 
-export const geojsonSourceClusterStates = new WeakMap<
-  maplibregl.Map,
-  Map<string, GeoJsonClusterState>
->();
+const geojsonSourceClusterStates = new WeakMap<maplibregl.Map, Map<string, GeoJsonClusterState>>();
 
 export function rememberGeoJsonSourceClusterState(
   map: maplibregl.Map,

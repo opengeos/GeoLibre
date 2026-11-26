@@ -13,16 +13,13 @@ import type * as maplibregl from "maplibre-gl";
 // Keyed first by the map instance (a WeakMap, so entries are garbage-collected
 // when a map is destroyed and a fresh map never inherits stale base filters)
 // then by native MapLibre layer id.
-export interface NativeFilterState {
+interface NativeFilterState {
   base: maplibregl.FilterSpecification | null;
   appliedKey: string;
   liveKey: string;
 }
 
-export const externalNativeBaseFilters = new WeakMap<
-  maplibregl.Map,
-  Map<string, NativeFilterState>
->();
+const externalNativeBaseFilters = new WeakMap<maplibregl.Map, Map<string, NativeFilterState>>();
 
 export function nativeFilterStatesFor(map: maplibregl.Map): Map<string, NativeFilterState> {
   let perLayer = externalNativeBaseFilters.get(map);
@@ -117,14 +114,14 @@ export function combineExternalFilters(
       : ["all", ...extras]) as unknown as maplibregl.FilterSpecification;
 }
 
-export function nativeFilterFromMap(
+function nativeFilterFromMap(
   map: maplibregl.Map,
   nativeLayerId: string,
 ): maplibregl.FilterSpecification | null {
   return (map.getFilter(nativeLayerId) as maplibregl.FilterSpecification | undefined) ?? null;
 }
 
-export function nativeFilterKey(filter: maplibregl.FilterSpecification | null): string {
+function nativeFilterKey(filter: maplibregl.FilterSpecification | null): string {
   return JSON.stringify(filter);
 }
 

@@ -12,7 +12,6 @@ import {
 } from "./pmtiles-layer";
 import type * as maplibregl from "maplibre-gl";
 import { ensurePMTilesProtocol } from "./pmtiles-archive";
-import { sourceId } from "./geojson-loader";
 import { ensureGeneratedImageHandler } from "./generated-images";
 import { prepareLineDecoration } from "./line-decorations";
 import { circlePaint, fillPaint, linePaint, rasterPaint } from "./style-mapper";
@@ -155,7 +154,7 @@ export function ensurePMTilesExternalLayer(
 }
 
 // Bound cleanup to the decorations this map instance has actually created.
-export const pmtilesDecorationOwners = new WeakMap<maplibregl.Map, Map<string, Set<string>>>();
+const pmtilesDecorationOwners = new WeakMap<maplibregl.Map, Map<string, Set<string>>>();
 
 /**
  * Line decorations (flow-direction arrows and other repeated symbols) for a
@@ -264,17 +263,17 @@ export function removeStalePMTilesLineDecorations(
   if (owners?.size === 0) pmtilesDecorationOwners.delete(map);
 }
 
-export function getPMTilesSourceId(layer: GeoLibreLayer): string | undefined {
+function getPMTilesSourceId(layer: GeoLibreLayer): string | undefined {
   return stringMetadata(layer.metadata.sourceId) ?? stringSource(layer.source.sourceId) ?? layer.id;
 }
 
-export function getPMTilesTileType(layer: GeoLibreLayer): "raster" | "vector" {
+function getPMTilesTileType(layer: GeoLibreLayer): "raster" | "vector" {
   return layer.metadata.tileType === "raster" || layer.source.type === "raster"
     ? "raster"
     : "vector";
 }
 
-export function getPMTilesRenderableSourceLayers(
+function getPMTilesRenderableSourceLayers(
   layer: GeoLibreLayer,
   sourceId: string,
   nativeLayerIds: string[],
@@ -301,7 +300,7 @@ export function getPMTilesSourceLayers(layer: GeoLibreLayer): string[] {
  * The id this source layer is already drawn under, or the one to draw it under. Both schemes are
  * consulted — see `pmtilesControlLayerId` — or a control-added layer gets a second set over it.
  */
-export function getPMTilesNativeLayerId(
+function getPMTilesNativeLayerId(
   nativeLayerIds: string[],
   sourceId: string,
   sourceLayer: string,
@@ -486,7 +485,7 @@ export function syncBasemapControlRasterLayer(
 // plugins. Each entry pairs with a plugin id in WEB_SERVICE_PLUGIN_IDS in
 // @geolibre/plugins' web-service-sync; keep the two lists in step when
 // adding a web service plugin.
-export const WEB_SERVICE_SOURCE_KINDS = new Set([
+const WEB_SERVICE_SOURCE_KINDS = new Set([
   "fema-wms",
   "nasa-earthdata",
   "enviroatlas",
@@ -557,7 +556,7 @@ export function syncWebServiceTileRasterLayer(
 // federal endpoints without permissive CORS headers, so the dev server
 // routes them through the WMS proxy. The external-native path bypasses
 // getRenderableRasterTiles, hence the dedicated proxying here.
-export function getWebServiceTiles(map: maplibregl.Map, layer: GeoLibreLayer): string[] {
+function getWebServiceTiles(map: maplibregl.Map, layer: GeoLibreLayer): string[] {
   const tiles = tileTemplatesForMapCrs(map, getBasemapControlTiles(layer));
   if (layer.type !== "wms" || !isViteDevServer()) return tiles;
   return tiles.map((tile) =>
@@ -571,13 +570,13 @@ export function getWebServiceTiles(map: maplibregl.Map, layer: GeoLibreLayer): s
 // is the documented external-raster contract and the only source the generic
 // external-raster path reads — it deliberately does not look at
 // metadata.tileUrl (see getBasemapControlTiles for that basemap-internal key).
-export function getSourceTiles(layer: GeoLibreLayer): string[] {
+function getSourceTiles(layer: GeoLibreLayer): string[] {
   const tiles = layer.source.tiles;
   if (!Array.isArray(tiles)) return [];
   return tiles.filter((tile): tile is string => typeof tile === "string" && tile.length > 0);
 }
 
-export function getBasemapControlTiles(layer: GeoLibreLayer): string[] {
+function getBasemapControlTiles(layer: GeoLibreLayer): string[] {
   const tiles = getSourceTiles(layer);
   if (tiles.length > 0) return tiles;
   // The basemap control stores its single tile template under this internal
@@ -587,7 +586,7 @@ export function getBasemapControlTiles(layer: GeoLibreLayer): string[] {
   return tileUrl ? [tileUrl] : [];
 }
 
-export function getWaybackTileUrl(layer: GeoLibreLayer): string | null {
+function getWaybackTileUrl(layer: GeoLibreLayer): string | null {
   const rawUrl =
     stringMetadata(layer.metadata.waybackItemUrl) ??
     stringSource(layer.source.url) ??

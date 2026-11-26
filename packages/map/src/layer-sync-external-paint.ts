@@ -31,7 +31,7 @@ import {
 } from "./layer-sync-native-filters";
 
 /** `metadata.sourceKind` for the layers maplibre-gl-vector owns. */
-export const VECTOR_CONTROL_SOURCE_KIND = "maplibre-gl-vector";
+const VECTOR_CONTROL_SOURCE_KIND = "maplibre-gl-vector";
 
 /**
  * A layer the Add Vector Layer control owns, matched by its metadata rather
@@ -82,7 +82,7 @@ export function setNativeLayerVisibility(
   }
 }
 
-export function getStyleLayerSpec(
+function getStyleLayerSpec(
   map: maplibregl.Map,
   layerId: string,
 ): maplibregl.LayerSpecification | null {
@@ -106,7 +106,7 @@ export function getStyleLayerSpec(
   return map.getStyle?.()?.layers?.find((layer) => layer.id === layerId) ?? null;
 }
 
-export function isFillStyleLayerSpec(
+function isFillStyleLayerSpec(
   layer: maplibregl.LayerSpecification | null,
 ): layer is maplibregl.FillLayerSpecification {
   return layer?.type === "fill";
@@ -123,9 +123,9 @@ export function externalExtrusionLayerId(nativeLayerId: string): string {
 // `nativeFilterStatesFor`) because native layer ids are only unique within one
 // map: two live maps showing the same control would otherwise share entries,
 // and one clearing extrusion would strand the other's fill hidden.
-export const extrusionHiddenNativeLayerIdsByMap = new WeakMap<maplibregl.Map, Set<string>>();
+const extrusionHiddenNativeLayerIdsByMap = new WeakMap<maplibregl.Map, Set<string>>();
 
-export function extrusionHiddenNativeLayerIdsFor(map: maplibregl.Map): Set<string> {
+function extrusionHiddenNativeLayerIdsFor(map: maplibregl.Map): Set<string> {
   let ids = extrusionHiddenNativeLayerIdsByMap.get(map);
   if (!ids) {
     ids = new Set();
@@ -338,7 +338,7 @@ export function syncVectorControlPointSymbology(
 // radius.
 export const overriddenRadiusNativeLayerIds = new WeakMap<maplibregl.Map, Set<string>>();
 
-export function overriddenRadiusIdsFor(map: maplibregl.Map): Set<string> {
+function overriddenRadiusIdsFor(map: maplibregl.Map): Set<string> {
   let ids = overriddenRadiusNativeLayerIds.get(map);
   if (!ids) {
     ids = new Set();
@@ -348,7 +348,7 @@ export function overriddenRadiusIdsFor(map: maplibregl.Map): Set<string> {
 }
 
 /** Hand an overridden circle-radius back to the control's flat value. */
-export function restoreOverriddenCircleRadius(
+function restoreOverriddenCircleRadius(
   map: maplibregl.Map,
   circleNativeId: string,
   layer: GeoLibreLayer,
@@ -359,9 +359,9 @@ export function restoreOverriddenCircleRadius(
 
 // The nullable paint GeoLibre wrote on plugin and control native layers, per
 // map (see OwnedPaintResets).
-export const ownedPaintResets = new WeakMap<maplibregl.Map, OwnedPaintResets>();
+const ownedPaintResets = new WeakMap<maplibregl.Map, OwnedPaintResets>();
 
-export function ownedPaintResetsFor(map: maplibregl.Map): OwnedPaintResets {
+function ownedPaintResetsFor(map: maplibregl.Map): OwnedPaintResets {
   let owned = ownedPaintResets.get(map);
   if (!owned) {
     owned = new OwnedPaintResets();

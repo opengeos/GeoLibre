@@ -236,7 +236,7 @@ export function syncGeoJsonVtLayer(
  * newly added render layer is inserted below `beforeId`, so the order they are
  * first added in is the order they stack in.
  */
-export function applyVectorDataRenderLayers(
+function applyVectorDataRenderLayers(
   map: maplibregl.Map,
   layer: GeoLibreLayer,
   src: string,
@@ -299,7 +299,7 @@ export function applyVectorDataRenderLayers(
  * extrusion, whichever the style asks for, and the removal of every polygon
  * layer the current style or geometry no longer uses.
  */
-export function applyPolygonRenderLayers(
+function applyPolygonRenderLayers(
   ctx: VectorRenderContext,
   fillPatternId: ReturnType<typeof prepareFillPattern>,
 ): void {
@@ -328,7 +328,7 @@ export function applyPolygonRenderLayers(
  * The extruded polygon path: a `fill-extrusion` layer, plus a flat fill for
  * the zoom range below the style's flat-extrusion cutoff when it has one.
  */
-export function applyExtrudedPolygonLayers(
+function applyExtrudedPolygonLayers(
   ctx: VectorRenderContext,
   fillPatternId: ReturnType<typeof prepareFillPattern>,
 ): void {
@@ -395,7 +395,7 @@ export function applyExtrudedPolygonLayers(
  * The flat polygon path: the normal fill layer, or the inverted mask that
  * replaces it when the style asks for an inverted fill and one can be built.
  */
-export function applyFlatPolygonFillLayers(
+function applyFlatPolygonFillLayers(
   ctx: VectorRenderContext,
   fillPatternId: ReturnType<typeof prepareFillPattern>,
 ): void {
@@ -483,7 +483,7 @@ export function applyFlatPolygonFillLayers(
  * The line layer: line features, plus polygon outlines unless the polygons
  * are extruded.
  */
-export function applyLineRenderLayer(ctx: VectorRenderContext): void {
+function applyLineRenderLayer(ctx: VectorRenderContext): void {
   const { map, layer, profile, sourceSpec, beforeId, visibility, opacity } = ctx;
   if (profile.hasLine || (!layer.style.extrusionEnabled && profile.hasPolygon)) {
     ensureLayer(
@@ -519,7 +519,7 @@ export function applyLineRenderLayer(ctx: VectorRenderContext): void {
  * outlines. With line placement MapLibre rotates the icon to follow the
  * line, so the arrow shape points along the feature's direction.
  */
-export function applyLineDecorationLayer(ctx: VectorRenderContext): void {
+function applyLineDecorationLayer(ctx: VectorRenderContext): void {
   const { map, layer, profile, sourceSpec, beforeId, visibility, opacity } = ctx;
   const decorationImageId = prepareLineDecoration(layer.style);
   if (
@@ -570,7 +570,7 @@ export function applyLineDecorationLayer(ctx: VectorRenderContext): void {
  * the single (default) circle / marker renderer — and the removal of every
  * point layer the other renderers own.
  */
-export function applyPointRenderLayers(
+function applyPointRenderLayers(
   ctx: VectorRenderContext,
   markerImage: ReturnType<typeof markerImageValue>,
   kmlIconImage: ReturnType<typeof prepareKmlFeatureIcons>,
@@ -592,7 +592,7 @@ export function applyPointRenderLayers(
 }
 
 /** Heatmap renderer: one density layer, no circle/cluster/marker layers. */
-export function applyHeatmapPointLayer(ctx: VectorRenderContext): void {
+function applyHeatmapPointLayer(ctx: VectorRenderContext): void {
   const { map, layer, sourceSpec, beforeId, visibility, opacity, hasTextMarkers } = ctx;
   removeIfExists(map, circleLayerId(layer.id));
   removeIfExists(map, markerLayerId(layer.id));
@@ -624,7 +624,7 @@ export function applyHeatmapPointLayer(ctx: VectorRenderContext): void {
  * for the individual (unclustered) points. The source carries clusters
  * (geojson source-level clustering, or supercluster tiles on the tiled path).
  */
-export function applyClusterPointLayers(ctx: VectorRenderContext): void {
+function applyClusterPointLayers(ctx: VectorRenderContext): void {
   const { map, layer, sourceSpec, beforeId, visibility, opacity, hasTextMarkers } = ctx;
   removeIfExists(map, heatmapLayerId(layer.id));
   removeIfExists(map, markerLayerId(layer.id));
@@ -688,7 +688,7 @@ export function applyClusterPointLayers(ctx: VectorRenderContext): void {
  * Single (default) renderer: a marker icon per point when a marker is
  * configured, otherwise one circle per point.
  */
-export function applySinglePointLayers(
+function applySinglePointLayers(
   ctx: VectorRenderContext,
   markerImage: ReturnType<typeof markerImageValue>,
   kmlIconImage: ReturnType<typeof prepareKmlFeatureIcons>,
@@ -771,7 +771,7 @@ export function applySinglePointLayers(
 }
 
 /** The geoman text-marker layer: annotation text points render their own text. */
-export function applyTextMarkerLayer(ctx: VectorRenderContext): void {
+function applyTextMarkerLayer(ctx: VectorRenderContext): void {
   const { map, layer, sourceSpec, beforeId, visibility, opacity, hasTextMarkers } = ctx;
   if (hasTextMarkers) {
     ensureLayer(
@@ -819,7 +819,7 @@ export function applyTextMarkerLayer(ctx: VectorRenderContext): void {
  * so, like dedup labels, it is suppressed while a time-slider /
  * rule-visibility filter is active rather than rendering hidden features.
  */
-export function applyGeometryGeneratorLayers(
+function applyGeometryGeneratorLayers(
   map: maplibregl.Map,
   layer: GeoLibreLayer,
   visibility: "visible" | "none",

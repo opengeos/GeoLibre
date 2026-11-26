@@ -61,7 +61,7 @@ import {
  * so `moveLayer` cannot reorder it; the host registers a handler that pushes the
  * `beforeId` into the owning control instead. See issue #393 follow-up.
  */
-export let externalDeckLayerOrderHandler:
+let externalDeckLayerOrderHandler:
   | ((layerId: string, beforeId: string | undefined) => void)
   | null = null;
 
@@ -212,7 +212,7 @@ export function syncExternalNativeLayer(
  * zoom behavior: GeoLibre-owned extrusion when the control opts in, then
  * order, effective visibility and feature filters on each native layer.
  */
-export function syncExternalCustomLayer(
+function syncExternalCustomLayer(
   map: maplibregl.Map,
   layer: GeoLibreLayer,
   nativeLayerIds: string[],
@@ -266,7 +266,7 @@ export function syncExternalCustomLayer(
   }
 }
 
-export function ensureExternalGeoJsonNativeLayer(
+function ensureExternalGeoJsonNativeLayer(
   map: maplibregl.Map,
   layer: GeoLibreLayer,
   nativeLayerIds: string[],
@@ -387,7 +387,7 @@ export function ensureExternalGeoJsonNativeLayer(
   }
 }
 
-export function sourceIdFromNativeLayerId(layerId: string | undefined): string | null {
+function sourceIdFromNativeLayerId(layerId: string | undefined): string | null {
   return layerId ? `${layerId}-source` : null;
 }
 
@@ -395,7 +395,7 @@ export function sourceIdFromNativeLayerId(layerId: string | undefined): string |
 // on has exactly one definition: the Layer Library's "can this be re-added and
 // rendered?" gate reads the same predicate (issue #1520), and a change to what
 // marks a custom-render layer cannot leave the two disagreeing.
-export function isExternalCustomLayer(layer: GeoLibreLayer): boolean {
+function isExternalCustomLayer(layer: GeoLibreLayer): boolean {
   return controlRendersLayer(layer);
 }
 
@@ -404,7 +404,7 @@ export function isExternalCustomLayer(layer: GeoLibreLayer): boolean {
 // fill-extrusions. Controls that implement extrusion themselves — Add Vector
 // Layer and DuckDB push `extrusionEnabled` into their own control style — must
 // leave this unset, or both would extrude the same features.
-export function supportsNativeFillExtrusion(layer: GeoLibreLayer): boolean {
+function supportsNativeFillExtrusion(layer: GeoLibreLayer): boolean {
   return layer.metadata.nativeFillExtrusion === true;
 }
 
@@ -415,7 +415,7 @@ export function supportsNativeFillExtrusion(layer: GeoLibreLayer): boolean {
 // leaving the control's own paint untouched. Unlike `customLayerType`, which
 // drops the layer onto an ordering-only path, these layers still respond to the
 // panel's show/hide and reorder controls.
-export function controlOwnsPaint(layer: GeoLibreLayer): boolean {
+function controlOwnsPaint(layer: GeoLibreLayer): boolean {
   return layer.metadata.controlOwnsPaint === true || pluginOwnsPaint(layer);
 }
 
@@ -433,7 +433,7 @@ export const appliedBridgeState = new Map<
 // Forward the panel's generic controls to a plugin-painted layer's own API. The
 // setters are optional, so a plugin can bridge opacity only (the common case:
 // visibility already works, MapLibre honors it on a custom layer).
-export function applyExternalNativePaintBridge(layer: GeoLibreLayer): void {
+function applyExternalNativePaintBridge(layer: GeoLibreLayer): void {
   const bridge = getExternalNativePaintBridge(layer.id);
   if (!bridge) {
     appliedBridgeState.delete(layer.id);

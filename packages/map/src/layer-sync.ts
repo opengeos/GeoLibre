@@ -36,11 +36,7 @@ import { isPlaceholderLayer } from "./placeholders";
 import { getActiveMapCrs } from "./active-map-crs";
 import {
   managedZoomRangeLayerIds,
-  styleLayerZoomRange,
-  intersectZoomRange,
   stringSource,
-  textFontForMapStyle,
-  styleValuesEqual,
   forgetGeoJsonSourceClusterState,
   getExternalNativeLayerIds,
   getExternalSourceIds,

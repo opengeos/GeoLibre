@@ -82,7 +82,7 @@ export function applyAttributeLabelLayer(ctx: VectorRenderContext): void {
  * The aggregated one-label-per-location features for a unique/concatenate
  * label dedupe, or null when the layer does not dedupe its labels.
  */
-export function dedupedAttributeLabels(
+function dedupedAttributeLabels(
   ctx: VectorRenderContext,
   labels: LabelStyle,
 ): ReturnType<typeof getDedupedLabelFeatures> | null {
@@ -122,7 +122,7 @@ export function dedupedAttributeLabels(
  * keep MapLibre's placement: a derived Point can have a different geometry
  * type, containment, or distance result than the original polygon.
  */
-export function onePerPolygonLabelPoints(
+function onePerPolygonLabelPoints(
   ctx: VectorRenderContext,
   labels: LabelStyle,
 ): FeatureCollection | null {
@@ -143,7 +143,7 @@ export function onePerPolygonLabelPoints(
  * geometry type, containment, or distance. These must evaluate on the original
  * geometry rather than on a derived label anchor.
  */
-export function readsFeatureGeometry(layer: GeoLibreLayer, labels: LabelStyle): boolean {
+function readsFeatureGeometry(layer: GeoLibreLayer, labels: LabelStyle): boolean {
   const sources = [
     JSON.stringify(withFeatureFilters(layer, ["all"] as unknown as maplibregl.FilterSpecification)),
     labels.expression,
@@ -203,7 +203,7 @@ export function readsFeatureGeometry(layer: GeoLibreLayer, labels: LabelStyle): 
  * else the parsed label expression, else the field. An empty string means
  * there is nothing to label.
  */
-export function attributeLabelTextField(
+function attributeLabelTextField(
   labels: LabelStyle,
   dedupedLabelFc: ReturnType<typeof getDedupedLabelFeatures> | null,
 ): maplibregl.ExpressionSpecification | string {
@@ -235,14 +235,14 @@ export function attributeLabelTextField(
 }
 
 // Canvas used to measure label widths for line-gap placement.
-export let measureContext: CanvasRenderingContext2D | null | undefined;
+let measureContext: CanvasRenderingContext2D | null | undefined;
 
 /**
  * Width of a label in pixels at `size`. MapLibre draws with the style's glyph
  * font, which is not available to the canvas, so a sans-serif stand-in is
  * measured; without a DOM (tests, workers) a per-character estimate is used.
  */
-export function measureLabelText(text: string, size: number): number {
+function measureLabelText(text: string, size: number): number {
   if (measureContext === undefined) {
     try {
       measureContext =
@@ -257,7 +257,7 @@ export function measureLabelText(text: string, size: number): number {
 }
 
 /** A layer's effective label settings. */
-export function layerLabelStyle(layer: GeoLibreLayer): LabelStyle {
+function layerLabelStyle(layer: GeoLibreLayer): LabelStyle {
   return { ...DEFAULT_LAYER_STYLE.labels, ...styleValue(layer.style, "labels") };
 }
 
@@ -265,7 +265,7 @@ export function layerLabelStyle(layer: GeoLibreLayer): LabelStyle {
  * The label zoom range, as the label layers apply it: the label's own range
  * intersected with the layer's style range.
  */
-export function labelZoomRange(
+function labelZoomRange(
   labels: LabelStyle,
   style: LayerStyle,
 ): { minzoom: number; maxzoom: number } {
@@ -278,7 +278,7 @@ export function labelZoomRange(
   );
 }
 
-export function lineGapWanted(labels: LabelStyle): boolean {
+function lineGapWanted(labels: LabelStyle): boolean {
   return (
     labels.enabled &&
     labels.placement === "line" &&
@@ -310,7 +310,7 @@ export function lineGapWanted(labels: LabelStyle): boolean {
  * label (the derived-symbology rule). Shared by the placement and the
  * zoom-resync predicate so the two cannot drift.
  */
-export function lineGapApplies(
+function lineGapApplies(
   layer: GeoLibreLayer,
   profile: ReturnType<typeof detectGeometryProfile>,
 ): boolean {
@@ -373,7 +373,7 @@ export function hasLineGapLabels(layers: readonly GeoLibreLayer[]): boolean {
  * hidden by collision would leave an empty hole; placement already avoided
  * overlaps).
  */
-export function ensureLineGapLabelLayer(
+function ensureLineGapLabelLayer(
   ctx: VectorRenderContext,
   labels: LabelStyle,
   points: GeoJSON,
@@ -434,7 +434,7 @@ export function ensureLineGapLabelLayer(
  * Create/update the attribute label layer (and, for deduped labels, its
  * aggregated source), then drop the dedup source once nothing references it.
  */
-export function ensureAttributeLabelLayer(
+function ensureAttributeLabelLayer(
   ctx: VectorRenderContext,
   labels: LabelStyle,
   dedupedLabelFc: ReturnType<typeof getDedupedLabelFeatures> | null,
@@ -546,7 +546,7 @@ export function ensureAttributeLabelLayer(
  * The label layer's base filter and its data-defined overrides (GH #1320),
  * each null when unset or invalid.
  */
-export function attributeLabelOverrides(
+function attributeLabelOverrides(
   labels: LabelStyle,
   dedupedLabelFc: ReturnType<typeof getDedupedLabelFeatures> | null,
 ) {

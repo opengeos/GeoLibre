@@ -87,12 +87,7 @@ export function syncRasterTileLayer(
   );
 }
 
-export type CornerCoordinates = [
-  [number, number],
-  [number, number],
-  [number, number],
-  [number, number],
-];
+type CornerCoordinates = [[number, number], [number, number], [number, number], [number, number]];
 
 /**
  * Validate persisted overlay corners (video/image): four [lng, lat] pairs.
@@ -209,7 +204,7 @@ export function syncImageLayer(map: maplibregl.Map, layer: GeoLibreLayer, before
 
 // Adapted to the map's CRS before the dev proxy wraps them: the adaptation
 // reads the template's query string, which the proxy URL-encodes.
-export function getRenderableRasterTiles(map: maplibregl.Map, layer: GeoLibreLayer): string[] {
+function getRenderableRasterTiles(map: maplibregl.Map, layer: GeoLibreLayer): string[] {
   return proxyWmsTiles(
     layer.type,
     tileTemplatesForMapCrs(map, (layer.source.tiles as string[]) ?? []),
@@ -217,7 +212,7 @@ export function getRenderableRasterTiles(map: maplibregl.Map, layer: GeoLibreLay
 }
 
 /** The parts of MapLibre's `VectorTileSource` this module reads and updates. */
-export interface VectorSourceLike {
+interface VectorSourceLike {
   url?: string;
   tiles?: string[];
   setUrl?: (url: string) => unknown;
@@ -231,7 +226,7 @@ export interface VectorSourceLike {
  * re-requests them, so this is deliberately a no-op when nothing changed — a
  * needless reload would blank the layer for a frame on every sync.
  */
-export function updateVectorSourceEndpoint(
+function updateVectorSourceEndpoint(
   source: VectorSourceLike,
   url: string | undefined,
   tiles: string[] | undefined,
@@ -403,7 +398,7 @@ export function syncMbtilesLayer(
   syncMbtilesVectorLayer(map, layer, beforeId);
 }
 
-export function syncMbtilesVectorLayer(
+function syncMbtilesVectorLayer(
   map: maplibregl.Map,
   layer: GeoLibreLayer,
   beforeId?: string,
@@ -529,7 +524,7 @@ export function syncMbtilesVectorLayer(
   removeStaleMbtilesLayers(map, layer.id, currentLayerIds);
 }
 
-export function getMbtilesSourceLayers(layer: GeoLibreLayer): string[] {
+function getMbtilesSourceLayers(layer: GeoLibreLayer): string[] {
   const sourceLayers = layer.source.sourceLayers ?? layer.metadata.sourceLayers;
   return Array.isArray(sourceLayers)
     ? sourceLayers.filter(
@@ -539,7 +534,7 @@ export function getMbtilesSourceLayers(layer: GeoLibreLayer): string[] {
     : [];
 }
 
-export function removeStaleMbtilesLayers(
+function removeStaleMbtilesLayers(
   map: maplibregl.Map,
   layerId: string,
   currentLayerIds: Set<string>,
@@ -552,7 +547,7 @@ export function removeStaleMbtilesLayers(
   }
 }
 
-export function encodeMbtilesLayerPart(value: string): string {
+function encodeMbtilesLayerPart(value: string): string {
   return encodeURIComponent(value).replaceAll("%", "_");
 }
 
@@ -654,7 +649,7 @@ export function vectorTileAllStyleLayerIds(layer: GeoLibreLayer): string[] {
   });
 }
 
-export function getVectorTileSourceLayers(layer: GeoLibreLayer): string[] {
+function getVectorTileSourceLayers(layer: GeoLibreLayer): string[] {
   const sourceLayers = layer.source.sourceLayers ?? layer.metadata.sourceLayers;
   if (Array.isArray(sourceLayers)) {
     return sourceLayers.filter(
@@ -667,14 +662,14 @@ export function getVectorTileSourceLayers(layer: GeoLibreLayer): string[] {
   return typeof sourceLayer === "string" && sourceLayer.length > 0 ? [sourceLayer] : [];
 }
 
-export function vectorTileScopedSourceLayer(
+function vectorTileScopedSourceLayer(
   layer: GeoLibreLayer,
   sourceLayer: string,
 ): string | undefined {
   return getVectorTileSourceLayers(layer).length > 1 ? sourceLayer : undefined;
 }
 
-export function removeStaleVectorTileLayers(
+function removeStaleVectorTileLayers(
   map: maplibregl.Map,
   layerId: string,
   currentLayerIds: Set<string>,
