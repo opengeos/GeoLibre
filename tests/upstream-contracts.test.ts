@@ -756,6 +756,44 @@ describe("maplibre-gl-planetary-computer", () => {
 describe("maplibre-gl-raster", () => {
   const section = "`maplibre-gl-raster` — stretch and gamma curves";
 
+  it("ignores claimed clicks through the inspector filter's true-inspects contract", async () => {
+    const message = (detail: string) =>
+      contractMessage(
+        "maplibre-gl-raster",
+        "`maplibre-gl-raster`: pixel inspector click filter",
+        detail,
+        "packages/plugins",
+      );
+    // Text check of the published declaration: the filter's meaning is not
+    // visible to the compiler, only its signature.
+    const types = readFileSync(
+      path.join(packageDir("maplibre-gl-raster", "packages/plugins"), "dist/types/index.d.ts"),
+      "utf8",
+    );
+    const doc = types.slice(
+      Math.max(0, types.indexOf("export declare type InspectorClickFilter") - 400),
+      types.indexOf("export declare type InspectorClickFilter"),
+    );
+    assert.ok(
+      doc.includes("`true` to let the pixel inspector handle the click, `false` to ignore it"),
+      message("InspectorClickFilter no longer documents true = inspect, false = ignore"),
+    );
+    const { rasterInspectorClickFilter } =
+      await import("../packages/plugins/src/plugins/maplibre-raster");
+    const { registerMapClickClaim } = await import("@geolibre/core");
+    assert.equal(
+      rasterInspectorClickFilter(),
+      true,
+      message("an unclaimed click must be inspected"),
+    );
+    const release = registerMapClickClaim(() => true);
+    try {
+      assert.equal(rasterInspectorClickFilter(), false, message("a claimed click must be ignored"));
+    } finally {
+      release();
+    }
+  });
+
   it("inverts stretch and gamma like the opacity mirror", async () => {
     const { invertAdjustments, applyAdjustments } = await import("maplibre-gl-raster");
     const { invertRasterAdjustments } =

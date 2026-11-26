@@ -140,6 +140,18 @@ export type RasterControlInternals = {
   _panel?: HTMLElement;
 };
 
+/**
+ * The pixel inspector's click filter: `true` inspects the click, `false`
+ * ignores it (maplibre-gl-raster's `InspectorClickFilter` contract). A click a
+ * drawing map tool (Measure, the Geo Editor) has claimed is ignored, the way
+ * the host's Identify handlers stand down (GeoLibre#3237).
+ *
+ * @returns Whether the inspector should read this click.
+ */
+export function rasterInspectorClickFilter(): boolean {
+  return !isMapClickClaimed();
+}
+
 type RasterControlConstructor = typeof RasterControl;
 type OverlayFactoryOptions = {
   interleaved: boolean;
@@ -1054,7 +1066,7 @@ async function ensureRasterControl(app: GeoLibreAppAPI): Promise<RasterControl |
     // Keep the pixel inspector from reading a click that a drawing map tool
     // (Measure, the Geo Editor) owns, the way the host's Identify handlers
     // stand down (GeoLibre#3237).
-    rasterControl.setInspectorClickFilter(() => !isMapClickClaimed());
+    rasterControl.setInspectorClickFilter(rasterInspectorClickFilter);
     // The control mounts hidden: project restore must not surface a map
     // button the user never asked for. openRasterLayerPanel shows it.
     await patchTauriRasterOverlayFactory(rasterControl);

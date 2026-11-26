@@ -318,7 +318,10 @@ black — it declines the stack.
   `defaultDateFallback` option (0.2.0+), so a panel Add of a time-enabled layer
   probes the zoom-0 tile at its default date and adds the newest earlier date
   with imagery (#3259). This used to be a GeoLibre wrapper around the
-  instance's `addLayer`; it is now upstream API, checked by the compiler.
+  instance's `addLayer`. The probe's behaviour (de-duplicating a repeat Add,
+  passing adds with a `date` or `key` straight through, adding nothing after
+  `onRemove`, which deactivating the plugin runs) is upstream's and tested
+  there; `tests/nasa-earthdata-options.test.ts` checks GeoLibre turns it on.
 
 ### `maplibre-gl-components` (`packages/plugins/package.json`)
 
@@ -451,9 +454,9 @@ enumerating placeholder names.
 DuckDB-WASM holds remote file sizes in 32 bits). It stays a copy so the browse
 panels never import the control's chunk. If it drifts, the remote-browse panels
 (Source Cooperative, Hugging Face) silently block GeoParquet the engine could
-now open, or offer an Add that is certain to fail. Updating the constant is enough: the limit the user is shown is
-rendered from it, not written into the copy. `tests/upstream-contracts.test.ts`
-compares it with the export.
+now open, or offer an Add that is certain to fail. Updating the constant is
+enough: the limit the user is shown is rendered from it, not written into the
+copy. `tests/upstream-contracts.test.ts` compares it with the export.
 
 `remote-file-formats.ts` is the **single** home for this and the other
 format/reader/size rules those panels share — a per-panel copy would miss this
@@ -462,8 +465,8 @@ check, so add new browse panels against that module rather than duplicating it
 
 Adoption (`adoptVectorControlLayers` in `vector-layer-sync.ts`, #2715) hands the
 control's small GeoJSON-mode layers to GeoLibre, and leans on three things the
-package documents as API since 0.12.0. `getLayerGeoJSON` must return the whole collection for
-a `renderMode: "geojson"`, `ingestMode: "table"` layer. `removeLayer` must drop
+package documents as API since 0.12.0. `getLayerGeoJSON` must return the whole
+collection for a `renderMode: "geojson"`, `ingestMode: "table"` layer. `removeLayer` must drop
 the layer's DuckDB table as well as its map source, or adoption keeps two copies
 of the data (the drop is asynchronous and unreported). And `KML_ICON_PROPERTY`
 copies the exported `KML_ICON_URL_PROPERTY`, the feature property the control's
@@ -538,8 +541,8 @@ whole downloads get the size check. It stays a copy to keep the lidar chunk off
 the startup path. If upstream changes that routing, update the copy, or a
 streamed file gets a needless size check and a downloaded one skips it. Note
 that a COPC stream that fails falls back to a whole download, which then skips
-the size check. `addLidarLayerFromUrl` also relies on `load` firing, and adding the store
-layer, before `loadPointCloud` resolves; it throws if not.
+the size check. `addLidarLayerFromUrl` also relies on `load` firing, and adding
+the store layer, before `loadPointCloud` resolves; it throws if not.
 `tests/lidar-url-layer.test.ts` pins the GeoLibre side of both, and
 `tests/upstream-contracts.test.ts` compares the copy with
 `isStreamedPointCloudUrl` over a set of URLs.
@@ -724,10 +727,12 @@ pipeline, a changed curve or a retuned log strength fails
 ### `maplibre-gl-raster`: pixel inspector click filter
 
 `packages/plugins/src/plugins/maplibre-raster.ts` passes
-`() => !isMapClickClaimed()` to the control's public
-`setInspectorClickFilter` (0.15.0 and later), so the pixel inspector ignores a
-click that a drawing map tool (Measure, the Geo Editor) has claimed (#3237).
-The compiler checks it.
+`rasterInspectorClickFilter` to the control's public `setInspectorClickFilter`
+(0.15.0 and later), so the pixel inspector ignores a click that a drawing map
+tool (Measure, the Geo Editor) has claimed (#3237). Upstream's contract is that
+the filter returns `true` to inspect a click and `false` to ignore it;
+`tests/upstream-contracts.test.ts` pins the GeoLibre side against a claimed and
+an unclaimed click.
 
 ### `maplibre-gl-raster` — rasters stay out of the depth buffer
 
@@ -793,7 +798,8 @@ PROJ-computed point. Every entry in the table was checked against PROJ's best
 transformation for that code (within 2 m; 15 m for the NAD27 mean). Re-check
 any entry you add the same way.
 
-One definition is replaced whole, not only shifted: EPSG:31300 (Belge Lambert 72) uses Lambert Conic Conformal (2SP Belgium), which proj4 lacks and the tables
+One definition is replaced whole, not only shifted: EPSG:31300 (Belge Lambert
+72) uses Lambert Conic Conformal (2SP Belgium), which proj4 lacks and the tables
 give as a plain LCC 2SP, about 745 m off. `REPLACED` in `datum-shift.ts` gives it
 the parameters of EPSG:31370, the same grid as a plain LCC 2SP. PROJ has the same
 gap (it uses the plain LCC 2SP formulas for that method), so check it against the
