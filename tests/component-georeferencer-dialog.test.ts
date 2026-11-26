@@ -72,7 +72,7 @@ function clickImageAt(x: number, y: number) {
 
 describe("GeoreferencerDialog", () => {
   it("links image points to map clicks, solves the fit and adds the image to the map", async () => {
-    const { engine, click } = fakeEngine();
+    const { engine, click, fitted } = fakeEngine();
     renderDialog(engine);
     await loadImage();
     assert.equal(screen.getByRole("button", { name: "Add to map" }).hasAttribute("disabled"), true);
@@ -106,6 +106,10 @@ describe("GeoreferencerDialog", () => {
       [-100, 40],
     ]);
     assert.equal((layer.metadata as { gcps: unknown[] }).gcps.length, 3);
+    // The map zooms to the new overlay (zoom-to-new-layers is on by default).
+    assert.equal(fitted.length, 1);
+    const fit = (fitted[0] as number[]).map((v) => Math.round(v * 1000) / 1000);
+    assert.deepEqual(fit, [-100, 40, -96, 42]);
   });
 
   it("asks to reopen the dialog when Escape cancels a pending map link", async () => {

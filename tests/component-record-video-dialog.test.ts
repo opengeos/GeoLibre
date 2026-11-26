@@ -59,16 +59,14 @@ function fakeRecorder(
 }
 
 function renderDialog(recorder: Recorder, engine = fakeEngine()) {
-  let open = true;
   render(
     createElement(RecordVideoDialog, {
       open: true,
-      onOpenChange: (next: boolean) => (open = next),
+      onOpenChange: () => {},
       mapControllerRef: { current: engine },
       recorder,
     }),
   );
-  return () => open;
 }
 
 const text = () => document.body.textContent ?? "";
