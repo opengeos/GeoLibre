@@ -242,6 +242,26 @@ for such an account must return `400` with an error containing the stable,
 case-insensitive sentinel text `username required`. Existing clients recognize
 that phrase and direct the user to account settings.
 
+### `POST /api/collab/identity-token`
+
+Mints a short-lived credential that a GeoLibre live-collaboration relay
+accepts as the joiner's `identityToken` (see
+[Signed-in identity](collaboration.md#signed-in-identity-optional)). Requires a
+credential with `write:projects`; answers `404` with
+`{"error": "collaboration identity is not configured"}` unless the server has
+`GEOLIBRE_COLLAB_IDENTITY_SECRET` (at least 32 characters), which must equal the relay's
+`COLLAB_IDENTITY_SECRET`. Responses are `Cache-Control: no-store`.
+
+```json
+{"token": "<payload>.<signature>", "provider": "geolibre", "expiresAt": "2026-08-03T12:05:00Z"}
+```
+
+The token is `base64url(payload).base64url(HMAC-SHA256(secret, base64url(payload)))`
+with claims `{provider: "geolibre", userId, username, exp}`. It lives
+`GEOLIBRE_COLLAB_IDENTITY_TTL_SECONDS` (default 300, at most 3600), so the
+relay never holds the account's access token and needs no call back to this
+server to check it.
+
 ### Session and personal-token management
 
 These routes require a separate OAuth Bearer grant whose **only** scope is

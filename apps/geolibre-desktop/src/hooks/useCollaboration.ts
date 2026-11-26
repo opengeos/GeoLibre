@@ -92,6 +92,17 @@ export function useCollaboration(
   const applyingRemoteRef = useRef(false);
   const viewOnlyNoticeRef = useRef(createViewOnlyNotice());
   const restoreTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const joinGenerationRef = useRef(0);
+  // The join can wait on the identity lookup; frames sent before it would be
+  // refused by the relay, so project pushes hold until it is out.
+  const joinSentRef = useRef(false);
+  // Set after an anonymous join by a possibly signed-in user: retries once
+  // with a fresh identity token if the relay answers identity-required.
+  const identityRetryRef = useRef<(() => Promise<boolean>) | null>(null);
+  // Set once this connection's welcome has been handled: a whole-project push
+  // before it could overwrite the session with a project that has not yet
+  // taken in the relay's state.
+  const welcomedRef = useRef(false);
   const pendingConnectRef = useRef<{
     resolve: () => void;
     reject: (error: Error) => void;
@@ -151,6 +162,9 @@ export function useCollaboration(
   }, []);
 
   const sendSnapshot = async (): Promise<void> => {
+    // The welcome either loads the session's project or, for a host of an
+    // empty session, sends this one; an edit before it is covered by that.
+    if (!welcomedRef.current) return;
     if (!canEdit() || syncPausedRef.current) return;
     const request = ++snapshotRequestRef.current;
     let project: GeoLibreProject;
@@ -244,6 +258,7 @@ export function useCollaboration(
     switch (message.type) {
       case "welcome": {
         selfIdRef.current = message.clientId;
+        welcomedRef.current = true;
         store.setCollaboration({
           isActive: true,
           connecting: false,
@@ -414,17 +429,57 @@ export function useCollaboration(
       });
     });
 
-    conn.send({
-      type: "join",
-      clientId: selfIdRef.current ?? crypto.randomUUID(),
-      displayName,
-      color,
-      hostToken,
-      inviteToken,
-      identityToken,
-    });
+    // CollabConnection reuses one object across reconnects, so a generation
+    // tells a join for this socket from one a reconnect has superseded.
+    const generation = ++joinGenerationRef.current;
+    const sendJoin = (identity: string | null | undefined) => {
+      if (connRef.current !== conn || joinGenerationRef.current !== generation) return;
+      conn.send({
+        type: "join",
+        clientId: selfIdRef.current ?? crypto.randomUUID(),
+        displayName,
+        color,
+        hostToken,
+        inviteToken,
+        ...(identity ? { identityToken: identity } : {}),
+      });
+      joinSentRef.current = true;
+    };
+    if (identityToken) {
+      sendJoin(identityToken);
+    } else {
+      // Signed in to the server API: join as that account. The token is reused
+      // across reconnects while it has a minute left. Worst case the join (and
+      // so `connect()`) waits the lookup's 3 s deadline before going out
+      // anonymously, as before.
+      void import("../lib/collab-identity")
+        .then(({ fetchCollabIdentityToken }) => fetchCollabIdentityToken())
+        .catch(() => null)
+        .then((token) => {
+          if (connRef.current !== conn || joinGenerationRef.current !== generation) return;
+          // If the session requires sign-in and refuses this join (the
+          // lookup timed out, or a skewed clock kept an expired cached
+          // token), try once more with a fresh token and a longer deadline.
+          identityRetryRef.current = async () => {
+            const { clearCollabIdentityCache, fetchCollabIdentityToken } =
+              await import("../lib/collab-identity");
+            clearCollabIdentityCache();
+            const fresh = await fetchCollabIdentityToken({ timeoutMs: 10_000 }).catch(() => null);
+            if (!fresh || connRef.current !== conn || joinGenerationRef.current !== generation) {
+              return false;
+            }
+            sendJoin(fresh);
+            return true;
+          };
+          sendJoin(token);
+        });
+    }
 
     teardownRef.current = () => {
+      joinGenerationRef.current += 1;
+      joinSentRef.current = false;
+      identityRetryRef.current = null;
+      welcomedRef.current = false;
       if (debounce) clearTimeout(debounce);
       unsubscribe();
     };
@@ -435,6 +490,11 @@ export function useCollaboration(
     if (!surface) return () => {};
     const container = surface.getContainer();
     let lastCursor = 0;
+    // A reconnect keeps these listeners while its join may still wait on the
+    // identity lookup; presence sent before the join would be dropped.
+    const sendPresence = (message: Parameters<CollabConnection["send"]>[0]) => {
+      if (joinSentRef.current) conn.send(message);
+    };
     const onPointerMove = (event: PointerEvent) => {
       const now = Date.now();
       if (now - lastCursor < CURSOR_THROTTLE_MS) return;
@@ -442,17 +502,17 @@ export function useCollaboration(
       const bounds = container.getBoundingClientRect();
       const lngLat = surface.unproject([event.clientX - bounds.left, event.clientY - bounds.top]);
       if (lngLat)
-        conn.send({
+        sendPresence({
           type: "presence",
           cursor: lngLat,
           view: engine.readView(),
         });
     };
     const onPointerLeave = () =>
-      conn.send({ type: "presence", cursor: null, view: engine.readView() });
+      sendPresence({ type: "presence", cursor: null, view: engine.readView() });
     const onCameraIdle = (event?: { storyCamera: boolean }) => {
       if (event?.storyCamera) return;
-      conn.send({ type: "presence", view: engine.readView() });
+      sendPresence({ type: "presence", view: engine.readView() });
     };
     container.addEventListener("pointermove", onPointerMove);
     container.addEventListener("pointerleave", onPointerLeave);
@@ -514,6 +574,18 @@ export function useCollaboration(
         },
         onMessage: (msg) => {
           if (connRef.current !== conn) return;
+          if (
+            msg.type === "error" &&
+            msg.code === "identity-required" &&
+            identityRetryRef.current
+          ) {
+            const retry = identityRetryRef.current;
+            identityRetryRef.current = null;
+            void retry().then((sent) => {
+              if (!sent && connRef.current === conn) handleMessage(msg);
+            });
+            return;
+          }
           if (msg.type !== "welcome" && msg.type !== "snapshot") {
             handleMessage(msg);
             return;
