@@ -136,6 +136,8 @@ export interface HeightGrid {
   /** Buildings in cell coordinates, for shadow casting. */
   buildings: Building[];
   maxHeight: number;
+  /** Cell paints the footprint burn made, charged to the run's visit budget. */
+  burned: number;
   /** Geographic bounds `[west, south, east, north]`. */
   bbox: [number, number, number, number];
   /** Centre latitude/longitude the frame is built around. */
@@ -334,6 +336,7 @@ export function buildHeightGrid(features: Feature[], params: BuildingShadowParam
     cellSize,
     buildings,
     maxHeight,
+    burned,
     bbox: [gWest, gNorth - height * resLat, gWest + width * resLon, gNorth],
     lat0,
     lon0,
@@ -497,7 +500,7 @@ export function buildingShadows(
       `Sun at ${new Date(instant).toISOString().replace(".000Z", "Z")}: azimuth ${sun.azimuth.toFixed(2)}°, elevation ${sun.elevation.toFixed(2)}°.`,
     );
     const up = sun.elevation >= MIN_SUN_ELEVATION_DEGREES;
-    if (up) castShadows(grid, sun.azimuth, sun.elevation, mask);
+    if (up) castShadows(grid, sun.azimuth, sun.elevation, mask, MAX_SHADOW_VISITS - grid.burned);
     else mask.fill(1);
     let shadedGround = 0;
     for (let i = 0; i < cells; i += 1) {
@@ -534,7 +537,8 @@ export function buildingShadows(
         `This run would evaluate ${daylight} sun positions over ${cells.toLocaleString("en-US")} cells, more than the browser budget of ${MAX_SHADOW_WORK.toLocaleString("en-US")}; use a longer time step or a larger cell size.`,
       );
     }
-    let walked = 0;
+    // One budget for the whole run: the burn has already spent part of it.
+    let walked = grid.burned;
     let firstUp: number | null = null;
     let lastUp: number | null = null;
     let positions = 0;

@@ -388,6 +388,7 @@ describe("review hardening", () => {
       cellSize: 1,
       buildings: [],
       maxHeight: 10,
+      burned: 0,
       bbox: [0, 0, 1, 1] as [number, number, number, number],
       lat0: 0,
       lon0: 0,
