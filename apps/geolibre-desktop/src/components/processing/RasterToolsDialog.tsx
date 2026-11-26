@@ -743,8 +743,18 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
         }
         return value;
       };
+      // A file picked for a parameter that is now hidden (a reference surface
+      // after switching back to a plane) is neither read nor counted against
+      // the memory budget.
+      const visibleInputs = <T,>(entries: Record<string, T>): Record<string, T> =>
+        Object.fromEntries(
+          Object.entries(entries).filter(([key]) => {
+            const param = tool.parameters.find((p) => clientInputForParam(p)?.key === key);
+            return !param || isParamVisible(param);
+          }),
+        );
       const vectors: Record<string, unknown> = {};
-      for (const [key, entry] of Object.entries(clientVectorInputs)) {
+      for (const [key, entry] of Object.entries(visibleInputs(clientVectorInputs))) {
         vectors[key] = parseVector(entry);
       }
       let raster: RasterData | undefined;
@@ -783,7 +793,7 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
       // Check its footprint together with output and secondary estimates
       // before decoding the secondary files.
       const additionalInputs = raster
-        ? await loadClientAdditionalRasters(raster, clientAdditionalInputs, {
+        ? await loadClientAdditionalRasters(raster, visibleInputs(clientAdditionalInputs), {
             outputBands: clientRasterOutputBands(tool.id, raster.bands.length),
             expression:
               tool.id === "raster-calc" && typeof params.expression === "string"
@@ -902,6 +912,7 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
     clientVectorInputs,
     vectorPrimaryInput,
     validateParams,
+    isParamVisible,
     mapControllerRef,
     addGeoJsonLayer,
     t,

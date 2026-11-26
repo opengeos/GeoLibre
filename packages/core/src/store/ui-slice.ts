@@ -121,7 +121,8 @@ export type RasterToolKind =
   | "sar-db"
   | "speckle-filter"
   | "sar-rgb"
-  | "flood-map";
+  | "flood-map"
+  | "cut-fill";
 
 /** Unsaved cell text, keyed by feature id and field name. Kept only for this project session. */
 export type AttributeTableDrafts = Record<string, Record<string, string>>;
