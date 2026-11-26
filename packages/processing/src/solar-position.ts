@@ -18,6 +18,11 @@ export interface SunPosition {
   azimuth: number;
   /** Apparent elevation above the horizon in degrees, refraction included. */
   elevation: number;
+  /**
+   * Geometric elevation in degrees, without refraction: the direction the
+   * light actually travels near the ground, which sets shadow lengths.
+   */
+  geometricElevation: number;
   /** Solar declination in degrees. */
   declination: number;
   /** Equation of time in minutes. */
@@ -101,6 +106,7 @@ export function sunPosition(ms: number, lat: number, lon: number): SunPosition {
   return {
     azimuth,
     elevation: geometric + refractionCorrection(geometric),
+    geometricElevation: geometric,
     declination,
     equationOfTime,
   };

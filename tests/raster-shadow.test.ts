@@ -357,3 +357,12 @@ describe("roof-walk budget", () => {
     assert.ok(castShadows(grid, 0, 2, mask) > 100, "the same call fits the default budget");
   });
 });
+
+describe("geometric versus apparent elevation", () => {
+  it("reports both, with refraction lifting the apparent sun", () => {
+    // London, 06:30 UTC at the September equinox: about 5.8° apparent.
+    const sun = sunPosition(Date.parse("2026-09-23T06:30:00Z"), 51.5, -0.12);
+    assert.ok(sun.elevation - sun.geometricElevation > 0.1, "about 0.15° of refraction near 6°");
+    assert.ok(sun.elevation - sun.geometricElevation < 0.25);
+  });
+});

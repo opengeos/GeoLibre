@@ -26,7 +26,7 @@ import {
   polygonizeRaster,
   zonalStatistics,
 } from "./raster-vector";
-import { buildingShadows } from "./raster-shadow";
+import { buildingShadows, type BuildingShadowParams } from "./raster-shadow";
 import { mosaicRasters, reprojectRaster, resampleRaster } from "./raster-warp";
 
 /**
@@ -1299,7 +1299,7 @@ export async function runRasterToolClientAsync(
       // The shadow grid is built in lon/lat; a projected input is brought there first.
       const wgs84 =
         epsg === 4326 ? collection : await toWgs84(collection, await epsgDefinition(epsg));
-      const out = buildingShadows(wgs84.features, p as never);
+      const out = buildingShadows(wgs84.features, p as BuildingShadowParams);
       return rasterResult(out.raster, out.messages);
     }
     default:

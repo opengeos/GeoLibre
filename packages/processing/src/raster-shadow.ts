@@ -14,10 +14,16 @@ import { clearSkyDni, localTimeToUtc, sunPosition } from "./solar-position";
  *    its footprint and, for every footprint edge, the quadrilateral swept by
  *    translating that edge by the shadow offset `h / tan(elevation)` away from
  *    the sun. Those polygons are scan-converted, so the ground answer is exact
- *    to the cell and costs only the shadowed area.
- *  - **On a roof**, a taller neighbour may shade it. Roof cells (a small share
- *    of the grid) walk the height grid toward the sun instead, stopping once
- *    the ray climbs above the tallest building.
+ *    to the cell; the sweeps cost the shadowed area, on top of one pass over
+ *    the grid per sun position.
+ *  - **On a roof**, a taller neighbour may shade it. Roof cells walk the
+ *    height grid toward the sun instead, stopping once the ray climbs above
+ *    the tallest building or leaves the grid. In a dense district roofs can be
+ *    half the cells, so this walk is usually the larger cost.
+ *
+ * Shadow lengths use the sun's geometric elevation (light travels in a
+ * straight line near the ground); the apparent, refracted elevation decides
+ * whether the sun is up and feeds the air mass of the irradiance model.
  *
  * Sun hours and insolation repeat that for sun positions every `step` minutes
  * from midnight to midnight local time, counting only positions with the sun
@@ -368,6 +374,15 @@ export function castShadows(
   return samples;
 }
 
+/**
+ * The elevation shadows are cast at: the geometric elevation, floored just
+ * above the horizon, since refraction can lift the apparent sun into view
+ * while the geometric one is still at or below it.
+ */
+function shadowElevation(geometric: number): number {
+  return Math.max(geometric, 0.1);
+}
+
 /** The outcome of {@link buildingShadows}. */
 export interface BuildingShadowResult {
   raster: RasterData;
@@ -413,7 +428,7 @@ export function buildingShadows(
       `Sun at ${new Date(instant).toISOString().replace(".000Z", "Z")}: azimuth ${sun.azimuth.toFixed(2)}°, elevation ${sun.elevation.toFixed(2)}°.`,
     );
     const up = sun.elevation >= MIN_SUN_ELEVATION_DEGREES;
-    if (up) castShadows(grid, sun.azimuth, sun.elevation, mask);
+    if (up) castShadows(grid, sun.azimuth, shadowElevation(sun.geometricElevation), mask);
     else mask.fill(1);
     let shadedGround = 0;
     for (let i = 0; i < cells; i += 1) {
@@ -459,7 +474,13 @@ export function buildingShadows(
       positions += 1;
       firstUp ??= minute;
       lastUp = minute;
-      walked += castShadows(grid, sun.azimuth, sun.elevation, mask, MAX_ROOF_WALK_SAMPLES - walked);
+      walked += castShadows(
+        grid,
+        sun.azimuth,
+        shadowElevation(sun.geometricElevation),
+        mask,
+        MAX_ROOF_WALK_SAMPLES - walked,
+      );
       const weight =
         mode === "sun-hours"
           ? step / 60
