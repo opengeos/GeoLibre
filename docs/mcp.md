@@ -14,12 +14,12 @@ in-chat preview uses a bundled MCP App view.
 
 The `live_*` tools are the other half. They speak a loopback command relay
 in GeoLibre Desktop, so a command from an MCP client moves the map already open
-there. Turn on **Settings → Startup → Allow AI agents to drive the map** and
-the app starts its processing server at launch, which hosts the relay; no
-Jupyter notebook is needed. The older path still works: opening
-**Processing → Jupyter Notebook** once per launch also provides a relay (the
-[Notebook panel](notebook.md)'s). Web, JupyterLite, and the Mac App Store
-build have no relay, so those tools have nothing to attach to there.
+there. Turn on **Settings → Startup → Allow AI agents to drive the map** and the
+desktop app serves the relay itself: no Jupyter notebook, Python runtime, or
+processing server is involved, and it works in every desktop build, the Mac App
+Store one included. Opening **Processing → Jupyter Notebook** also provides a
+relay (the [Notebook panel](notebook.md)'s). Web and JupyterLite have no relay,
+so those tools have nothing to attach to there.
 
 ### How the live relay is found
 
@@ -27,24 +27,37 @@ The MCP server never takes the relay's address from the model. It looks, in
 order, for:
 
 1. `GEOLIBRE_RELAY_URL` (and `GEOLIBRE_RELAY_TOKEN`), when set;
-2. the processing sidecar's discovery file,
-   `~/.geolibre/runtime/live-relay.json` (override with
-   `GEOLIBRE_LIVE_RELAY_FILE`), which the sidecar writes with owner-only
-   permissions while it runs and deletes when it stops;
-3. the desktop Jupyter server's connection file (port 8766).
+2. the desktop's discovery file, `~/.geolibre/runtime/live-relay.json`
+   (override with `GEOLIBRE_LIVE_RELAY_FILE`), which the app writes with
+   owner-only permissions while access is on and deletes when it is turned off
+   or the app quits;
+3. on macOS, the same file inside the Mac App Store build's sandbox container,
+   `~/Library/Containers/org.geolibre.desktop/Data/.geolibre/runtime/live-relay.json`;
+4. the desktop Jupyter server's connection file (port 8766).
 
-The sidecar relay has its own per-launch token, separate from the sidecar's
-API token, so a Live MCP client can send map commands and nothing else. The
-relay requires the desktop's explicit **Allow AI agents to drive the map**
-opt-in. Starting the sidecar for processing leaves relay access disabled.
-Turning the setting off immediately disconnects this window and requests
-server-side revocation, including removal of discovery. Failed requests retry
-automatically with a persistent notice until the server confirms the change;
-processing jobs keep running. The app authenticates its sidecar WebSocket in
-the handshake protocol header, keeping its credential out of access-logged
-URL paths. A Docker or multi-tenant sidecar never
-serves it. Only a loopback URL is accepted and
-redirects are refused, so the token stays on the machine.
+The relay listens on an ephemeral `127.0.0.1` port. The Mac App Store build is
+the exception: the App Sandbox refuses to bind even a loopback TCP port without
+the network-server entitlement, so it listens on a Unix socket,
+`live-relay.sock`, next to the discovery file in its container, and the MCP
+server connects to that socket. The first time a terminal or MCP client reads
+the container, recent macOS versions ask whether it may access another app's
+data; allow it. The MCP server only looks in that container when the Mac App
+Store build is installed.
+
+Each time access is turned on the relay generates a new token, and only a
+client holding it (read from the owner-only discovery file) can send map
+commands. Turning the setting off immediately closes the listener, fails
+commands still waiting for a result, disconnects the window, and removes the
+discovery file; a failed change retries automatically with a persistent notice
+until the app confirms it. Requests that carry a browser `Origin` header are
+refused, and over TCP so is a `Host` other than the loopback address. Only a loopback URL is
+accepted and redirects are refused, so the token stays on the machine.
+
+Commands wait for the app's result for a per-method budget: 60 seconds for
+GeoJSON layer additions, feature reads, and image exports; 120 seconds for raster
+bytes; 30 minutes for processing algorithms and Whitebox tools; one hour for
+Model Builder graphs; five seconds for everything else. The `live_run_*` tools
+take a `timeout_seconds` override.
 
 ## Install
 

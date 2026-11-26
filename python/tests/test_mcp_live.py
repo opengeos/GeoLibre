@@ -688,3 +688,199 @@ def test_live_run_tools_forward_timeout_seconds(relay_server, monkeypatch, tmp_p
         )
     )
     assert relay_server.body["timeoutSeconds"] == 7200.0
+
+
+def test_timeout_policy_matches_the_desktop_relay():
+    """Keep the Rust desktop relay's per-method budgets in step with the client."""
+    from geolibre.mcp import live
+
+    path = Path(__file__).resolve().parents[2] / "apps/geolibre-desktop/src-tauri/src/live_relay.rs"
+    if not path.exists():
+        pytest.skip("monorepo sources not available")
+    import re
+
+    source = path.read_text(encoding="utf-8")
+    table = source.split("METHOD_RESULT_TIMEOUT_SECONDS: &[(&str, f64)] = &[", 1)[1]
+    table = table.split("];", 1)[0]
+
+    def product(expression: str) -> float:
+        value = 1.0
+        for factor in expression.split("*"):
+            value *= float(factor)
+        return value
+
+    parsed = {
+        name: product(expression)
+        for name, expression in re.findall(r'\("(\w+)",\s*([0-9.*\s]+)\)', table)
+    }
+    assert parsed == live.METHOD_TIMEOUT_SECONDS
+
+    def constant(name: str) -> float:
+        match = re.search(rf"const {name}: f64 = ([0-9.*\s]+);", source)
+        assert match, name
+        return product(match.group(1))
+
+    assert constant("DEFAULT_RESULT_TIMEOUT_SECONDS") == live.DEFAULT_TIMEOUT_SECONDS
+    assert constant("MIN_RESULT_TIMEOUT_SECONDS") == live.MIN_TIMEOUT_SECONDS
+    assert constant("MAX_RESULT_TIMEOUT_SECONDS") == live.MAX_TIMEOUT_SECONDS
+
+
+unix_only = pytest.mark.skipif(os.name == "nt", reason="Unix sockets")
+
+
+class _UnixRelayServer:
+    """A Unix-socket stand-in for the Mac App Store desktop relay."""
+
+    def __init__(self, path: Path) -> None:
+        import socketserver
+
+        self.path = path
+        self.requests: list[tuple[str, str | None, dict]] = []
+        server = self
+
+        class Handler(BaseHTTPRequestHandler):
+            def do_GET(self) -> None:  # noqa: N802 - stdlib handler name
+                server.requests.append((self.path, self.headers.get("Authorization"), {}))
+                self._reply({"listeners": 1})
+
+            def do_POST(self) -> None:  # noqa: N802 - stdlib handler name
+                length = int(self.headers.get("Content-Length", "0"))
+                body = json.loads(self.rfile.read(length).decode("utf-8"))
+                server.requests.append((self.path, self.headers.get("Authorization"), body))
+                self._reply({"delivered": 1, "ok": True, "value": body["method"]})
+
+            def _reply(self, payload: dict) -> None:
+                encoded = json.dumps(payload).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(encoded)))
+                self.end_headers()
+                self.wfile.write(encoded)
+
+            def address_string(self) -> str:
+                return "unix"
+
+            def log_message(self, format: str, *args: object) -> None:
+                return
+
+        class Server(socketserver.ThreadingMixIn, socketserver.UnixStreamServer):
+            daemon_threads = True
+
+        self._server = Server(str(path), Handler)
+        self._thread = threading.Thread(target=self._server.serve_forever, daemon=True)
+        self._thread.start()
+
+    def close(self) -> None:
+        self._server.shutdown()
+        self._thread.join(timeout=5)
+        self._server.server_close()
+
+
+def _unix_discovery(directory: Path, socket_path: Path, **overrides: object) -> Path:
+    payload = {
+        "kind": "desktop",
+        "transport": "unix",
+        "socket": str(socket_path),
+        "token": "unix-secret",
+        "pid": os.getpid(),
+    }
+    payload.update(overrides)
+    path = directory / "live-relay.json"
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    return path
+
+
+@pytest.fixture
+def short_dir():
+    """A short temporary directory, since socket paths are capped near 104 bytes."""
+    import shutil
+    import tempfile
+
+    directory = Path(tempfile.mkdtemp(prefix="glr", dir="/tmp" if os.name != "nt" else None))
+    yield directory
+    shutil.rmtree(directory, ignore_errors=True)
+
+
+@unix_only
+def test_unix_socket_relay_is_discovered_and_driven(short_dir, monkeypatch):
+    """Reach the Mac App Store relay's socket with the advertised token."""
+    monkeypatch.delenv("GEOLIBRE_RELAY_URL", raising=False)
+    socket_path = short_dir / "live-relay.sock"
+    server = _UnixRelayServer(socket_path)
+    try:
+        discovery = _unix_discovery(short_dir, socket_path)
+        monkeypatch.setenv("GEOLIBRE_LIVE_RELAY_FILE", str(discovery))
+        relay = require()
+        assert relay.redacted_url == f"unix:{socket_path}"
+        assert relay.listeners() == 1
+        assert relay.call("runAlgorithm", {"id": "buffer"}) == "runAlgorithm"
+        path, authorization, body = server.requests[-1]
+        assert path == "/relay/command"
+        assert authorization == "token unix-secret"
+        assert body["timeoutSeconds"] == 1800.0
+    finally:
+        server.close()
+
+
+@unix_only
+@pytest.mark.parametrize("case", ["elsewhere", "missing", "not_socket", "relative", "absent"])
+def test_unix_socket_must_sit_beside_its_discovery_file(short_dir, monkeypatch, case):
+    """Refuse a socket the owner-only discovery directory did not create."""
+    monkeypatch.delenv("GEOLIBRE_RELAY_URL", raising=False)
+    monkeypatch.setattr("geolibre.mcp.live.runtime_directories", lambda: [])
+    (short_dir / "sub").mkdir()
+    socket_path = short_dir / "live-relay.sock"
+    if case == "elsewhere":
+        socket_path = short_dir / "sub" / "live-relay.sock"
+    server = _UnixRelayServer(socket_path) if case not in {"missing", "not_socket"} else None
+    if case == "not_socket":
+        socket_path.write_text("", encoding="utf-8")
+    try:
+        overrides: dict[str, object] = {}
+        if case == "relative":
+            overrides["socket"] = "live-relay.sock"
+        elif case == "absent":
+            overrides["socket"] = None
+        discovery = _unix_discovery(short_dir, socket_path, **overrides)
+        monkeypatch.setenv("GEOLIBRE_LIVE_RELAY_FILE", str(discovery))
+        assert discover() is None
+    finally:
+        if server:
+            server.close()
+
+
+@unix_only
+def test_relative_discovery_override_finds_the_socket(short_dir, monkeypatch):
+    """Accept a relative discovery path naming the socket's directory."""
+    monkeypatch.delenv("GEOLIBRE_RELAY_URL", raising=False)
+    socket_path = short_dir / "live-relay.sock"
+    server = _UnixRelayServer(socket_path)
+    try:
+        _unix_discovery(short_dir, socket_path)
+        monkeypatch.chdir(short_dir.parent)
+        monkeypatch.setenv("GEOLIBRE_LIVE_RELAY_FILE", f"{short_dir.name}/live-relay.json")
+        assert require().listeners() == 1
+    finally:
+        server.close()
+
+
+def test_mac_app_store_container_is_searched(tmp_path, monkeypatch):
+    """Look in the sandbox container's home when no override is set."""
+    from geolibre.mcp import live
+
+    monkeypatch.delenv("GEOLIBRE_LIVE_RELAY_FILE", raising=False)
+    monkeypatch.setattr(live.Path, "home", classmethod(lambda cls: tmp_path))
+    monkeypatch.setattr(live.sys, "platform", "darwin")
+    # Without the store build's container, it is never looked at.
+    assert live.discovery_files() == [tmp_path / ".geolibre" / "runtime" / "live-relay.json"]
+    (tmp_path / "Library/Containers/org.geolibre.desktop").mkdir(parents=True)
+    files = live.discovery_files()
+    assert files[0] == tmp_path / ".geolibre" / "runtime" / "live-relay.json"
+    assert files[1] == (
+        tmp_path / "Library/Containers/org.geolibre.desktop/Data/.geolibre/runtime/live-relay.json"
+    )
+    monkeypatch.setattr(live.sys, "platform", "linux")
+    assert live.discovery_files() == files[:1]
+    monkeypatch.setattr(live.sys, "platform", "darwin")
+    monkeypatch.setenv("GEOLIBRE_LIVE_RELAY_FILE", str(tmp_path / "x.json"))
+    assert live.discovery_files() == [tmp_path / "x.json"]
