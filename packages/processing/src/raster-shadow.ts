@@ -43,13 +43,18 @@ export const MAX_SHADOW_CELLS = 4_000_000;
 export const MAX_SHADOW_WORK = 100_000_000;
 
 /**
- * Most roof-walk samples a day simulation may take before it stops. The
- * walk's length depends on the skyline, so it cannot be bounded up front the
- * way {@link MAX_SHADOW_WORK} bounds the cell passes; it is counted as it
- * runs instead. The Midtown Manhattan example takes about 1 billion over a
- * solstice day at 15-minute steps (roughly 8 s).
+ * Most roof-walk samples one run may take before it stops. The walk's length
+ * depends on the skyline, so it cannot be bounded up front the way
+ * {@link MAX_SHADOW_WORK} bounds the cell passes; it is counted inside the
+ * walk instead, so even a single sun position cannot run away. The Midtown
+ * Manhattan example takes about 1 billion over a solstice day at 15-minute
+ * steps (roughly 8 s), so the cap leaves it about 2x headroom.
  */
-export const MAX_ROOF_WALK_SAMPLES = 5_000_000_000;
+export const MAX_ROOF_WALK_SAMPLES = 2_000_000_000;
+
+/** Thrown when a run exceeds {@link MAX_ROOF_WALK_SAMPLES}. */
+const ROOF_WALK_BUDGET_MESSAGE =
+  "Tracing sunlight across the roofs is taking too long for the browser; use a longer time step, a larger cell size, or fewer buildings.";
 
 /** Lowest sun elevation that casts a shadow; below it the sun counts as down. */
 export const MIN_SUN_ELEVATION_DEGREES = 0.5;
@@ -277,13 +282,16 @@ export function buildHeightGrid(features: Feature[], params: BuildingShadowParam
  * @param azimuth - Sun azimuth, degrees clockwise from north.
  * @param elevation - Sun elevation, degrees (must be above the horizon).
  * @param out - Reused mask: 1 shadowed, 0 lit; cleared first.
+ * @param sampleBudget - Most roof-walk samples this call may take.
  * @returns The number of roof-walk samples taken, for work accounting.
+ * @throws When the roof walk exceeds `sampleBudget`.
  */
 export function castShadows(
   grid: HeightGrid,
   azimuth: number,
   elevation: number,
   out: Uint8Array,
+  sampleBudget = MAX_ROOF_WALK_SAMPLES,
 ): number {
   out.fill(0);
   const { width, height, heights, cellSize } = grid;
@@ -335,6 +343,7 @@ export function castShadows(
       const y0 = row + 0.5;
       for (let d = step; d <= maxDistance; d += step) {
         samples += 1;
+        if (samples > sampleBudget) throw new Error(ROOF_WALK_BUDGET_MESSAGE);
         const c = Math.floor(x0 + sunX * d);
         const r = Math.floor(y0 + sunY * d);
         if (c < 0 || r < 0 || c >= width || r >= height) break;
@@ -439,12 +448,7 @@ export function buildingShadows(
       positions += 1;
       firstUp ??= minute;
       lastUp = minute;
-      walked += castShadows(grid, sun.azimuth, sun.elevation, mask);
-      if (walked > MAX_ROOF_WALK_SAMPLES) {
-        throw new Error(
-          "Tracing sunlight across the roofs is taking too long for the browser; use a longer time step, a larger cell size, or fewer buildings.",
-        );
-      }
+      walked += castShadows(grid, sun.azimuth, sun.elevation, mask, MAX_ROOF_WALK_SAMPLES - walked);
       const weight =
         mode === "sun-hours"
           ? step / 60

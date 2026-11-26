@@ -346,3 +346,14 @@ describe("courtyards and multipolygons", () => {
     );
   });
 });
+
+describe("roof-walk budget", () => {
+  it("stops inside a single sun position once the budget is spent", () => {
+    // A 40 m tower beside a field of low roofs, low sun: many long walks.
+    const features = [box(0, 0, 10, 10, 40), box(-60, -60, 60, -10, 3)];
+    const grid = buildHeightGrid(features, { cell_size: 1, margin: 10 });
+    const mask = new Uint8Array(grid.width * grid.height);
+    assert.throws(() => castShadows(grid, 0, 2, mask, 100), /taking too long/);
+    assert.ok(castShadows(grid, 0, 2, mask) > 100, "the same call fits the default budget");
+  });
+});

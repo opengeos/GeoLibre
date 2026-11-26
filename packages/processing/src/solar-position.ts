@@ -2,7 +2,7 @@
  * Sun position and clear-sky beam irradiance (issue #3530).
  *
  * The position follows the NOAA Solar Calculator (Meeus, "Astronomical
- * Algorithms", low-precision series): good to about 0.01 degree between 1800
+ * Algorithms", low-precision series): good to a few hundredths of a degree between 1800
  * and 2100, far finer than a building shadow raster can resolve. The beam
  * irradiance is the Meinel clear-sky model with the Kasten-Young air mass,
  * the usual first-order estimate when no measured or modelled irradiance is
