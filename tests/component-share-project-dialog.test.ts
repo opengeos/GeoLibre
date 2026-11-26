@@ -29,6 +29,9 @@ const PROJECT = {
   projectUrl: "https://share.geolibre.app/tester/my-map",
   viewerUrl: "https://web.geolibre.app/?url=https://share.geolibre.app/tester/my-map.geolibre.json",
   rawJsonUrl: "https://share.geolibre.app/tester/my-map.geolibre.json",
+  // A real server echoes the applied link settings back.
+  role: "view",
+  expiresAt: "2026-12-03T00:00:00.000Z",
 };
 
 interface Call {
@@ -164,6 +167,8 @@ describe("ShareProjectDialog", () => {
       PROJECT.projectUrl,
     );
     assert.match(document.body.textContent ?? "", /2 credential field\(s\) were not included/);
+    // The server confirmed the role and expiry, so no unconfirmed-settings alert.
+    assert.doesNotMatch(document.body.textContent ?? "", /did not confirm these link settings/);
   });
 
   it("asks for a title before sharing the default project name", () => {
@@ -205,6 +210,8 @@ describe("ShareProjectDialog", () => {
 
     window.confirm = () => false;
     fireEvent.click(screen.getAllByRole("button", { name: "Revoke" })[0]!);
+    // Let any request that would follow an await start before checking.
+    await act(async () => {});
     assert.equal(calls.filter((call) => call.method === "DELETE").length, 0);
 
     window.confirm = () => true;

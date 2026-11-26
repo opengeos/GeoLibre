@@ -96,7 +96,7 @@ describe("RecordTourDialog", () => {
     assert.equal((flights[1] as { zoom: number }).zoom, 5);
     // Captured coordinates are rounded for compact display.
     const center = (flights[1] as { center: [number, number] }).center;
-    assert.ok(String(center[0]).length < String(-83.123456789).length);
+    assert.deepEqual(center, [-83.123457, 35.987654]);
 
     fireEvent.click(screen.getAllByRole("button", { name: "Remove keyframe" })[0]!);
     assert.equal(keyframeRows().length, 1);
