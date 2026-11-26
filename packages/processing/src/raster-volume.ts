@@ -275,7 +275,7 @@ export function cutFill(
   const plane = Number(params.plane_elevation ?? 0);
   if (usePlane && !Number.isFinite(plane)) throw new Error("The plane elevation must be a number.");
   const zUnits = params.z_units || "m";
-  if (ELEVATION_UNIT_METERS[zUnits] == null) {
+  if (!Object.hasOwn(ELEVATION_UNIT_METERS, zUnits)) {
     throw new Error(`Unknown elevation unit "${zUnits}" (use m, ft or us-ft).`);
   }
   const zToMeters = ELEVATION_UNIT_METERS[zUnits];

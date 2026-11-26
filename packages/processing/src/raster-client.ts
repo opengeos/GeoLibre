@@ -1140,7 +1140,10 @@ export async function runRasterToolClientAsync(
       `Loaded raster: ${inputs.raster.width}×${inputs.raster.height}, ${inputs.raster.bands.length} band(s).`,
     );
   }
-  const rasterResult = (raster: RasterData, extra: string[] = []): ClientToolResult => {
+  const rasterResult = (
+    raster: RasterData,
+    extra: string[] = [],
+  ): Extract<ClientToolResult, { kind: "raster" }> => {
     messages.push(...extra, `Computed "${toolId}" in the browser.`);
     return {
       kind: "raster",
@@ -1321,6 +1324,9 @@ export async function runRasterToolClientAsync(
           definition = await rasterCrsDefinition(existing, "cut-fill");
         } catch {
           definition = null;
+          extra.push(
+            "Warning: the raster's CRS could not be resolved in the browser; Web Mercator area scaling cannot be applied if it is one.",
+          );
         }
         mercatorRadius = sphericalMercatorRadius(definition);
         const resolved = projectedMetersPerUnit(existing, definition);
@@ -1333,15 +1339,7 @@ export async function runRasterToolClientAsync(
         }
       }
       const out = cutFill(existing, surface, p as CutFillParams, metersPerUnit, mercatorRadius);
-      messages.push(...extra, ...out.messages, `Computed "${toolId}" in the browser.`);
-      return {
-        kind: "raster",
-        raster: out.raster,
-        bytes: writeRasterBands(out.raster),
-        messages,
-        detailMessages: [...extra, ...out.messages],
-        cutFill: out.summary,
-      };
+      return { ...rasterResult(out.raster, [...extra, ...out.messages]), cutFill: out.summary };
     }
     default:
       throw new Error(`"${toolId}" has no client-side implementation.`);
