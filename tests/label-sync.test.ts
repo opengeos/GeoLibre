@@ -354,6 +354,48 @@ describe("label sync", () => {
     assert.deepEqual(label.layout["text-field"], ["to-string", ["coalesce", ["get", "name"], ""]]);
   });
 
+  it("clears the one-per-polygon filter when the label source switches to deduped points (#3697)", () => {
+    const { map, layers } = makeMap();
+    const square = (x: number): GeoJSON.Polygon => ({
+      type: "Polygon",
+      coordinates: [
+        [
+          [x, 0],
+          [x + 1, 0],
+          [x + 1, 1],
+          [x, 1],
+          [x, 0],
+        ],
+      ],
+    });
+    const labels = {
+      enabled: true,
+      field: "name",
+      dedupe: "unique" as const,
+      visibilityExpression: '["get", "showLabel"]',
+    };
+    // Polygons: one label point per polygon, filtered by the visibility expression.
+    const polygons = colocatedPointLayer(labels);
+    polygons.geojson = {
+      type: "FeatureCollection",
+      features: [0, 2].map((x) => ({
+        type: "Feature" as const,
+        properties: { name: "A", showLabel: true },
+        geometry: square(x),
+      })),
+    };
+    syncLayer(map as never, polygons);
+    const before = layers.get(LABEL_ID) as { source: string; filter?: unknown };
+    assert.equal(before.source, LABEL_SOURCE_ID);
+    assert.match(JSON.stringify(before.filter), /showLabel/);
+    // The same layer now holds points, so its labels dedupe into the same
+    // label source; the synthetic points carry no showLabel to filter on.
+    syncLayer(map as never, colocatedPointLayer(labels));
+    const after = layers.get(LABEL_ID) as { source: string; filter?: unknown };
+    assert.equal(after.source, LABEL_SOURCE_ID);
+    assert.equal(after.filter, undefined);
+  });
+
   it("removes the dedup source when dedup is turned back off", () => {
     const { map, layers, sources } = makeMap();
     syncLayer(

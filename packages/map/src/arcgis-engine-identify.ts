@@ -51,6 +51,32 @@ export function stripSyntheticFields(attributes: Record<string, unknown>): Recor
 }
 
 /**
+ * Whether a layer sync can change what a hit test at a point would return:
+ * a layer added, removed or reordered, or any field other than its opacity
+ * replaced (visibility, features, filters, style). Opacity ticks from a slider
+ * are the common case and leave picking as it was.
+ *
+ * @param previous The layers the cached hit was computed against.
+ * @param next The layers the sync applies.
+ * @returns True when the cached hit may be stale.
+ */
+export function layersChangeHits(
+  previous: readonly GeoLibreLayer[],
+  next: readonly GeoLibreLayer[],
+): boolean {
+  if (previous === next) return false;
+  if (previous.length !== next.length) return true;
+  for (let i = 0; i < next.length; i += 1) {
+    const a = previous[i] as unknown as Record<string, unknown>;
+    const b = next[i] as unknown as Record<string, unknown>;
+    if (a === b) continue;
+    const keys = new Set([...Object.keys(a), ...Object.keys(b)]);
+    for (const key of keys) if (key !== "opacity" && a[key] !== b[key]) return true;
+  }
+  return false;
+}
+
+/**
  * ArcgisEngine layer: identifying features under a point, native-layer
  * picking, and the selection highlight and search result.
  */
@@ -67,8 +93,32 @@ export abstract class ArcgisEngineIdentify extends ArcgisEngineCamera {
    */
   protected serviceGeometries = new Map<string, Geometry>();
 
-  /** Results of the latest hit test, served by the synchronous identify. */
-  private lastHit: { lngLat: [number, number]; features: IdentifiedFeature[] } | null = null;
+  /**
+   * Results of the latest hit test, served by the synchronous identify. The
+   * `layerId` it was scoped to is kept, since a scoped hit holds only that
+   * layer's features and cannot answer an unscoped lookup.
+   */
+  private lastHit: {
+    lngLat: [number, number];
+    layerId: string | undefined;
+    features: IdentifiedFeature[];
+  } | null = null;
+
+  /**
+   * Bumped whenever {@link lastHit} is invalidated, so a hit test still in
+   * flight across a layer change does not store its now-stale answer.
+   */
+  private hitGeneration = 0;
+
+  /**
+   * Forget the cached hit test. Called when a layer sync changes what a hit
+   * could return (visibility, features, filters), and on the layers a pending
+   * hit test was started against.
+   */
+  protected invalidateHitCache(): void {
+    this.lastHit = null;
+    this.hitGeneration += 1;
+  }
 
   // ------------------------------------------------------------------ picking
 
@@ -83,6 +133,7 @@ export abstract class ArcgisEngineIdentify extends ArcgisEngineCamera {
   ): Promise<IdentifiedFeature[]> {
     const view = this.view;
     if (!view) return [];
+    const generation = this.hitGeneration;
     const external = identifyArcgisControls(view, screenPoint, layerId);
     const include = [...this.natives]
       .filter(([id]) => !layerId || id === layerId)
@@ -142,9 +193,12 @@ export abstract class ArcgisEngineIdentify extends ArcgisEngineCamera {
         geometry: hitGeometry,
       });
     }
+    // A layer sync during the hit test (a layer hidden, features edited)
+    // makes this answer stale for later synchronous lookups.
+    if (generation !== this.hitGeneration) return features;
     try {
       const lngLat = this.lngLatOf(view.toMap(screenPoint));
-      if (lngLat) this.lastHit = { lngLat, features };
+      if (lngLat) this.lastHit = { lngLat, layerId, features };
     } catch {
       // A view torn down between the hit test and the conversion has no
       // location to remember; the features are still the answer.
@@ -186,6 +240,7 @@ export abstract class ArcgisEngineIdentify extends ArcgisEngineCamera {
     const hit = this.lastHit;
     if (
       hit &&
+      (hit.layerId === undefined || hit.layerId === layerId) &&
       Math.abs(hit.lngLat[0] - lngLat[0]) <= 1e-6 &&
       Math.abs(hit.lngLat[1] - lngLat[1]) <= 1e-6
     )

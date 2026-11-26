@@ -1532,6 +1532,48 @@ describe("ArcgisEngine basemap", () => {
   });
 });
 
+describe("ArcgisEngine partial layer construction (#3697)", () => {
+  it("destroys the parts already built when a later part fails to construct", () => {
+    const fake = makeEngine();
+    const layerClasses = fake.sdk.layers as unknown as Record<string, unknown>;
+    const Real = layerClasses.GeoJSONLayer as new (props: Record<string, unknown>) => FakeLayer;
+    let built = 0;
+    layerClasses.GeoJSONLayer = function (props: Record<string, unknown>) {
+      if (++built === 2) throw new Error("second part failed");
+      return new Real(props);
+    };
+    // SQUARE is mixed geometry: a polygon part and a point part.
+    fake.engine.syncLayers([SQUARE]);
+    const parts = fake.created.filter((l) => l.kind === "geojson");
+    assert.equal(parts.length, 1);
+    assert.equal(parts[0].destroyed, true, "the first part is not stranded");
+    assert.equal(fake.layers.items.length, 0);
+    // The failure is reported on the layer rather than thrown out of the sync.
+    assert.match(String(fake.engine["errors"].get("layer:layer-a")), /second part failed/);
+  });
+
+  it("destroys every part when map.add fails part way", () => {
+    const fake = makeEngine();
+    const map = fake.map as unknown as { add: (layer: FakeLayer) => void };
+    const realAdd = map.add;
+    let adds = 0;
+    map.add = (layer) => {
+      if (++adds === 1) return realAdd(layer);
+      throw new Error("add failed");
+    };
+    // An inverted-fill mask plus the polygon and point parts: three layers, so
+    // one is still unadded when the second add throws.
+    fake.engine.syncLayers([{ ...SQUARE, style: { ...SQUARE.style, invertedFillEnabled: true } }]);
+    const parts = fake.created.filter((l) => l.kind === "geojson");
+    assert.equal(parts.length, 3);
+    assert.ok(
+      parts.every((part) => part.destroyed),
+      "no part is left undestroyed",
+    );
+    assert.equal(fake.layers.items.length, 0);
+  });
+});
+
 describe("ArcgisEngine picking and highlight", () => {
   it("resolves hit graphics to the store's feature identity and answers the sync identify", async () => {
     const { engine, layers, setHitResults } = makeEngine();
@@ -1744,6 +1786,99 @@ describe("ArcgisEngine picking and highlight", () => {
     };
     assert.equal((await engine.getLayerGeoJson("fs"))?.features.length, 1);
     assert.equal(calls, 2);
+  });
+  describe("synchronous identify cache (#3697)", () => {
+    const SERVICE = {
+      ...geojsonLayer({ id: "fs", name: "Service", geojson: undefined }),
+      type: "arcgis" as const,
+      source: { type: "geojson", url: "https://h/rest/services/X/FeatureServer/0" },
+    };
+    /** A service hit at (0.5, 0.5); its features are only reachable by hit test. */
+    function serviceHit(fake: ReturnType<typeof makeEngine>) {
+      const service = fake.layers.items.find((l) => l.kind === "feature")!;
+      fake.setHitResults([
+        {
+          type: "graphic",
+          graphic: {
+            attributes: { OBJECTID: 7 },
+            layer: service,
+            geometry: { type: "point", x: 0.5, y: 0.5, spatialReference: { wkid: 4326 } },
+          },
+        },
+      ]);
+    }
+
+    it("does not answer an unscoped lookup from a layer-scoped hit", async () => {
+      const fake = makeEngine();
+      fake.engine.syncLayers([SQUARE, SERVICE]);
+      serviceHit(fake);
+      await fake.engine.identifyFeaturesAt({ x: 0.5, y: 0.5 }, "fs");
+      // The square under the same point is found from the store's geometry.
+      const ids = fake.engine.identifyFeatures([0.5, 0.5]).map((f) => f.layerId);
+      assert.ok(ids.includes("layer-a"), `expected the square, got ${JSON.stringify(ids)}`);
+      // The scoped lookup it was taken for is still served from the cache.
+      assert.equal(fake.engine.identifyFeatures([0.5, 0.5], "fs")[0]?.featureId, "7");
+    });
+
+    it("drops the cached hit when a sync hides a layer, but not on an opacity change", async () => {
+      const fake = makeEngine();
+      fake.engine.syncLayers([SERVICE]);
+      serviceHit(fake);
+      await fake.engine.identifyFeaturesAt({ x: 0.5, y: 0.5 });
+      fake.engine.syncLayers([{ ...SERVICE, opacity: 0.4 }]);
+      assert.equal(fake.engine.identifyFeatures([0.5, 0.5]).length, 1);
+      fake.engine.syncLayers([{ ...SERVICE, opacity: 0.4, visible: false }]);
+      assert.deepEqual(fake.engine.identifyFeatures([0.5, 0.5]), []);
+    });
+
+    it("does not let a hit test that spans a layer change repopulate the cache", async () => {
+      const fake = makeEngine();
+      fake.engine.syncLayers([SERVICE]);
+      serviceHit(fake);
+      const pending = fake.engine.identifyFeaturesAt({ x: 0.5, y: 0.5 });
+      fake.engine.syncLayers([{ ...SERVICE, visible: false }]);
+      // The caller still gets the answer it asked for...
+      assert.equal((await pending).length, 1);
+      // ...but later synchronous lookups do not reuse it.
+      assert.deepEqual(fake.engine.identifyFeatures([0.5, 0.5]), []);
+    });
+  });
+  it("drops rows repeated across overlapping service pages by object id (#3697)", async () => {
+    const { engine, layers } = makeEngine();
+    engine.syncLayers([
+      {
+        ...geojsonLayer({ id: "fs", name: "Service", geojson: undefined }),
+        type: "arcgis",
+        source: { type: "geojson", url: "https://h/rest/services/X/FeatureServer/0" },
+      },
+    ]);
+    const service = layers.items[0] as (typeof layers.items)[0] & {
+      queryFeatures?: unknown;
+      objectIdField?: string;
+    };
+    service.objectIdField = "OBJECTID";
+    const point = { type: "point" as const, x: 3, y: 4, spatialReference: { wkid: 4326 } };
+    const starts: unknown[] = [];
+    // No ORDER BY support: the second page overlaps the first by one row.
+    service.queryFeatures = async (query: { start?: number; num?: number }) => {
+      starts.push(query.start === undefined ? undefined : [query.start, query.num]);
+      const oids = query.start === undefined ? [1, 2] : [2, 3];
+      return {
+        exceededTransferLimit: query.start === undefined,
+        features: oids.map((oid) => ({
+          attributes: { OBJECTID: oid },
+          geometry: point,
+          layer: null,
+        })),
+      };
+    };
+    const collection = await engine.getLayerGeoJson("fs");
+    assert.deepEqual(
+      collection?.features.map((f) => f.id),
+      [1, 2, 3],
+    );
+    // The next offset counts the rows the service sent, not the kept ones.
+    assert.deepEqual(starts, [undefined, [2, 2]]);
   });
   it("keeps synchronous control results when a native hit test outlives the engine", async () => {
     const { setArcgisControlPicker } = await import("../packages/map/src/arcgis-control-adapters");

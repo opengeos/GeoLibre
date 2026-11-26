@@ -81,14 +81,31 @@ export function unclusteredPointFilter(hasTextMarkers: boolean): maplibregl.Filt
  * active. Symbology derived from the raw features cannot see these filters.
  *
  * @param layer - The store layer being synced.
- * @returns True while a time, embed, authored or rule filter applies.
+ * @returns True while a time, embed, authored or rule filter applies, or an
+ *   annotation layer hides any of its features.
  */
 export function layerHasFeatureFilter(layer: GeoLibreLayer): boolean {
   return (
     (Array.isArray(layer.timeFilter) && layer.timeFilter.length > 0) ||
     (Array.isArray(layer.embedFilter) && layer.embedFilter.length > 0) ||
     compileLayerFilters(layer) !== null ||
-    ruleBasedVisibilityFilter(layer.style) !== null
+    ruleBasedVisibilityFilter(layer.style) !== null ||
+    annotationHidesFeatures(layer)
+  );
+}
+
+/**
+ * Whether an annotation layer hides any feature through the `visible: false`
+ * predicate {@link withFeatureFilters} adds. The predicate is always on for
+ * annotation layers, but it only filters anything once a feature is hidden.
+ *
+ * @param layer - The store layer being synced.
+ * @returns True when the layer is an annotation layer with a hidden feature.
+ */
+function annotationHidesFeatures(layer: GeoLibreLayer): boolean {
+  return (
+    layer.metadata?.sourceKind === "annotation" &&
+    (layer.geojson?.features.some((feature) => feature.properties?.visible === false) ?? false)
   );
 }
 
