@@ -292,3 +292,50 @@ describe("building-shadows through the browser dispatcher", () => {
     assert.ok(run.raster.bands[0].includes(1), "some ground is shaded");
   });
 });
+
+describe("courtyards and multipolygons", () => {
+  it("casts the inner wall's shadow into a courtyard", () => {
+    // A 30 m square block, 10 m tall, with a 10 m courtyard in the middle
+    // (10-20 m). Under a 45° south sun the courtyard's south wall (y = 10 m)
+    // shades the whole 10 m deep courtyard.
+    const ring = (a: number, b: number) => [
+      [a * M, a * M],
+      [b * M, a * M],
+      [b * M, b * M],
+      [a * M, b * M],
+      [a * M, a * M],
+    ];
+    const courtyard: Feature = {
+      type: "Feature",
+      properties: { height: 10 },
+      geometry: { type: "MultiPolygon", coordinates: [[ring(0, 30), ring(10, 20).reverse()]] },
+    };
+    const grid = buildHeightGrid([courtyard], { cell_size: 1, margin: 5 });
+    const [west, , , north] = grid.bbox;
+    const cell = (x: number, y: number) =>
+      Math.floor((north - y * M) / M) * grid.width + Math.floor((x * M - west) / M);
+    assert.equal(grid.heights[cell(15, 15)], 0, "the courtyard is open ground");
+    const mask = new Uint8Array(grid.width * grid.height);
+    castShadows(grid, 180, 45, mask);
+    assert.equal(mask[cell(15, 10.5)], 1, "by the south wall");
+    assert.equal(mask[cell(15, 19.5)], 1, "by the north wall, 9.5 m from the south wall");
+    // A higher sun shortens the shadow to 10 / tan(70°) = 3.6 m.
+    castShadows(grid, 180, 70, mask);
+    assert.equal(mask[cell(15, 12.5)], 1, "inside the shorter shadow");
+    assert.equal(mask[cell(15, 15)], 0, "past it");
+  });
+
+  it("refuses a day run beyond the work budget", () => {
+    assert.throws(
+      () =>
+        buildingShadows([box(0, 0, 10, 10, 10)], {
+          mode: "sun-hours",
+          date: "2026-06-21",
+          cell_size: 0.5,
+          margin: 400,
+          step_minutes: 1,
+        }),
+      /browser budget/,
+    );
+  });
+});

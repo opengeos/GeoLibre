@@ -35,6 +35,13 @@ export const SHADOW_NODATA = -9999;
 /** Most cells one run may allocate, so a continent of footprints cannot hang the tab. */
 export const MAX_SHADOW_CELLS = 4_000_000;
 
+/**
+ * Most cell-by-sun-position evaluations a day simulation may run (cells times
+ * daylight samples), since it runs on the browser's main thread. A Midtown
+ * Manhattan block of 400,000 cells at 15-minute steps is about 24 million.
+ */
+export const MAX_SHADOW_WORK = 100_000_000;
+
 /** Lowest sun elevation that casts a shadow; below it the sun counts as down. */
 export const MIN_SUN_ELEVATION_DEGREES = 0.5;
 
@@ -375,6 +382,20 @@ export function buildingShadows(
     const step = Number(params.step_minutes ?? 15);
     if (!(step >= 1 && step <= 120)) throw new Error("The time step must be 1 to 120 minutes.");
     const midnight = localTimeToUtc(date, "00:00", offset);
+    // Count the daylight samples first, so an oversized run fails up front
+    // instead of freezing the tab.
+    let daylight = 0;
+    for (let minute = step / 2; minute < 1440; minute += step) {
+      if (
+        sunPosition(midnight + minute * 60_000, lat0, lon0).elevation >= MIN_SUN_ELEVATION_DEGREES
+      )
+        daylight += 1;
+    }
+    if (daylight * cells > MAX_SHADOW_WORK) {
+      throw new Error(
+        `This run would evaluate ${daylight} sun positions over ${cells.toLocaleString("en-US")} cells, more than the browser budget of ${MAX_SHADOW_WORK.toLocaleString("en-US")}; use a longer time step or a larger cell size.`,
+      );
+    }
     let firstUp: number | null = null;
     let lastUp: number | null = null;
     let positions = 0;
@@ -417,7 +438,7 @@ export function buildingShadows(
     const roofCells = cells - groundCells;
     const unit = mode === "sun-hours" ? "h" : "kWh/m²";
     messages.push(
-      `Mean on open ground: ${(groundSum / Math.max(groundCells, 1)).toFixed(2)} ${unit} (unobstructed: ${groundMax.toFixed(2)} ${unit}); mean on roofs: ${(roofSum / Math.max(roofCells, 1)).toFixed(2)} ${unit}.`,
+      `Mean on ground (shaded cells included): ${(groundSum / Math.max(groundCells, 1)).toFixed(2)} ${unit}; best-lit ground: ${groundMax.toFixed(2)} ${unit}; mean on roofs: ${(roofSum / Math.max(roofCells, 1)).toFixed(2)} ${unit}.`,
       mode === "sun-hours"
         ? "Values: hours of direct sun."
         : "Values: clear-sky direct beam on a horizontal surface, kWh/m² (diffuse sky light not included).",
