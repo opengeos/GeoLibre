@@ -247,6 +247,7 @@ export {
   formatCutFillSummary,
   isGeographicRaster,
   projectedMetersPerUnit,
+  sphericalMercatorRadius,
   CUT_FILL_NODATA,
   type CutFillParams,
   type CutFillSummary,

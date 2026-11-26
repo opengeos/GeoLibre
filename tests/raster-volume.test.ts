@@ -13,6 +13,7 @@ import {
   cellAreasByRow,
   cutFill,
   projectedMetersPerUnit,
+  sphericalMercatorRadius,
 } from "../packages/processing/src/raster-volume";
 import { runRasterToolClientAsync, type RasterData } from "@geolibre/processing";
 
@@ -246,5 +247,31 @@ describe("cutFill elevation units", () => {
       () => cutFill(halves(), null, { z_units: "feet" }),
       /Unknown elevation unit "feet"/,
     );
+  });
+});
+
+describe("spherical Mercator from a CRS definition", () => {
+  it("recognises +proj=merc on a sphere and scales a custom-code raster", () => {
+    const def3857 =
+      "+proj=merc +a=6378137 +b=6378137 +lat_ts=0 +lon_0=0 +x_0=0 +y_0=0 +k=1 +units=m +nadgrids=@null +no_defs";
+    assert.equal(sphericalMercatorRadius(def3857), 6_378_137);
+    assert.equal(sphericalMercatorRadius("+proj=merc +R=6371000 +units=m"), 6_371_000);
+    assert.equal(sphericalMercatorRadius("+proj=merc +datum=WGS84 +units=m"), null, "ellipsoidal");
+    assert.equal(sphericalMercatorRadius("+proj=utm +zone=17"), null);
+    // The same 60°N cell as above, but published under a user-defined code.
+    const y = 6_378_137 * Math.log(Math.tan((75 * Math.PI) / 180));
+    const raster: RasterData = {
+      bands: [new Float32Array(1)],
+      width: 1,
+      height: 1,
+      originX: 0,
+      originY: y + 5,
+      resX: 10,
+      resY: 10,
+      nodata: null,
+      geoKeys: { GTModelTypeGeoKey: 1, ProjectedCSTypeGeoKey: 32767 },
+    };
+    near(cellAreasByRow(raster, 1)[0], 100, 1e-9, "unscaled without the definition");
+    near(cellAreasByRow(raster, 1, 6_378_137)[0], 25, 1e-9, "scaled with it");
   });
 });

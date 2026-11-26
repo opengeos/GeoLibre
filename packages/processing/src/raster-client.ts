@@ -29,6 +29,7 @@ import {
   cutFill,
   isGeographicRaster,
   projectedMetersPerUnit,
+  sphericalMercatorRadius,
   type CutFillParams,
   type CutFillSummary,
 } from "./raster-volume";
@@ -1313,6 +1314,7 @@ export async function runRasterToolClientAsync(
         if (surface) surface = (await clipRasterByMask(surface, boundary, { crop: true })).raster;
       }
       let metersPerUnit = 1;
+      let mercatorRadius: number | null = null;
       if (!isGeographicRaster(existing)) {
         let definition: string | null = null;
         try {
@@ -1320,6 +1322,7 @@ export async function runRasterToolClientAsync(
         } catch {
           definition = null;
         }
+        mercatorRadius = sphericalMercatorRadius(definition);
         const resolved = projectedMetersPerUnit(existing, definition);
         if (resolved == null) {
           extra.push(
@@ -1329,7 +1332,7 @@ export async function runRasterToolClientAsync(
           metersPerUnit = resolved;
         }
       }
-      const out = cutFill(existing, surface, p as CutFillParams, metersPerUnit);
+      const out = cutFill(existing, surface, p as CutFillParams, metersPerUnit, mercatorRadius);
       messages.push(...extra, ...out.messages, `Computed "${toolId}" in the browser.`);
       return {
         kind: "raster",

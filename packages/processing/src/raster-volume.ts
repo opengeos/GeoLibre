@@ -127,6 +127,27 @@ const WEB_MERCATOR_EPSG = new Set([3857, 3785, 900913, 102100, 102113]);
 const WEB_MERCATOR_RADIUS = 6_378_137;
 
 /**
+ * The sphere radius of a spherical Mercator proj4 definition (`+proj=merc`
+ * with `+R` or equal `+a`/`+b`), so a Web Mercator CRS published under a
+ * code other than 3857, or a custom definition, still gets the area scaling.
+ *
+ * @param proj4Definition - The CRS definition, when it could be resolved.
+ * @returns The radius in metres, or null for anything else.
+ */
+export function sphericalMercatorRadius(proj4Definition?: string | null): number | null {
+  if (!proj4Definition || !/\+proj=merc\b/.test(proj4Definition)) return null;
+  const param = (name: string) => {
+    const match = new RegExp(`\\+${name}=([0-9.eE+-]+)`).exec(proj4Definition);
+    return match ? Number(match[1]) : null;
+  };
+  const r = param("R");
+  if (r && r > 0) return r;
+  const a = param("a");
+  const b = param("b");
+  return a && b && a > 0 && a === b ? a : null;
+}
+
+/**
  * Ground area of one cell in each row, in square metres.
  *
  * A Web Mercator cell is `1/cos²φ` times larger on the map than on the
@@ -136,20 +157,29 @@ const WEB_MERCATOR_RADIUS = 6_378_137;
  * @param raster - A north-up raster.
  * @param metersPerUnit - Metres per horizontal unit for a projected raster
  *   (ignored for a geographic one).
+ * @param mercatorRadius - Sphere radius of a spherical Mercator CRS found
+ *   from its definition (see {@link sphericalMercatorRadius}); the Web
+ *   Mercator EPSG codes are recognised without it.
  * @returns One area per row; constant for an ordinary projected raster.
  */
-export function cellAreasByRow(raster: RasterData, metersPerUnit: number): Float64Array {
+export function cellAreasByRow(
+  raster: RasterData,
+  metersPerUnit: number,
+  mercatorRadius: number | null = null,
+): Float64Array {
   const areas = new Float64Array(raster.height);
   if (!isGeographicRaster(raster)) {
     const mapArea = raster.resX * metersPerUnit * raster.resY * metersPerUnit;
     const epsg = rasterEpsg(raster);
-    if (epsg == null || !WEB_MERCATOR_EPSG.has(epsg)) {
+    const radius =
+      mercatorRadius ?? (epsg != null && WEB_MERCATOR_EPSG.has(epsg) ? WEB_MERCATOR_RADIUS : null);
+    if (radius == null) {
       areas.fill(mapArea);
       return areas;
     }
     for (let row = 0; row < raster.height; row += 1) {
-      const y = raster.originY - (row + 0.5) * raster.resY;
-      const lat = Math.atan(Math.sinh(y / WEB_MERCATOR_RADIUS));
+      const y = (raster.originY - (row + 0.5) * raster.resY) * metersPerUnit;
+      const lat = Math.atan(Math.sinh(y / radius));
       areas[row] = mapArea * Math.cos(lat) ** 2;
     }
     return areas;
@@ -210,6 +240,8 @@ export function formatCutFillSummary(summary: CutFillSummary, zUnits = "m"): str
  * @param params - Reference kind, plane elevation, band and elevation units.
  * @param metersPerUnit - Metres per horizontal unit of a projected raster
  *   (default 1; ignored for a geographic raster).
+ * @param mercatorRadius - Sphere radius when the CRS definition is a
+ *   spherical Mercator under a code other than 3857.
  * @returns A difference raster (`existing - reference`, NaN where either is
  *   NoData), the totals, and log lines.
  * @throws When the band is missing, the surfaces are on different grids, or
@@ -220,6 +252,7 @@ export function cutFill(
   referenceInput: RasterData | null,
   params: CutFillParams,
   metersPerUnit = 1,
+  mercatorRadius: number | null = null,
 ): { raster: RasterData; summary: CutFillSummary; messages: string[] } {
   const existing = toNorthUp(existingInput);
   const usePlane = (params.reference ?? "plane") !== "surface";
@@ -246,7 +279,7 @@ export function cutFill(
     throw new Error(`Unknown elevation unit "${zUnits}" (use m, ft or us-ft).`);
   }
   const zToMeters = ELEVATION_UNIT_METERS[zUnits];
-  const areas = cellAreasByRow(existing, metersPerUnit);
+  const areas = cellAreasByRow(existing, metersPerUnit, mercatorRadius);
 
   const out = new Float32Array(a.length);
   const summary: CutFillSummary = {
