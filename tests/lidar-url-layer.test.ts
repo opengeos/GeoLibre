@@ -413,6 +413,48 @@ describe("addLidarLayerFromBytes", () => {
     assert.ok((await fetch(url)).ok, "still readable after the layer is removed");
   });
 
+  it("adds nothing once its signal has aborted", async () => {
+    installStubModule();
+    const controller = new AbortController();
+    controller.abort(new DOMException("Another project opened.", "AbortError"));
+    await assert.rejects(
+      addLidarLayerFromBytes(app, new Uint8Array([0x4c, 0x41, 0x53, 0x46]), {
+        name: "Output",
+        fileName: "output.las",
+        signal: controller.signal,
+      }),
+      { name: "AbortError" },
+    );
+    assert.deepEqual(loadCalls, [], "the cloud is never loaded");
+    assert.equal(useAppStore.getState().layers.length, 0);
+  });
+
+  it("takes back a cloud that finished loading after its signal aborted", async () => {
+    installStubModule();
+    const controller = new AbortController();
+    // Abort the moment the control lists the cloud, as a project opened while
+    // the cloud loaded would.
+    const unsubscribe = useAppStore.subscribe((state) => {
+      if (state.layers.length > 0 && !controller.signal.aborted) {
+        controller.abort(new DOMException("Another project opened.", "AbortError"));
+      }
+    });
+    try {
+      await assert.rejects(
+        addLidarLayerFromBytes(app, new Uint8Array([0x4c, 0x41, 0x53, 0x46]), {
+          name: "Output",
+          fileName: "output.las",
+          signal: controller.signal,
+        }),
+        { name: "AbortError" },
+      );
+    } finally {
+      unsubscribe();
+    }
+    assert.equal(loadCalls.length, 1);
+    assert.equal(useAppStore.getState().layers.length, 0, "the late cloud is removed again");
+  });
+
   it("keeps the camera still when asked", async () => {
     installStubModule();
     await addLidarLayerFromBytes(app, new Uint8Array([0x4c, 0x41, 0x53, 0x46]), {
