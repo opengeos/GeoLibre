@@ -19,8 +19,9 @@ export interface SunPosition {
   /** Apparent elevation above the horizon in degrees, refraction included. */
   elevation: number;
   /**
-   * Geometric elevation in degrees, without refraction: the direction the
-   * light actually travels near the ground, which sets shadow lengths.
+   * Geometric elevation in degrees, without refraction. Shadows follow the
+   * apparent elevation instead, since that is the direction the light
+   * arrives from.
    */
   geometricElevation: number;
   /** Solar declination in degrees. */
