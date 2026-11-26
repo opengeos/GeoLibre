@@ -198,6 +198,46 @@ test("invalid URLs and an empty accepted response without routing use catalog er
   assert.equal(current.id, "bad%ZZ");
 });
 
+test("malformed accepted bodies without routing report the localized missing-status error", async () => {
+  const process = await processDescription();
+  for (const status of [201, 202]) {
+    for (const body of ["<html>accepted</html>", "[]", '"accepted"']) {
+      const calls = serve(
+        () => new Response(body, { status, headers: { "Content-Type": "application/json" } }),
+      );
+      await assert.rejects(executeOgcProcess(process, {}, new AbortController().signal), {
+        code: "noStatusUrl",
+      });
+      assert.equal(calls.length, 1);
+    }
+  }
+});
+
+test("hosted transport can recover body routing when non-exposed response headers are unavailable", async () => {
+  const process = await processDescription();
+  const calls = serve(
+    () =>
+      new Response(
+        JSON.stringify({
+          status: "accepted",
+          links: [{ rel: "self", href: "/api/jobs/from-body" }],
+        }),
+        {
+          status: 201,
+          headers: { "Content-Type": "application/json" },
+        },
+      ),
+  );
+  const result = await executeOgcProcess(process, {}, new AbortController().signal);
+  assert.equal(result.kind, "job");
+  assert.equal(new URL(result.job!.url).pathname, "/api/jobs/from-body");
+  assert.equal(
+    calls[0].url.startsWith("https://example.org/"),
+    true,
+    "direct non-Tauri request without the development proxy",
+  );
+});
+
 test("GeoJSON validation covers nested geometry types and rejects non-finite positions", () => {
   const ring = [
     [0, 0],

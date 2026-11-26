@@ -252,3 +252,16 @@ and access to `Location`, `Link`, and `Retry-After` response headers. A successf
 development test does not establish hosted-site CORS support. Credentials may
 be supplied in the service URL query; they follow same-origin links only and
 are redacted from imported-layer provenance.
+
+For header-based job routing, configure the service response with
+`Access-Control-Expose-Headers: Location, Link, Retry-After`; these headers are
+not exposed to cross-origin browser scripts by default. See the
+[response-header exposure reference](https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Access-Control-Expose-Headers).
+When routing headers are unavailable, the client can use JSON status/self links,
+or a job identifier with an advertised job-list URL. An accepted response must
+provide a recoverable job URL through at least one of those paths.
+
+Advertised job and result links may use a different origin from the process
+endpoint. Native HTTP permits supported local/LAN destinations under its
+documented destination policy. Review the displayed **Job status URL** before
+using **Dismiss job**: that explicit action sends DELETE to the displayed target.

@@ -481,7 +481,12 @@ export async function executeOgcProcess(
   if (response.status === 201 || response.status === 202) {
     let fallback: string | undefined = retainedUrl;
     if (!fallback && response.body.length) {
-      const document = object(decode(response));
+      let document: JsonObject = {};
+      try {
+        document = object(decode(response));
+      } catch {
+        /* Missing routing is reported below, without exposing a JSON parser error. */
+      }
       const jobs = linked(process.links, REL + "job-list", process.url);
       if (jobs && typeof document.jobID === "string")
         fallback = append(jobs, `/${encodeURIComponent(document.jobID)}`);
