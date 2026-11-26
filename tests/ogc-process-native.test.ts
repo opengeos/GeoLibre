@@ -15,6 +15,7 @@ test("native protocol-owned errors use localized codes while unknown failures re
   for (const [message, code] of [
     ["OGC process request timed out", "requestTimeout"],
     ["Too many OGC process redirects", "redirectLimit"],
+    ["Response exceeds the 1024-byte download limit", "responseTooLarge"],
     ["OGC process inputs must be valid JSON", "inputsJsonSyntax"],
   ]) {
     Object.defineProperty(window, "__TAURI_INTERNALS__", {

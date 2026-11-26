@@ -1,5 +1,5 @@
 import { OgcProcessError } from "./ogc-process-errors";
-import { readLimitedBody } from "./bounded-response";
+import { readLimitedBody, ResponseLimitError } from "./bounded-response";
 import { isTauri } from "./is-tauri";
 import { normalizeFetchError } from "./ogc-json";
 import { waitForWcsRequest } from "./wcs";
@@ -156,10 +156,14 @@ export async function processHttp(
       ...(bodyReadFailed ? { bodyReadFailed: true } : {}),
     };
   } catch (error) {
+    if (error instanceof ResponseLimitError) throw new OgcProcessError("responseTooLarge");
     if (nativeDispatched) {
       // Match only errors owned by this native protocol command. Server details
       // and arbitrary connection errors must retain their original meaning.
       const message = error instanceof Error ? error.message : String(error);
+      // Mirrors http_body.rs::read_limited_body and ResponseLimitError's wording.
+      if (/^Response exceeds the \d+-byte download limit$/.test(message))
+        throw new OgcProcessError("responseTooLarge");
       const nativeCodes = {
         "OGC process request timed out": "requestTimeout",
         "Too many OGC process redirects": "redirectLimit",

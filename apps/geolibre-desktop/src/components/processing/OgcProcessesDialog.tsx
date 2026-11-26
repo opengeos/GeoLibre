@@ -332,6 +332,8 @@ export function OgcProcessesDialog({
                       !processing.granted ||
                       !client.jobUrl.trim() ||
                       client.phase === "dismissing" ||
+                      client.phase === "discovering" ||
+                      client.phase === "describing" ||
                       (client.job?.status === "dismissed" &&
                         sameOgcProcessJob(client.job.url, client.jobUrl.trim()))
                     }

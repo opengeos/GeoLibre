@@ -59,6 +59,266 @@ test("failed dialog loading offers visible recovery and close controls", async (
   assert.equal(useAppStore.getState().ui.ogcProcessesOpen, false);
 });
 
+test("a resumed running job stays locked when a later description uses a JSON format query", async () => {
+  const process = description();
+  process.links = process.links.filter((link: { rel: string }) => link.rel !== "self");
+  let available = false,
+    attempts = 0,
+    posts = 0;
+  globalThis.fetch = async (input, init) => {
+    const path = new URL(String(input)).pathname;
+    if (init?.method === "POST") {
+      posts++;
+      throw Error("Running job must remain locked");
+    }
+    if (path.includes("/jobs/"))
+      return new Response(
+        JSON.stringify({
+          jobID: "existing",
+          status: "running",
+          links: [
+            { rel: "process", href: "https://demo.pygeoapi.io/master/processes/hello-world" },
+          ],
+        }),
+        { headers: { "Content-Type": "application/json" } },
+      );
+    if (path.endsWith("/hello-world")) {
+      attempts++;
+      if (!available) return new Response("{}", { status: 404 });
+    }
+    return new Response(
+      JSON.stringify(path.endsWith("/hello-world") ? process : { processes: [process] }),
+      { headers: { "Content-Type": "application/json" } },
+    );
+  };
+  useAppStore.getState().setOgcProcessesOpen(true);
+  render(createElement(OgcProcessesDialog, { mapControllerRef: createRef<MapEngine>() }));
+  fireEvent.change(screen.getByLabelText("Job status URL"), {
+    target: { value: "https://demo.pygeoapi.io/master/jobs/existing" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Resume monitoring" }));
+  await waitFor(() => assert.ok(attempts > 0 && screen.queryByText("Running")));
+  fireEvent.click(screen.getByRole("button", { name: "Stop waiting" }));
+  available = true;
+  fireEvent.change(screen.getByLabelText("Service URL"), {
+    target: { value: "https://demo.pygeoapi.io/master/processes" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Retrieve processes" }));
+  await waitFor(() => assert.ok(screen.queryByLabelText("Name *")));
+  await waitFor(() =>
+    assert.equal(
+      screen.getByRole("button", { name: "Resume monitoring" }).hasAttribute("disabled"),
+      false,
+    ),
+  );
+  assert.equal(screen.getByRole("button", { name: "Run process" }).hasAttribute("disabled"), true);
+  assert.match(
+    (screen.getByLabelText("Job status URL") as HTMLInputElement).value,
+    /\/jobs\/existing/,
+  );
+  await act(async () => {
+    fireEvent.click(screen.getByRole("button", { name: "Run process" }));
+  });
+  assert.equal(posts, 0);
+});
+
+test("Dismiss cannot interrupt an active process description", async () => {
+  const first = description(),
+    second = JSON.parse(JSON.stringify(first).replaceAll("hello-world", "second"));
+  let release: ((response: Response) => void) | undefined,
+    deletes = 0;
+  globalThis.fetch = async (input, init) => {
+    const path = new URL(String(input)).pathname;
+    if (init?.method === "POST")
+      return new Response(null, {
+        status: 202,
+        headers: { Location: "/master/jobs/one", "Retry-After": "0" },
+      });
+    if (init?.method === "DELETE") {
+      deletes++;
+      return new Response(null, { status: 204 });
+    }
+    if (path.includes("/jobs/"))
+      return new Response(JSON.stringify({ status: "running" }), {
+        headers: { "Content-Type": "application/json" },
+      });
+    if (path.endsWith("/second"))
+      return new Promise<Response>((resolve) => {
+        release = resolve;
+      });
+    return new Response(
+      JSON.stringify(path.endsWith("/hello-world") ? first : { processes: [first, second] }),
+      { headers: { "Content-Type": "application/json" } },
+    );
+  };
+  await form();
+  fireEvent.click(screen.getByRole("button", { name: "Run process" }));
+  await waitFor(() => assert.ok(screen.queryByText("Running")));
+  fireEvent.click(screen.getByRole("button", { name: "Stop waiting" }));
+  fireEvent.change(screen.getByLabelText("Process"), { target: { value: "second" } });
+  await waitFor(() => assert.ok(release));
+  assert.equal(screen.getByRole("button", { name: "Dismiss job" }).hasAttribute("disabled"), true);
+  fireEvent.click(screen.getByRole("button", { name: "Dismiss job" }));
+  assert.equal(deletes, 0);
+  await act(async () =>
+    release?.(
+      new Response(JSON.stringify(second), { headers: { "Content-Type": "application/json" } }),
+    ),
+  );
+  await waitFor(() => assert.ok(screen.queryByLabelText("Name *")));
+  assert.equal(screen.getByRole("button", { name: "Run process" }).hasAttribute("disabled"), false);
+});
+
+for (const count of [0, 1, 3]) {
+  test(`layer insertion respects occurrence limits for ${count} features`, async () => {
+    const process = description();
+    process.inputs.area = { title: "Area", minOccurs: 1, maxOccurs: 2, schema: { type: "object" } };
+    const data = {
+      type: "FeatureCollection" as const,
+      features: Array.from({ length: count }, (_, id) => ({
+        type: "Feature" as const,
+        properties: {},
+        geometry: { type: "Point" as const, coordinates: [id, id] },
+      })),
+    };
+    const id = useAppStore.getState().addGeoJsonLayer("Input", data);
+    let submitted: { inputs: { area: unknown } } | undefined;
+    serve(async (_url, init) => {
+      submitted = JSON.parse(String(init?.body));
+      return new Response(JSON.stringify({ echo: "Done" }));
+    }, process);
+    await form();
+    const editor = screen.getByLabelText("Area *") as HTMLTextAreaElement;
+    const previous = '[{"value":{},"mediaType":"application/geo+json"}]';
+    fireEvent.change(editor, { target: { value: previous } });
+    fireEvent.change(screen.getByLabelText("Layer input for Area"), {
+      target: { value: JSON.stringify([id, "features"]) },
+    });
+    if (count === 1) {
+      fireEvent.click(screen.getByRole("button", { name: "Run process" }));
+      await waitFor(() => assert.ok(submitted));
+      assert.deepEqual(submitted?.inputs.area, [
+        { value: data.features[0], mediaType: "application/geo+json" },
+      ]);
+    } else {
+      assert.equal(editor.value, previous);
+      assert.equal(editor.getAttribute("aria-invalid"), "true");
+      assert.match(screen.getByRole("alert").textContent ?? "", /accepts 1 to 2/);
+    }
+  });
+}
+
+for (const type of ["object", "array", "integer"]) {
+  test(`layer representations match a repeated ${type} schema`, async () => {
+    const process = description();
+    process.inputs.area = { title: "Area", minOccurs: 0, maxOccurs: 2, schema: { type } };
+    const data = {
+      type: "FeatureCollection" as const,
+      features: [
+        {
+          type: "Feature" as const,
+          properties: {},
+          geometry: { type: "Point" as const, coordinates: [3, 4] },
+        },
+      ],
+    };
+    const id = useAppStore.getState().addGeoJsonLayer("Input", data);
+    let submitted: { inputs: { area: unknown } } | undefined;
+    serve(async (_url, init) => {
+      submitted = JSON.parse(String(init?.body));
+      return new Response(JSON.stringify({ echo: "Done" }));
+    }, process);
+    await form();
+    const picker = screen.queryByLabelText("Layer input for Area");
+    if (type === "integer") {
+      assert.equal(picker === null, true);
+      return;
+    }
+    assert.ok(picker);
+    const choices = [...picker.querySelectorAll("option")]
+      .filter((option) => option.value)
+      .map((option) => JSON.parse(option.value)[1]);
+    assert.deepEqual(
+      choices,
+      type === "object" ? ["collection", "features", "geometries"] : ["features", "geometries"],
+    );
+    if (type === "array") {
+      fireEvent.change(picker, { target: { value: JSON.stringify([id, "features"]) } });
+      fireEvent.click(screen.getByRole("button", { name: "Run process" }));
+      await waitFor(() => assert.ok(submitted));
+      assert.deepEqual(submitted?.inputs.area, [data.features]);
+    }
+  });
+}
+
+for (const representation of ["features", "geometries"] as const) {
+  for (const [count, minimum] of [
+    [0, 1],
+    [2, 1],
+    [3, 1],
+    [3, 2],
+  ] as const) {
+    test(`mixed object/array input selects a valid ${representation} occurrence shape for ${count} features and minimum ${minimum}`, async () => {
+      const process = description();
+      process.inputs.area = {
+        title: "Area",
+        schema: { type: ["object", "array"] },
+        minOccurs: minimum,
+        maxOccurs: 2,
+      };
+      const data = {
+        type: "FeatureCollection" as const,
+        features: Array.from({ length: count }, (_, index) => ({
+          type: "Feature" as const,
+          properties: { id: index },
+          geometry: { type: "Point" as const, coordinates: [index, 4] },
+        })),
+      };
+      const id = useAppStore.getState().addGeoJsonLayer("Mixed", data);
+      let submitted: { inputs: { area: unknown } } | undefined;
+      serve(async (_url, init) => {
+        submitted = JSON.parse(String(init?.body));
+        return new Response(JSON.stringify({ echo: "Done" }));
+      }, process);
+      await form();
+      const editor = screen.getByLabelText("Area *") as HTMLTextAreaElement;
+      fireEvent.change(editor, { target: { value: "[]" } });
+      fireEvent.change(screen.getByLabelText("Layer input for Area"), {
+        target: { value: JSON.stringify([id, representation]) },
+      });
+      if (minimum === 2) {
+        assert.equal(editor.value, "[]");
+        assert.match(screen.getByRole("alert").textContent ?? "", /accepts 2 to 2/);
+        return;
+      }
+      fireEvent.click(screen.getByRole("button", { name: "Run process" }));
+      await waitFor(() => assert.ok(submitted));
+      const values =
+        representation === "features"
+          ? data.features
+          : data.features.map((feature) => feature.geometry);
+      assert.deepEqual(
+        submitted?.inputs.area,
+        count === 2
+          ? values.map((value) => ({ value, mediaType: "application/geo+json" }))
+          : [values],
+      );
+    });
+  }
+}
+
+test("a single object layer input offers no bare array representations", async () => {
+  const process = description();
+  process.inputs.area = { title: "Area", minOccurs: 0, schema: { type: "object" } };
+  useAppStore.getState().addGeoJsonLayer("Input", { type: "FeatureCollection", features: [] });
+  serve(async () => new Response("{}"), process);
+  await form();
+  const choices = [...screen.getByLabelText("Layer input for Area").querySelectorAll("option")]
+    .filter((option) => option.value)
+    .map((option) => JSON.parse(option.value)[1]);
+  assert.deepEqual(choices, ["collection"]);
+});
+
 test("raw JSON validation is associated with its editor and transport errors do not mark it invalid", async () => {
   serve(async () => new Response("{}", { status: 503 }));
   await form();
@@ -857,34 +1117,67 @@ test("editing imported inline GeoJSON leaves the retained output snapshot unchan
   );
 });
 
-for (const type of ["uint64", "int64"]) {
-  test(`striped ${type} process rasters are rejected before lossy conversion or layer publication`, async () => {
-    const { initCogWasm, readGeoTiffInfo } = await import("@geolibre/processing");
-    await initCogWasm(
-      new Uint8Array(
-        readFileSync(
-          new URL("../node_modules/geolibre-wasm/geolibre_wasm_bg.wasm", import.meta.url),
-        ),
+test("vendor GeoJSON string results can be imported as a validated layer", async () => {
+  const data = {
+    type: "FeatureCollection",
+    features: [
+      {
+        type: "Feature",
+        properties: { name: "Vendor" },
+        geometry: { type: "Point", coordinates: [3, 4] },
+      },
+    ],
+  };
+  serve(
+    async () =>
+      new Response(
+        JSON.stringify({
+          map: {
+            value: JSON.stringify(data),
+            mediaType: "application/vnd.geo+json",
+          },
+        }),
+        { headers: { "Content-Type": "application/json" } },
       ),
-    );
-    const bytes = new Uint8Array(
-      readFileSync(new URL(`./fixtures/ogc-processes/striped-${type}.tif`, import.meta.url)),
-    );
-    const info = await readGeoTiffInfo(bytes);
-    assert.equal(info.bits_per_sample, 64);
-    assert.equal(info.tiled, false);
-    assert.notEqual(info.sample_format, "ieeefloat");
-    serve(async () => new Response(bytes, { headers: { "Content-Type": "image/tiff" } }));
-    await form();
-    fireEvent.click(screen.getByRole("button", { name: "Run process" }));
-    await waitFor(() => assert.ok(screen.queryByRole("button", { name: "Add to map" })));
-    fireEvent.click(screen.getByRole("button", { name: "Add to map" }));
-    await waitFor(() => assert.match(screen.getByRole("alert").textContent ?? "", /precision/));
-    assert.equal(useAppStore.getState().layers.length, 0);
-  });
+  );
+  await form();
+  fireEvent.click(screen.getByRole("button", { name: "Run process" }));
+  await waitFor(() => assert.ok(screen.queryByRole("button", { name: "Add to map" })));
+  fireEvent.click(screen.getByRole("button", { name: "Add to map" }));
+  await waitFor(() => assert.equal(useAppStore.getState().layers.length, 1));
+  assert.deepEqual(useAppStore.getState().layers[0].geojson, data);
+});
+
+for (const layout of ["striped", "tiled"]) {
+  for (const type of ["uint64", "int64"]) {
+    test(`${layout} ${type} process rasters are rejected before lossy conversion or layer publication`, async () => {
+      const { initCogWasm, readGeoTiffInfo } = await import("@geolibre/processing");
+      await initCogWasm(
+        new Uint8Array(
+          readFileSync(
+            new URL("../node_modules/geolibre-wasm/geolibre_wasm_bg.wasm", import.meta.url),
+          ),
+        ),
+      );
+      const bytes = new Uint8Array(
+        readFileSync(new URL(`./fixtures/ogc-processes/${layout}-${type}.tif`, import.meta.url)),
+      );
+      const info = await readGeoTiffInfo(bytes);
+      assert.equal(info.bits_per_sample, 64);
+      assert.equal(info.tiled, layout === "tiled");
+      assert.notEqual(info.sample_format, "ieeefloat");
+      serve(async () => new Response(bytes, { headers: { "Content-Type": "image/tiff" } }));
+      await form();
+      fireEvent.click(screen.getByRole("button", { name: "Run process" }));
+      await waitFor(() => assert.ok(screen.queryByRole("button", { name: "Add to map" })));
+      fireEvent.click(screen.getByRole("button", { name: "Add to map" }));
+      await waitFor(() => assert.match(screen.getByRole("alert").textContent ?? "", /precision/));
+      assert.equal(useAppStore.getState().layers.length, 0);
+    });
+  }
 }
 
-for (const repeated of [false, true])
+for (const repeated of [false, true]) {
   for (const representation of ["collection", "features", "geometries"] as const) {
     test(`layer ${representation} inputs preserve ${repeated ? "repeated" : "single"} occurrence qualification`, async () => {
       const process = description();
@@ -935,6 +1228,7 @@ for (const repeated of [false, true])
       assert.deepEqual((submitted as { inputs: { area: unknown } }).inputs.area, expected);
     });
   }
+}
 
 test("base64 JSON geodata is importable while ordinary JSON messages stay download-only", async () => {
   const collection = {

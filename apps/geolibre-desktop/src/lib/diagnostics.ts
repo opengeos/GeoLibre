@@ -226,7 +226,11 @@ function emitChange(): void {
   snapshot = createSnapshot(records);
   for (const listener of [...listeners]) {
     try {
-      listener();
+      // A void callback may still return a promise. Observe its rejection without
+      // delaying notification or changing the recorded operation's outcome.
+      const returned: unknown = listener();
+      if (returned && typeof returned === "object" && "then" in returned)
+        void Promise.resolve(returned).catch(() => {});
     } catch {
       // Observers must not change the outcome of the operation being recorded.
       // Logging here could reenter diagnostic notification.

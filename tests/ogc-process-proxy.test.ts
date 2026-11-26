@@ -272,6 +272,7 @@ test("process proxy preserves execution/job controls, redirect methods and respo
           port,
           method,
           path: `/proxy?url=${encodeURIComponent(new URL(path, "https://process.example").href)}`,
+          signal: AbortSignal.timeout(5000),
           headers: { "content-type": "application/json", ...headers },
         },
         (res) => {
@@ -380,6 +381,7 @@ test("process proxy preserves execution/job controls, redirect methods and respo
     }
     assert.equal(dispatches, before);
   } finally {
+    server.closeAllConnections();
     server.close();
     await once(server, "close");
     await upstream.close();

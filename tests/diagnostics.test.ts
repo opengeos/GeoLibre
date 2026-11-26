@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { afterEach, before, beforeEach, describe, it } from "node:test";
+import { setImmediate as nextTurn } from "node:timers/promises";
 
 // diagnostics.ts reads localStorage at import time, so the window stub must
 // be installed before the module is loaded; hence the dynamic import below.
@@ -29,6 +30,23 @@ let setCaptureNetworkInfo: DiagnosticsModule["setCaptureNetworkInfo"];
 let installDiagnosticsCapture: DiagnosticsModule["installDiagnosticsCapture"];
 let EXPECTED_STATUS_HEADER: DiagnosticsModule["EXPECTED_STATUS_HEADER"];
 let OPTIONAL_RESOURCE_HEADER: DiagnosticsModule["OPTIONAL_RESOURCE_HEADER"];
+
+it("isolates rejected promises returned by diagnostic observers", async () => {
+  const { subscribeDiagnostics } = await import("../apps/geolibre-desktop/src/lib/diagnostics");
+  const stop = subscribeDiagnostics(async () => {
+    throw new Error("observer failed");
+  });
+  try {
+    appendDiagnostic({ category: "network", level: "error", message: "Recorded outcome" });
+    await nextTurn();
+    assert.equal(
+      getDiagnosticsSnapshot().records.some((record) => record.message === "Recorded outcome"),
+      true,
+    );
+  } finally {
+    stop();
+  }
+});
 
 before(async () => {
   ({

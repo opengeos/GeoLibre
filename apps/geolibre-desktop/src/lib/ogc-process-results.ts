@@ -7,6 +7,7 @@ import { downloadOgcProcessOutput, type OgcProcessOutput } from "./ogc-api-proce
 import { parseGeoJsonValue } from "./file-io/vector-text-formats";
 import { uniqueLayerName } from "./unique-layer-name";
 import { validOgcProcessGeoJson } from "./ogc-process-geometry";
+import { isProcessJsonMediaType } from "./ogc-process-media-type";
 
 /** Bounded display copy; large results stay intact for downloading and import. */
 export function ogcProcessOutputPreview(output: OgcProcessOutput): string {
@@ -35,9 +36,18 @@ export function canImportOgcProcessOutput(output: OgcProcessOutput): boolean {
   if (output.warning) return false;
   const mediaType = output.mediaType?.split(";", 1)[0].trim().toLowerCase();
   const unknownBinary = !mediaType || mediaType === "application/octet-stream";
-  if (output.href || output.bytes) return unknownBinary || /json|tiff/i.test(mediaType ?? "");
-  if (/geo\+json|tiff/i.test(output.mediaType ?? "")) return true;
-  if (output.encoding === "base64" && (unknownBinary || /json/i.test(mediaType ?? ""))) return true;
+  if (output.href || output.bytes)
+    return (
+      unknownBinary || isProcessJsonMediaType(mediaType ?? "") || /tiff/i.test(mediaType ?? "")
+    );
+  if (
+    mediaType === "application/geo+json" ||
+    mediaType === "application/vnd.geo+json" ||
+    /tiff/i.test(mediaType ?? "")
+  )
+    return true;
+  if (output.encoding === "base64" && (unknownBinary || isProcessJsonMediaType(mediaType ?? "")))
+    return true;
   const value = output.value;
   return (
     !!value &&
@@ -110,10 +120,10 @@ export async function importOgcProcessOutput(
     let data = new Uint8Array(await blob.arrayBuffer());
     const info = await readGeoTiffInfo(data);
     if (!info.ok) throw new OgcProcessError("rasterUnreadable");
+    // Both tiled readers and striped conversion ultimately expose Float64 values.
+    if (info.bits_per_sample === 64 && info.sample_format !== "ieeefloat")
+      throw new OgcProcessError("rasterPrecision");
     if (!info.tiled) {
-      // Float64 cannot preserve arbitrary 64-bit integer samples exactly.
-      if (info.bits_per_sample === 64 && info.sample_format !== "ieeefloat")
-        throw new OgcProcessError("rasterPrecision");
       data = new Uint8Array(await convertGeoTiffToCog(data, { signal, float64: true }));
       const converted = await readGeoTiffInfo(data);
       if (

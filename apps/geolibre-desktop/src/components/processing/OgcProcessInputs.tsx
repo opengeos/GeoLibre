@@ -33,7 +33,11 @@ export function OgcProcessInputs({
 }) {
   const { t } = useTranslation();
   const prefix = useId();
-  const [inputLimit, setInputLimit] = useState<string | null>(null);
+  const [inputProblem, setInputProblem] = useState<{
+    key: string;
+    code: "inputLimit" | "inputOccurrences";
+    parameters?: { name: string; count: number; minimum: number; maximum: number | string };
+  } | null>(null);
   const exporting = useAppCapability("export:data");
   const layers = useLayerSlices(
     useMemo(
@@ -47,7 +51,7 @@ export function OgcProcessInputs({
     ),
   );
   const set = (key: string, value: string | undefined) => {
-    setInputLimit(null);
+    setInputProblem(null);
     const next = { ...values };
     if (value === undefined) delete next[key];
     else
@@ -61,14 +65,25 @@ export function OgcProcessInputs({
   };
   return (
     <div className="space-y-4">
-      {inputLimit !== null && (
-        <p id={`${prefix}-limit`} role="alert" className="text-sm text-destructive">
-          {t("processing.ogcProcesses.errors.inputLimit")}
+      {inputProblem !== null && (
+        <p id={`${prefix}-problem`} role="alert" className="text-sm text-destructive">
+          {t(`processing.ogcProcesses.errors.${inputProblem.code}`, inputProblem.parameters ?? {})}
         </p>
       )}
       {Object.entries(process.inputs).map(([key, definition]) => {
         const schema = ogcInputSchema(definition),
           kind = ogcInputKind(definition);
+        const types =
+          typeof schema.type === "string"
+            ? [schema.type]
+            : Array.isArray(schema.type)
+              ? schema.type
+              : undefined;
+        const acceptsObject = !types || types.includes("object");
+        const acceptsArray = !types || types.includes("array");
+        const repeated = isRepeatedInput(definition);
+        const collectionAllowed = acceptsObject;
+        const arraysAllowed = repeated ? acceptsObject || acceptsArray : acceptsArray;
         const id = `${prefix}-${encodeURIComponent(key)}`;
         const fieldValue = Object.hasOwn(values, key) ? values[key] : "";
         const title = typeof definition.title === "string" ? definition.title : key;
@@ -77,7 +92,11 @@ export function OgcProcessInputs({
           (item) => Object.hasOwn(values, key) && ogcInputText(item, kind) === values[key],
         );
         const errorId =
-          inputLimit === key ? `${prefix}-limit` : error?.name === key ? error.id : undefined;
+          inputProblem?.key === key
+            ? `${prefix}-problem`
+            : error?.name === key
+              ? error.id
+              : undefined;
         const invalid = {
           "aria-invalid": errorId ? (true as const) : undefined,
           "aria-describedby": errorId,
@@ -158,8 +177,9 @@ export function OgcProcessInputs({
                 }
               />
             )}
-            {kind === "json" && layers.length > 0 && (
+            {kind === "json" && layers.length > 0 && (collectionAllowed || arraysAllowed) && (
               <Select
+                {...invalid}
                 aria-label={t("processing.ogcProcesses.layerInput", { name: title })}
                 disabled={disabled || !exporting.granted}
                 value=""
@@ -169,6 +189,11 @@ export function OgcProcessInputs({
                     string,
                     string,
                   ];
+                  if (
+                    !["collection", "features", "geometries"].includes(representation) ||
+                    (representation === "collection" ? !collectionAllowed : !arraysAllowed)
+                  )
+                    return;
                   const layer = useAppStore.getState().layers.find((item) => item.id === layerId);
                   if (!layer?.geojson || !resolveLayerCapabilities(layer).export) return;
                   const value =
@@ -181,18 +206,48 @@ export function OgcProcessInputs({
                     value,
                     mediaType: "application/geo+json",
                   });
-                  const repeated = isRepeatedInput(definition);
-                  const input =
+                  let input =
                     representation === "collection"
                       ? repeated
                         ? [qualify(value)]
                         : qualify(value)
                       : repeated && Array.isArray(value)
-                        ? value.map(qualify)
+                        ? acceptsObject
+                          ? value.map(qualify)
+                          : [value]
                         : value;
+                  if (repeated && Array.isArray(input)) {
+                    const minimum =
+                      typeof definition.minOccurs === "number" ? definition.minOccurs : 1;
+                    const maximum =
+                      typeof definition.maxOccurs === "number" ? definition.maxOccurs : Infinity;
+                    if (
+                      representation !== "collection" &&
+                      acceptsObject &&
+                      acceptsArray &&
+                      Array.isArray(value) &&
+                      (input.length < minimum || input.length > maximum) &&
+                      minimum <= 1 &&
+                      maximum >= 1
+                    )
+                      input = [value];
+                    if (input.length < minimum || input.length > maximum) {
+                      setInputProblem({
+                        key,
+                        code: "inputOccurrences",
+                        parameters: {
+                          name: title,
+                          count: input.length,
+                          minimum,
+                          maximum: Number.isFinite(maximum) ? maximum : "∞",
+                        },
+                      });
+                      return;
+                    }
+                  }
                   const serialized = serializeOgcProcessLayerInput(input);
                   if (serialized === null) {
-                    setInputLimit(key);
+                    setInputProblem({ key, code: "inputLimit" });
                     return;
                   }
                   set(key, serialized);
@@ -201,15 +256,21 @@ export function OgcProcessInputs({
                 <option value="">{t("processing.ogcProcesses.insertLayer")}</option>
                 {layers.map((layer) => (
                   <optgroup key={layer.id} label={layer.name}>
-                    <option value={JSON.stringify([layer.id, "collection"])}>
-                      {t("processing.ogcProcesses.featureCollection")}
-                    </option>
-                    <option value={JSON.stringify([layer.id, "features"])}>
-                      {t("processing.ogcProcesses.features")}
-                    </option>
-                    <option value={JSON.stringify([layer.id, "geometries"])}>
-                      {t("processing.ogcProcesses.geometries")}
-                    </option>
+                    {collectionAllowed && (
+                      <option value={JSON.stringify([layer.id, "collection"])}>
+                        {t("processing.ogcProcesses.featureCollection")}
+                      </option>
+                    )}
+                    {arraysAllowed && (
+                      <option value={JSON.stringify([layer.id, "features"])}>
+                        {t("processing.ogcProcesses.features")}
+                      </option>
+                    )}
+                    {arraysAllowed && (
+                      <option value={JSON.stringify([layer.id, "geometries"])}>
+                        {t("processing.ogcProcesses.geometries")}
+                      </option>
+                    )}
                   </optgroup>
                 ))}
               </Select>

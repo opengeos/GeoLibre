@@ -1,3 +1,9 @@
+/** Recognize single JSON documents while keeping JSON sequences on the raw path. */
+export function isProcessJsonMediaType(value: string): boolean {
+  const base = parseProcessMediaType(value)?.base;
+  return base?.split("/", 2)[1] === "json" || Boolean(base?.endsWith("+json"));
+}
+
 /** Compare HTTP media types without folding case-sensitive parameter values. */
 export function parseProcessMediaType(
   value: string,
