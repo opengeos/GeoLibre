@@ -216,11 +216,21 @@ from the pending changes even if other operations fail. GeoLibre then queries
 saved records for server defaults and calculated fields. Changes made locally
 during a save remain pending.
 
-A lost or incomplete response leaves the outcome uncertain. GeoLibre blocks
-another save from that layer, including after reopening the project, to prevent
-repeating an insert that may already have succeeded. Check the service state and
-add the service as a new layer before continuing. Export pending local work first
-if it needs to be retained. A confirmed service rejection can be corrected and retried.
+Saves go through the [offline edit outbox](user-guide/offline-edit-sync.md).
+When the service cannot be reached, the edits are queued, survive reloading or
+restarting the app, and sync when the connection returns. Before writing,
+GeoLibre reads the service's current version of every feature it is about to
+change: a feature someone else edited since you downloaded it is held for you
+to review (keep yours, keep the service's, or decide later) instead of being
+overwritten, while the other edits go through.
+
+A lost or incomplete response does not block the layer. On the next attempt
+GeoLibre checks which edits already landed: updates and deletes that match the
+service are counted as done, and a new feature is looked for among the records
+created since your download (by its geometry and attributes) before it is sent
+again. A confirmed service rejection keeps just the refused features queued, with
+the service's message, so they can be corrected and retried. Layers saved with an
+uncertain outcome by an earlier GeoLibre version still need to be added again.
 
 Access tokens stay in the live connection and are not saved in the project.
 Re-add protected services with a current token after reopening a project or when

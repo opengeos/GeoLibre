@@ -549,6 +549,82 @@ describe("writeLayerEditsToSource and saveLayerEditsBatch", () => {
     assert.equal(queued, false);
   });
 
+  it("routes a writable ArcGIS layer through the offline edit outbox", async () => {
+    const loaded = {
+      type: "FeatureCollection" as const,
+      features: [
+        {
+          type: "Feature" as const,
+          id: "a",
+          geometry: { type: "Point" as const, coordinates: [0, 0] },
+          properties: { OBJECTID: 7, status: "ok" },
+        },
+      ],
+    };
+    const info = {
+      objectIdField: "OBJECTID",
+      capabilities: "Create,Update,Delete",
+      fields: [
+        { name: "OBJECTID", type: "esriFieldTypeOID", editable: false },
+        { name: "status", type: "esriFieldTypeString", editable: true },
+      ],
+    };
+    const drawn = {
+      type: "Feature" as const,
+      geometry: { type: "Point" as const, coordinates: [1, 1] },
+      properties: { status: "new" },
+    };
+    const agLayer = makeLayer("ag1", "Assets", {
+      sourcePath: undefined,
+      source: {
+        type: "geojson",
+        arcgisQueryUrl: "https://example.com/arcgis/rest/services/A/FeatureServer/0/query",
+      },
+      geojson: {
+        ...loaded,
+        features: [{ ...loaded.features[0], properties: { OBJECTID: 7, status: "fixed" } }, drawn],
+      },
+      metadata: {
+        sourceKind: "arcgis-feature-query",
+        arcgisEditInfo: info,
+        arcgisEditBaseline: loaded,
+      },
+    });
+    let queued: EnqueueInput | undefined;
+    const patches: Array<Partial<GeoLibreLayer>> = [];
+    const res = await writeLayerEditsToSource(agLayer, {
+      map: undefined,
+      t,
+      canEditLayer: () => true,
+      deps: {
+        commitDrafts: () => "none",
+        readLatestLayer: () => agLayer,
+        readProjectGeneration: () => 7,
+        saveArcgis: async () => {
+          throw new Error("the direct ArcGIS save must not run");
+        },
+        updateLayer: (_id, patch) => patches.push(patch),
+        saveOutbox: async (input) => {
+          queued = input;
+          return { status: "success", message: "synced" };
+        },
+      },
+    });
+    assert.equal(res.message, "synced");
+    assert.equal(queued?.backend, "arcgis");
+    assert.deepEqual(
+      queued?.ops.map((op) => [op.kind, op.key]),
+      [
+        ["update", "7"],
+        ["insert", null],
+      ],
+    );
+    // The drawn feature got a stable id so its object ID can be stamped back.
+    const stamped = patches[0].geojson!.features[1];
+    assert.match(String(stamped.id), /^arcgis-new-/);
+    assert.equal(queued?.ops[1].feature?.id, stamped.id);
+  });
+
   it("catches synchronous commitDrafts throws so later batch layers still run", async () => {
     const l1 = makeLayer("l1", "Layer 1");
     const l2 = makeLayer("l2", "Layer 2");

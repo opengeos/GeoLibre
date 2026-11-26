@@ -699,6 +699,7 @@ export async function recoverPostgisLayer(
     keptTheirs: 0,
     insertedKeys: new Map(),
     touchedKeys: [],
+    theirsKeys: [],
   };
   try {
     return await refreshPostgisLayerAfterSync(entry, outcome, deps);

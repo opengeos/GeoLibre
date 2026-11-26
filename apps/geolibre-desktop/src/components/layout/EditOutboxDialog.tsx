@@ -420,8 +420,14 @@ function ConflictItem({
  * @returns Display text.
  */
 function describeEntryError(entry: OutboxEntry, t: TFunction): string {
-  if (entry.lastErrorCode === "postgisNoConnection") {
-    return t("editOutbox.errors.postgisNoConnection");
+  switch (entry.lastErrorCode) {
+    case "postgisNoConnection":
+      return t("editOutbox.errors.postgisNoConnection");
+    case "arcgisLayerClosed":
+      return t("editOutbox.errors.arcgisLayerClosed");
+    case "geolensNotConnected":
+      return t("editOutbox.errors.geolensNotConnected");
+    default:
+      return entry.lastError ?? "";
   }
-  return entry.lastError ?? "";
 }

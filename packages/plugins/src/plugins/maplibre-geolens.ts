@@ -39,6 +39,11 @@ import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
 import { isTauriRuntime } from "./earth-engine-auth";
 import { getControlMap } from "./style-map";
 import {
+  geoLensEditSessions,
+  getGeoLensSaveHandler,
+  setActiveGeoLensClient,
+} from "./geolens-edit-bridge";
+import {
   applyFeatureEdits,
   captureFeatureBaseline,
   datasetPageUrl,
@@ -1149,11 +1154,6 @@ async function addFeaturesLayer(
 // Feature editing: change tracking and write-back.
 // ---------------------------------------------------------------------------
 
-/** What a layer's features looked like on the server, per store layer id. */
-interface GeoLensEditSession {
-  baseline: GeoLensFeatureBaseline;
-}
-
 /**
  * Per-layer baselines for the GeoLens datasets loaded this session.
  *
@@ -1163,7 +1163,8 @@ interface GeoLensEditSession {
  * means the diff is against what the dataset holds *now* rather than what it
  * held whenever the project was last saved.
  */
-const editSessions = new Map<string, GeoLensEditSession>();
+// Shared with the host's offline edit outbox through the edit bridge.
+const editSessions = geoLensEditSessions;
 
 /** A GeoLens GeoJSON layer in the store that can be written back. */
 interface GeoLensEditableLayer {
@@ -1864,6 +1865,35 @@ function buildPanel(
       // Re-read from the store: the row was built from a snapshot that may be a
       // few edits old by the time the button is pressed.
       const fresh = currentEditableLayer(layer.id) ?? layer;
+      const handler = getGeoLensSaveHandler();
+      if (handler) {
+        // The host queues the save in its offline edit outbox and syncs it,
+        // with conflict detection against the dataset's current rows.
+        const baseline = await ensureBaseline(client, fresh, state.featureLimit, fetchImpl);
+        const pending = diffFeatures(fresh.geojson, baseline);
+        if (
+          pending.deletes.length > 0 &&
+          !window.confirm(labels.confirmDeletes(pending.deletes.length))
+        ) {
+          return;
+        }
+        const result = await handler({
+          layerId: fresh.id,
+          layerName: fresh.name,
+          datasetId: fresh.datasetId,
+          client,
+          baseline,
+          featureLimit: fresh.featureLimit ?? state.featureLimit,
+        });
+        if (result.errors.length > 0) {
+          showError(labels.savePartial(result.errors.length, result.errors[0]));
+        }
+        status.textContent = result.message ?? labels.savedEdits(result.written);
+        if (result.written > 0) {
+          await refreshVectorTilesForDataset(client, fresh.datasetId, fetchImpl);
+        }
+        return;
+      }
       const outcome = await saveLayerEdits(
         client,
         fresh,
@@ -2132,6 +2162,8 @@ function buildPanel(
     // display to "" would wipe the inline `display:flex` and collapse to block.
     if (!connected) state.client = null;
     else writeSavedGeoLensServerUrl(baseUrl);
+    // Let queued outbox edits for this server sync with this connection.
+    setActiveGeoLensClient(baseUrl, state.client ? { client: state.client, fetchImpl } : null);
     searchRow.style.display = connected ? "flex" : "none";
     // Ask the server whether it allows dataset editing at all. Public endpoint,
     // and a failure resolves to "no editing", so this never blocks connecting.

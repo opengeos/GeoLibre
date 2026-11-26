@@ -382,6 +382,7 @@ describe("saveThroughOutbox", () => {
       keptTheirs: 0,
       insertedKeys: new Map(),
       touchedKeys: [],
+      theirsKeys: [],
     };
     const queued = (kind: SyncOutcome["kind"], extra: Partial<SyncOutcome> = {}) =>
       saveThroughOutbox(input([updateOp("a", "1")]), t, {

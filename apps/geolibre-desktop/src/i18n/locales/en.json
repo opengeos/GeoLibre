@@ -375,7 +375,9 @@
     "notDurable": "This browser is not keeping data between sessions, so queued edits are lost if you close or reload the page.",
     "storageUnreadable": "Edits queued in an earlier session could not be read from this device's storage ({{error}}). They are still stored, but cannot be synced until storage is readable again; new edits are kept for this session only.",
     "errors": {
-      "postgisNoConnection": "No PostgreSQL connection is available for this table. Reconnect in Add data > PostgreSQL, then sync again."
+      "postgisNoConnection": "No PostgreSQL connection is available for this table. Reconnect in Add data > PostgreSQL, then sync again.",
+      "arcgisLayerClosed": "Open the project that holds this ArcGIS layer to sync its queued edits. They sync on their own once it is open.",
+      "geolensNotConnected": "Connect to this GeoLens server with an API key in the GeoLens panel to sync its queued edits."
     },
     "offlineNotice": "You are offline. Queued edits sync automatically when the connection returns.",
     "empty": "No edits are waiting to sync.",

@@ -260,6 +260,7 @@ export function syncOutboxEntryNow(
         keptTheirs: 0,
         insertedKeys: new Map(),
         touchedKeys: [],
+        theirsKeys: [],
         error: message,
       };
     }

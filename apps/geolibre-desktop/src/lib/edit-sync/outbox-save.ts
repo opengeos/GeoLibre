@@ -18,6 +18,8 @@ export interface OutboxSaveResult {
   status: "success" | "warning" | "error";
   message: string;
   silent?: boolean;
+  /** The sync attempt behind the result, when one ran. */
+  outcome?: SyncOutcome | null;
 }
 
 /** Injectable outbox calls (tests). */
@@ -99,5 +101,6 @@ export async function saveThroughOutbox(
       message: t("editOutbox.save.noChanges", { target: input.targetLabel }),
     };
   }
-  return describeSyncOutcome(await syncNow(input.id), input.targetLabel, t);
+  const outcome = await syncNow(input.id);
+  return { ...describeSyncOutcome(outcome, input.targetLabel, t), outcome };
 }

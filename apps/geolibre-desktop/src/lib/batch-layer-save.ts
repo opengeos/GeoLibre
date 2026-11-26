@@ -42,6 +42,12 @@ import {
 import { participantCanEditLayer } from "./collab-protocol";
 import { databaseBaselineKeys, databaseFeatureKeys } from "./database-tables";
 import { embedEditedGeometry, hasEditedGeometry } from "./edited-geometry-save";
+import {
+  arcgisOutboxId,
+  arcgisOutboxTarget,
+  buildArcGISChangeSet,
+  withLocalFeatureIds,
+} from "./edit-sync/arcgis-edit-sync";
 import { editSessionToken } from "./edit-sync/edit-outbox-runner";
 import { saveThroughOutbox } from "./edit-sync/outbox-save";
 import { ensureEditSyncBackends } from "./edit-sync/register-backends";
@@ -479,6 +485,34 @@ export async function writeLayerEditsToSource(
     const path = typeof layer.sourcePath === "string" ? layer.sourcePath.trim() : "";
     if (!isMssql && !isPostgis && !isArcGISWritableLayer(layer) && !path) {
       return { status: "error", message: t("layers.saveEditsError"), silent: true };
+    }
+
+    if (isArcGISWritableLayer(layer) && layer.metadata.arcgisSaveUncertain !== true) {
+      // Offline-first save (#3530): queue the changed features, then sync with
+      // per-feature conflict detection against the service's current version.
+      const target = arcgisOutboxTarget(layer);
+      if (target && layer.geojson) {
+        // New features need a stable id to receive their assigned object ID.
+        const geojsonWithIds = withLocalFeatureIds(layer.geojson, target.objectIdField);
+        if (geojsonWithIds !== layer.geojson) updateLayer(layer.id, { geojson: geojsonWithIds });
+        const ops = buildArcGISChangeSet({ ...layer, geojson: geojsonWithIds }, target);
+        if (ops) {
+          const saveOutbox = deps?.saveOutbox ?? defaultSaveOutbox;
+          return await saveOutbox(
+            {
+              id: arcgisOutboxId(target),
+              backend: "arcgis",
+              target,
+              targetLabel: layer.name,
+              layerId: layer.id,
+              layerName: layer.name,
+              ops,
+              session: editSessionToken(layer.id, requestProjectGeneration),
+            },
+            t,
+          );
+        }
+      }
     }
 
     if (isArcGISWritableLayer(layer)) {

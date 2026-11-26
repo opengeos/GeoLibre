@@ -3613,3 +3613,114 @@ export async function saveArcGISLayerEdits(
     arcgisSavingLayers.delete(layerId);
   }
 }
+
+/** One entry of an `applyEdits` result list. */
+export interface ArcGISEditResultEntry {
+  success?: boolean;
+  objectId?: number;
+  globalId?: string;
+  error?: { description?: string; code?: number };
+}
+
+/** The parsed `applyEdits` response. */
+export interface ArcGISApplyEditsResponse {
+  addResults?: ArcGISEditResultEntry[];
+  updateResults?: ArcGISEditResultEntry[];
+  deleteResults?: ArcGISEditResultEntry[];
+  error?: ArcGISErrorEnvelope;
+}
+
+/** An `applyEdits` request the service refused as a whole (nothing applied). */
+export class ArcGISEditsRejectedError extends Error {
+  override readonly name = "ArcGISEditsRejectedError";
+}
+
+/**
+ * What the offline edit outbox (#3530) needs to sync one feature layer: its
+ * fresh metadata, and query and `applyEdits` calls bound to the layer's live
+ * connection. Credentials stay inside the connection, never in the outbox.
+ */
+export interface ArcGISOutboxSession {
+  layerUrl: string;
+  info: ArcGISEditInfo;
+  /** Query features on the same path the layer was loaded with (GeoJSON, paged). */
+  query(params: Record<string, string>): Promise<Feature[]>;
+  /**
+   * Send one `applyEdits` request with `rollbackOnFailure=false`. Throws
+   * {@link ArcGISEditsRejectedError} when the service answers with an error
+   * envelope; any other throw means the outcome is unknown.
+   */
+  applyEdits(edits: {
+    adds?: unknown[];
+    updates?: unknown[];
+    deletes?: number[];
+  }): Promise<ArcGISApplyEditsResponse>;
+}
+
+/**
+ * Open an outbox session for an ArcGIS feature layer in the current project.
+ *
+ * @param layerId - The store layer.
+ * @returns The session, or undefined when the layer is not an open, writable
+ *   ArcGIS feature layer (the outbox then waits for it).
+ */
+export async function openArcGISOutboxSession(
+  layerId: string,
+): Promise<ArcGISOutboxSession | undefined> {
+  const layer = useAppStore.getState().layers.find((l) => l.id === layerId);
+  const queryUrl = layer?.source.arcgisQueryUrl;
+  if (!layer || !isArcGISWritableLayer(layer) || typeof queryUrl !== "string") return undefined;
+  const layerUrl = trimTrailingSlash(queryUrl).replace(/\/query$/i, "");
+  if (!/^https:/i.test(layerUrl)) {
+    throw new LocalizedError(`${ERROR_KEY}.writesRequireHttps`, "ArcGIS writes require HTTPS.");
+  }
+  const options = await withFreshArcGISToken(
+    arcgisEditOptions.get(layerId) ?? { layerType: "feature", sourceType: "url" },
+  );
+  const fetched = await fetchArcGISFeatureLayerInfo(layerUrl, options, undefined, undefined, {
+    fresh: true,
+  });
+  const generalized =
+    (layer.metadata.arcgisEditInfo as ArcGISEditInfo | undefined)?.geometryGeneralized === true;
+  const info: ArcGISFeatureLayerInfo = generalized
+    ? { ...fetched, geometryGeneralized: true }
+    : fetched;
+  return {
+    layerUrl,
+    info,
+    async query(params) {
+      const collection = await fetchArcGISFeaturePages(
+        queryUrl,
+        { ...options, maxFeatures: undefined },
+        info,
+        { params },
+      );
+      return collection.features;
+    },
+    async applyEdits(edits) {
+      const body = new URLSearchParams({
+        f: "json",
+        rollbackOnFailure: "false",
+        returnEditResults: "true",
+      });
+      if (options.token?.trim()) body.set("token", options.token.trim());
+      if (edits.adds?.length) body.set("adds", JSON.stringify(edits.adds));
+      if (edits.updates?.length) body.set("updates", JSON.stringify(edits.updates));
+      if (edits.deletes?.length) body.set("deletes", edits.deletes.join(","));
+      const http = await arcGISFetch(`${layerUrl}/applyEdits`, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: body.toString(),
+        redirect: "error",
+      });
+      if (!http.ok) throw new Error(`HTTP ${http.status}`);
+      const response = (await http.json()) as ArcGISApplyEditsResponse;
+      if (response.error) {
+        throw new ArcGISEditsRejectedError(
+          arcgisErrorMessage(response.error, "ArcGIS rejected the edits."),
+        );
+      }
+      return response;
+    },
+  };
+}

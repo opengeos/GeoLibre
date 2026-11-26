@@ -233,6 +233,8 @@ export interface SyncOutcome {
   insertedKeys: Map<string, string>;
   /** Keys of the features that changed on the server through this sync. */
   touchedKeys: string[];
+  /** Keys of conflicted features resolved with keep theirs. */
+  theirsKeys: string[];
   error?: string;
 }
 
@@ -483,6 +485,7 @@ export async function syncOutboxEntry(
     keptTheirs: 0,
     insertedKeys: new Map(),
     touchedKeys: [],
+    theirsKeys: [],
   };
   const startedAt = now();
   const failRetryable = (error: unknown, ops: OutboxOp[]): SyncOutcome => {
@@ -569,8 +572,16 @@ export async function syncOutboxEntry(
     const failedById = new Map(result.failed.map((f) => [f.opId, f.message]));
     for (const verdict of verdicts) {
       const { op } = verdict;
-      if (verdict.kind === "done") outcome.alreadyApplied += 1;
-      if (verdict.kind === "theirs") outcome.keptTheirs += 1;
+      if (verdict.kind === "done") {
+        outcome.alreadyApplied += 1;
+        // An insert found already on the server: report its key like a new one.
+        const matched = op.kind === "insert" ? remote.insertMatches?.get(op.id) : undefined;
+        if (matched !== undefined) outcome.insertedKeys.set(op.id, matched);
+      }
+      if (verdict.kind === "theirs") {
+        outcome.keptTheirs += 1;
+        if (op.key !== null) outcome.theirsKeys.push(op.key);
+      }
       if (verdict.kind === "apply" && appliedIds.has(op.id)) {
         if (op.kind === "insert") outcome.inserted += 1;
         else if (op.kind === "update") outcome.updated += 1;

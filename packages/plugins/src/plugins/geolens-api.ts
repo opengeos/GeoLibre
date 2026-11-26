@@ -752,6 +752,45 @@ export async function fetchDatasetFeatures(
   throw new Error("GeoLens items request failed");
 }
 
+/** A GeoLens request that got an HTTP error answer (as opposed to no answer). */
+export class GeoLensHttpError extends Error {
+  override readonly name = "GeoLensHttpError";
+  constructor(
+    message: string,
+    readonly status: number,
+  ) {
+    super(message);
+  }
+}
+
+/**
+ * Read one feature's current server version from the OGC API Features item
+ * endpoint (`/api/collections/{id}/items/{gid}`), which serializes it exactly
+ * as the items pages do.
+ *
+ * @returns The feature, or null when the server has no row with that gid.
+ * @throws GeoLensHttpError on any other HTTP error; a fetch failure (no
+ *   answer at all) propagates as thrown by `fetchImpl`.
+ */
+export async function fetchDatasetFeature(
+  options: GeoLensClientOptions,
+  datasetId: string,
+  gid: GeoLensGid,
+  fetchImpl: GeoLensFetch = defaultGeoLensFetch,
+  signal?: AbortSignal,
+): Promise<import("geojson").Feature | null> {
+  if (!HTTP_URL_RE.test(options.baseUrl)) throw new Error("GeoLens URL must be http(s)");
+  const url = `${options.baseUrl}/api/collections/${encodeURIComponent(datasetId)}/items/${gid}`;
+  const res = await fetchImpl(url, { headers: authHeaders(options), signal });
+  if (res.status === 404) return null;
+  if (!res.ok) {
+    throw new GeoLensHttpError(`GeoLens item request failed (HTTP ${res.status})`, res.status);
+  }
+  const body = (await res.json()) as import("geojson").Feature & { links?: unknown };
+  const { links: _links, ...feature } = body;
+  return feature as import("geojson").Feature;
+}
+
 /**
  * The dataset's attribute (field) names, read from a single OGC API Features
  * item. GeoLens exposes no queryables endpoint, but a `limit=1` items request
@@ -1066,7 +1105,10 @@ async function writeError(res: GeoLensHttpResponse, fallback: string): Promise<E
   } catch {
     // A non-JSON error body (a proxy's HTML 502) leaves just the status.
   }
-  return new Error(detail ? `${fallback}: ${detail}` : `${fallback} (HTTP ${res.status})`);
+  return new GeoLensHttpError(
+    detail ? `${fallback}: ${detail}` : `${fallback} (HTTP ${res.status})`,
+    res.status,
+  );
 }
 
 async function writeRequest(
