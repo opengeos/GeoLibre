@@ -57,7 +57,8 @@ _COLLAPSIBLE_PANELS = frozenset({"measure", "minimap"})
 
 
 # CSV/tabular input is inlined into the project exactly like GeoJSON is, so the
-# same 50 MB ceiling applies to a fetched response or a local file.
+# same 50 MB ceiling applies to a fetched response or a local file. It is its own
+# constant (read at import), so tests can lower it without touching the GeoJSON cap.
 _MAX_TABULAR_BYTES = _project._MAX_GEOJSON_BYTES
 
 
