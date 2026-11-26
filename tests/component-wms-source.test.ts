@@ -1,15 +1,12 @@
-import { fireEvent, mockFetch, render, screen, waitFor } from "./helpers/dom";
+import { fireEvent, mockFetch, screen, waitFor } from "./helpers/dom";
 import assert from "node:assert/strict";
 import { after, describe, it } from "node:test";
 import { DOMParser as LinkedomDOMParser } from "linkedom";
-import { createElement, createRef, useState } from "react";
-import type { GeoLibreLayer } from "@geolibre/core";
-import type { AddDataShellContextValue } from "../apps/geolibre-desktop/src/components/layout/add-data/context";
+import { createElement } from "react";
+import { renderAddDataSource } from "./helpers/add-data-shell";
 
-const [{ WmsSource }, { AddDataShellProvider }] = await Promise.all([
-  import("../apps/geolibre-desktop/src/components/layout/add-data/sources/WmsSource"),
-  import("../apps/geolibre-desktop/src/components/layout/add-data/context"),
-]);
+const { WmsSource } =
+  await import("../apps/geolibre-desktop/src/components/layout/add-data/sources/WmsSource");
 
 // happy-dom's XML documents do not resolve getElementsByTagNameNS("*", ...),
 // so the capabilities parser finds no layers there. Parse with linkedom, as
@@ -43,36 +40,7 @@ const CAPABILITIES = `<?xml version="1.0" encoding="UTF-8"?>
 
 /** Render the source inside a minimal Add Data shell that records added layers. */
 function renderSource(props: { initialUrl?: string; initialLayers?: string } = {}) {
-  const added: GeoLibreLayer[] = [];
-  let closed = 0;
-  function Shell() {
-    const [isSubmitting, setIsSubmitting] = useState(false);
-    const shell: AddDataShellContextValue = {
-      mapControllerRef: createRef(),
-      addLayer: (layer) => void added.push(layer),
-      existingLayers: [],
-      isSubmitting,
-      setIsSubmitting,
-      closeDialog: () => void (closed += 1),
-      targetGroupId: null,
-      martin: {
-        server: null,
-        setServer: () => {},
-        sources: [],
-        setSources: () => {},
-        selectedSourceId: "",
-        setSelectedSourceId: () => {},
-        status: null,
-        setStatus: () => {},
-        markLayerAdded: () => {},
-        resetOnOpen: () => {},
-        stopTransient: () => {},
-      },
-    };
-    return createElement(AddDataShellProvider, { value: shell }, createElement(WmsSource, props));
-  }
-  render(createElement(Shell));
-  return { added, closed: () => closed };
+  return renderAddDataSource(createElement(WmsSource, props));
 }
 
 /** Serve GetCapabilities (directly or through the dev proxy) and record requests. */
@@ -120,7 +88,7 @@ describe("WmsSource", () => {
     await waitFor(() => assert.ok(text().includes("No layers were found for this service.")));
     serve("gateway down", 502);
     fireEvent.click(screen.getByRole("button", { name: "Retrieve layers" }));
-    await waitFor(() => assert.ok(/502|Could not retrieve layers/.test(text())), text());
+    await waitFor(() => assert.ok(/502|Could not retrieve layers/.test(text())));
   });
 
   it("refuses to add without layer names", async () => {

@@ -1,53 +1,17 @@
-import { fireEvent, mockFetch, render, screen, waitFor } from "./helpers/dom";
+import { fireEvent, mockFetch, screen, waitFor } from "./helpers/dom";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { createElement, createRef, useState } from "react";
-import type { GeoLibreLayer } from "@geolibre/core";
-import type { AddDataShellContextValue } from "../apps/geolibre-desktop/src/components/layout/add-data/context";
+import { createElement } from "react";
+import { renderAddDataSource } from "./helpers/add-data-shell";
 
-const [{ DelimitedTextSource }, { AddDataShellProvider }] = await Promise.all([
-  import("../apps/geolibre-desktop/src/components/layout/add-data/sources/DelimitedTextSource"),
-  import("../apps/geolibre-desktop/src/components/layout/add-data/context"),
-]);
+const { DelimitedTextSource } =
+  await import("../apps/geolibre-desktop/src/components/layout/add-data/sources/DelimitedTextSource");
 
 const CSV_URL = "https://data.example.com/cities.csv";
 
 /** Render the source inside a minimal Add Data shell that records added layers. */
 function renderSource() {
-  const added: GeoLibreLayer[] = [];
-  let closed = 0;
-  function Shell() {
-    const [isSubmitting, setIsSubmitting] = useState(false);
-    const shell: AddDataShellContextValue = {
-      mapControllerRef: createRef(),
-      addLayer: (layer) => void added.push(layer),
-      existingLayers: [],
-      isSubmitting,
-      setIsSubmitting,
-      closeDialog: () => void (closed += 1),
-      targetGroupId: null,
-      martin: {
-        server: null,
-        setServer: () => {},
-        sources: [],
-        setSources: () => {},
-        selectedSourceId: "",
-        setSelectedSourceId: () => {},
-        status: null,
-        setStatus: () => {},
-        markLayerAdded: () => {},
-        resetOnOpen: () => {},
-        stopTransient: () => {},
-      },
-    };
-    return createElement(
-      AddDataShellProvider,
-      { value: shell },
-      createElement(DelimitedTextSource),
-    );
-  }
-  render(createElement(Shell));
-  return { added, closed: () => closed };
+  return renderAddDataSource(createElement(DelimitedTextSource));
 }
 
 function serve(body: string, status = 200) {
@@ -94,7 +58,6 @@ describe("DelimitedTextSource", () => {
     await waitFor(() => assert.ok(text().includes("No coordinate columns detected")));
     fireEvent.click(screen.getByRole("button", { name: "Add layer" }));
     await waitFor(() => assert.equal(added.length, 1));
-    assert.ok(text().length > 0);
     const features = added[0]!.geojson?.features ?? [];
     assert.equal(features.length, 2);
     assert.equal(features[0]!.geometry, null);
@@ -102,14 +65,16 @@ describe("DelimitedTextSource", () => {
   });
 
   it("needs a URL and reports a failed download", async () => {
-    serve("nope", 404);
+    const requested = serve("nope", 404);
     const { added } = renderSource();
     const retrieve = screen.getByRole("button", { name: "Retrieve columns" });
     assert.equal(retrieve.hasAttribute("disabled"), true);
     fireEvent.change(urlInput(), { target: { value: CSV_URL } });
     fireEvent.click(retrieve);
-    await waitFor(() => assert.ok(/404/.test(text())), text());
+    await waitFor(() => assert.ok(/404/.test(text())));
     fireEvent.click(screen.getByRole("button", { name: "Add layer" }));
+    // Add downloads again; wait for that request before checking nothing was added.
+    await waitFor(() => assert.equal(requested.length, 2));
     await waitFor(() => assert.ok(/404/.test(text())));
     assert.equal(added.length, 0);
   });
