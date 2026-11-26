@@ -21,9 +21,9 @@ import { clearSkyDni, localTimeToUtc, sunPosition } from "./solar-position";
  *    the tallest building or leaves the grid. In a dense district roofs can be
  *    half the cells, so this walk is usually the larger cost.
  *
- * Shadow lengths use the sun's geometric elevation (light travels in a
- * straight line near the ground); the apparent, refracted elevation decides
- * whether the sun is up and feeds the air mass of the irradiance model.
+ * Shadows are cast along the sun's apparent (refracted) elevation: that is
+ * the direction the light is travelling when it reaches the ground beside a
+ * building, so it is the direction the building blocks.
  *
  * Sun hours and insolation repeat that for sun positions every `step` minutes
  * from midnight to midnight local time, counting only positions with the sun
@@ -156,7 +156,7 @@ function polygonsOf(geometry: Geometry | null): Position[][][] {
  * instead of silently reading its leading digits.
  */
 export function parseLength(text: string): number | null {
-  const match = /^\s*([0-9]*\.?[0-9]+)\s*(m|metres?|meters?|ft|feet|foot|')?\s*$/i.exec(text);
+  const match = /^\s*(\d+(?:\.\d*)?|\.\d+)\s*(m|metres?|meters?|ft|feet|foot|')?\s*$/i.exec(text);
   if (!match) return null;
   const value = Number(match[1]);
   const unit = (match[2] ?? "m").toLowerCase();
@@ -184,7 +184,7 @@ export function buildingHeight(
   const h = read(params.height_field ?? "height", parseLength);
   if (h != null) return Math.min(h, MAX_BUILDING_HEIGHT_METERS);
   const levels = read(params.levels_field ?? "building:levels", (text) =>
-    /^\s*[0-9]*\.?[0-9]+\s*$/.test(text) ? Number(text) : null,
+    /^\s*(\d+(?:\.\d*)?|\.\d+)\s*$/.test(text) ? Number(text) : null,
   );
   if (levels != null) {
     const levelHeight = params.level_height == null ? 3 : Number(params.level_height);
@@ -193,8 +193,11 @@ export function buildingHeight(
     }
     return Math.min(levels * levelHeight, MAX_BUILDING_HEIGHT_METERS);
   }
-  const fallback = Number(params.default_height ?? 10);
-  return Number.isFinite(fallback) && fallback > 0 ? fallback : 10;
+  const fallback = params.default_height == null ? 10 : Number(params.default_height);
+  if (!(Number.isFinite(fallback) && fallback > 0)) {
+    throw new Error("The default height must be greater than zero.");
+  }
+  return Math.min(fallback, MAX_BUILDING_HEIGHT_METERS);
 }
 
 /**
@@ -433,15 +436,6 @@ export function castShadows(
   return work;
 }
 
-/**
- * The elevation shadows are cast at: the geometric elevation, floored just
- * above the horizon, since refraction can lift the apparent sun into view
- * while the geometric one is still at or below it.
- */
-function shadowElevation(geometric: number): number {
-  return Math.max(geometric, 0.1);
-}
-
 /** The outcome of {@link buildingShadows}. */
 export interface BuildingShadowResult {
   raster: RasterData;
@@ -487,7 +481,7 @@ export function buildingShadows(
       `Sun at ${new Date(instant).toISOString().replace(".000Z", "Z")}: azimuth ${sun.azimuth.toFixed(2)}°, elevation ${sun.elevation.toFixed(2)}°.`,
     );
     const up = sun.elevation >= MIN_SUN_ELEVATION_DEGREES;
-    if (up) castShadows(grid, sun.azimuth, shadowElevation(sun.geometricElevation), mask);
+    if (up) castShadows(grid, sun.azimuth, sun.elevation, mask);
     else mask.fill(1);
     let shadedGround = 0;
     for (let i = 0; i < cells; i += 1) {
@@ -537,13 +531,7 @@ export function buildingShadows(
       positions += 1;
       firstUp ??= minute;
       lastUp = minute;
-      walked += castShadows(
-        grid,
-        sun.azimuth,
-        shadowElevation(sun.geometricElevation),
-        mask,
-        MAX_ROOF_WALK_SAMPLES - walked,
-      );
+      walked += castShadows(grid, sun.azimuth, sun.elevation, mask, MAX_ROOF_WALK_SAMPLES - walked);
       const weight =
         mode === "sun-hours"
           ? minutes / 60
@@ -556,7 +544,7 @@ export function buildingShadows(
       `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(Math.floor(m % 60)).padStart(2, "0")}`;
     messages.push(
       positions
-        ? `Sampled ${positions} sun position(s) every ${step} min, about ${hhmm(firstUp! - step / 2)} to ${hhmm(lastUp! + step / 2)} local time (peak elevation ${maxElevation.toFixed(1)}°).`
+        ? `Sampled ${positions} sun position(s) every ${step} min, about ${hhmm(firstUp! - step / 2)} to ${hhmm(Math.min(lastUp! + step / 2, 1440))} local time (peak elevation ${maxElevation.toFixed(1)}°).`
         : "The sun stays below the horizon all day.",
     );
     let groundSum = 0;

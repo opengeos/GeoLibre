@@ -468,6 +468,10 @@ describe("review hardening", () => {
 });
 
 describe("height attribute hygiene", () => {
+  it("rejects an explicit non-positive default height", () => {
+    assert.throws(() => buildingHeight({}, { default_height: 0 }), /default height/);
+  });
+
   it("reads storeys as plain numbers and clamps absurd heights", () => {
     assert.equal(buildingHeight({ "building:levels": "3 ft" }, { default_height: 8 }), 8);
     assert.equal(buildingHeight({ "building:levels": "4" }, {}), 12);
