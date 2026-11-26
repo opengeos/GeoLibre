@@ -1,3 +1,4 @@
+import { OgcProcessError } from "./ogc-process-errors";
 import { redactUrlCredentials, shouldZoomToNewLayers, useAppStore } from "@geolibre/core";
 import type { GeoLibreAppAPI } from "@geolibre/plugins";
 import { addRasterToMap } from "@geolibre/plugins/maplibre-raster";
@@ -90,7 +91,7 @@ export async function importOgcProcessOutput(
     const { convertGeoTiffToCog, readGeoTiffInfo } = await import("@geolibre/processing");
     let data = new Uint8Array(await blob.arrayBuffer());
     const info = await readGeoTiffInfo(data);
-    if (!info.ok) throw new Error("The process result is not a readable GeoTIFF.");
+    if (!info.ok) throw new OgcProcessError("rasterUnreadable");
     if (!info.tiled) {
       data = new Uint8Array(await convertGeoTiffToCog(data, { signal, float64: true }));
       const converted = await readGeoTiffInfo(data);
@@ -98,9 +99,7 @@ export async function importOgcProcessOutput(
         (info.bits_per_sample !== 8 || info.sample_format !== "uint") &&
         (converted.bits_per_sample !== 64 || converted.sample_format !== "ieeefloat")
       )
-        throw new Error(
-          "Raster conversion did not preserve numerical precision. Download the original result instead.",
-        );
+        throw new OgcProcessError("rasterPrecision");
     }
     signal.throwIfAborted();
     if (useAppStore.getState().projectLoadCount !== project)
@@ -121,7 +120,7 @@ export async function importOgcProcessOutput(
   try {
     document = JSON.parse(await blob.text());
   } catch {
-    throw new Error("Only GeoJSON and GeoTIFF results can be added to the map.");
+    throw new OgcProcessError("geodataOnly");
   }
   const value =
     document && typeof document === "object" && !Array.isArray(document)
@@ -153,7 +152,7 @@ export async function importOgcProcessOutput(
               ...(value?.crs ? { crs: value.crs } : {}),
             }
           : null;
-  if (!collection) throw new Error("Only GeoJSON and GeoTIFF results can be added to the map.");
+  if (!collection) throw new OgcProcessError("geodataOnly");
   const data = await parseGeoJsonText(JSON.stringify(collection));
   signal.throwIfAborted();
   const state = useAppStore.getState();

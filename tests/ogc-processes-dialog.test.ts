@@ -13,12 +13,15 @@ const description = () =>
   );
 const processPath = "/master/processes/hello-world";
 
-function serve(execution: (url: string, init?: RequestInit) => Response | Promise<Response>) {
+function serve(
+  execution: (url: string, init?: RequestInit) => Response | Promise<Response>,
+  process = description(),
+) {
   globalThis.fetch = async (input, init) => {
     const url = String(input),
       path = new URL(url).pathname;
     if (init?.method !== "POST" && init?.method !== "DELETE" && !path.includes("/jobs/")) {
-      const document = path === processPath ? description() : { processes: [description()] };
+      const document = path === processPath ? process : { processes: [process] };
       return new Response(JSON.stringify(document), {
         headers: { "Content-Type": "application/json" },
       });
@@ -53,6 +56,8 @@ test("process dialog submits typed inputs and renders synchronous literal output
     });
   });
   await form();
+  fireEvent.change(screen.getByLabelText("Message"), { target: { value: "Temporary" } });
+  fireEvent.change(screen.getByLabelText("Message"), { target: { value: "" } });
   fireEvent.click(screen.getByRole("button", { name: "Run process" }));
   await waitFor(() => assert.equal(screen.queryByText("Hello GeoLibre!") !== null, true));
   assert.deepEqual(submitted, {
@@ -61,6 +66,183 @@ test("process dialog submits typed inputs and renders synchronous literal output
   });
   assert.equal(screen.queryByRole("button", { name: "Add to map" }) === null, true);
   assert.equal(screen.queryByRole("alert") === null, true);
+});
+
+test("import provenance stays attached to the execution after endpoint and job URL edits", async () => {
+  const data = {
+    type: "FeatureCollection",
+    features: [
+      { type: "Feature", properties: {}, geometry: { type: "Point", coordinates: [-80, 44] } },
+    ],
+  };
+  serve(
+    async () =>
+      new Response(JSON.stringify({ echo: { value: data, mediaType: "application/geo+json" } }), {
+        headers: { "Content-Type": "application/json" },
+      }),
+  );
+  await form();
+  fireEvent.click(screen.getByRole("button", { name: "Run process" }));
+  await waitFor(() => assert.ok(screen.queryByRole("button", { name: "Add to map" })));
+  fireEvent.change(screen.getByLabelText("Service URL"), {
+    target: { value: "https://other.example/new-service" },
+  });
+  fireEvent.change(screen.getByLabelText("Job status URL"), {
+    target: { value: "https://other.example/jobs/wrong" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Add to map" }));
+  await waitFor(() => assert.equal(useAppStore.getState().layers.length, 1));
+  const layer = useAppStore.getState().layers[0];
+  assert.deepEqual(layer.geojson, data);
+  assert.match(
+    String(layer.metadata?.sourceUrl),
+    /^https:\/\/demo\.pygeoapi\.io\/master\/processes\/hello-world/,
+  );
+});
+
+test("layer FeatureCollections are sent as qualified GeoJSON inputs", async () => {
+  const process = description();
+  process.inputs.area = { title: "Area", schema: { type: "object" }, minOccurs: 1 };
+  const data = { type: "FeatureCollection" as const, features: [] };
+  const id = useAppStore.getState().addGeoJsonLayer("Study area", data);
+  let submitted: unknown;
+  serve(async (_url, init) => {
+    submitted = JSON.parse(String(init?.body));
+    return new Response(JSON.stringify({ echo: "Done" }), {
+      headers: { "Content-Type": "application/json" },
+    });
+  }, process);
+  await form();
+  fireEvent.change(screen.getByLabelText("Layer input for Area"), {
+    target: { value: JSON.stringify([id, "collection"]) },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Run process" }));
+  await waitFor(() => assert.ok(submitted));
+  assert.deepEqual((submitted as { inputs: { area: unknown } }).inputs.area, {
+    value: data,
+    mediaType: "application/geo+json",
+  });
+});
+
+test("cleared required strings fail locally and JSON mode can send explicit empty strings", async () => {
+  const submissions: Array<{ inputs: Record<string, unknown> }> = [];
+  serve(async (_url, init) => {
+    submissions.push(JSON.parse(String(init?.body)));
+    return new Response(JSON.stringify({ echo: "Done" }), {
+      headers: { "Content-Type": "application/json" },
+    });
+  });
+  await form();
+  fireEvent.change(screen.getByLabelText("Name *"), { target: { value: "" } });
+  fireEvent.click(screen.getByRole("button", { name: "Run process" }));
+  await waitFor(() =>
+    assert.match(screen.getByRole("alert").textContent ?? "", /Missing process input: name/),
+  );
+  assert.equal(submissions.length, 0);
+  fireEvent.click(screen.getByRole("checkbox", { name: "Edit all inputs as JSON" }));
+  fireEvent.change(screen.getByLabelText("Inputs JSON"), {
+    target: { value: JSON.stringify({ name: "", message: "" }) },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Run process" }));
+  await waitFor(() => assert.equal(submissions.length, 1));
+  assert.deepEqual(submissions[0].inputs, { name: "", message: "" });
+});
+
+test("a completed synchronous job retains its advertised output context when resumed", async () => {
+  let posts = 0;
+  serve(async (url, init) => {
+    if (init?.method === "POST") {
+      posts++;
+      return new Response(JSON.stringify({ outputs: [{ id: "echo", value: "Initial echo" }] }), {
+        headers: {
+          "Content-Type": "application/json",
+          Location: "https://demo.pygeoapi.io/master/jobs/sync",
+        },
+      });
+    }
+    return new Response(
+      JSON.stringify(
+        url.includes("/results")
+          ? { outputs: [{ id: "echo", value: "Resumed echo" }] }
+          : { jobID: "sync", status: "successful" },
+      ),
+      { headers: { "Content-Type": "application/json" } },
+    );
+  });
+  await form();
+  fireEvent.click(screen.getByRole("button", { name: "Run process" }));
+  await waitFor(() => assert.ok(screen.queryByText("Initial echo")));
+  await waitFor(() =>
+    assert.equal(
+      screen.getByRole("button", { name: "Resume monitoring" }).hasAttribute("disabled"),
+      false,
+    ),
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Resume monitoring" }));
+  await waitFor(() => assert.ok(screen.queryByText("Resumed echo")));
+  assert.equal(posts, 1);
+});
+
+test("paused jobs lock their own processes and remain resumable after switching", async () => {
+  const first = description();
+  const second = JSON.parse(JSON.stringify(first).replaceAll("hello-world", "second"));
+  second.title = "Second process";
+  const posts: string[] = [];
+  globalThis.fetch = async (input, init) => {
+    const url = new URL(String(input));
+    if (init?.method === "POST") {
+      const id = url.pathname.includes("/second/") ? "b" : "a";
+      posts.push(id);
+      return new Response(JSON.stringify({ jobID: id, status: "accepted" }), {
+        status: 201,
+        headers: { "Content-Type": "application/json", Location: `/master/jobs/${id}` },
+      });
+    }
+    if (init?.method === "DELETE") return new Response(null, { status: 204 });
+    return new Response(
+      JSON.stringify(
+        url.pathname.endsWith("/hello-world")
+          ? first
+          : url.pathname.endsWith("/second")
+            ? second
+            : url.pathname.includes("/jobs/")
+              ? { jobID: url.pathname.split("/").pop(), status: "running" }
+              : { processes: [first, second] },
+      ),
+      { headers: { "Content-Type": "application/json" } },
+    );
+  };
+  await form();
+  const run = () => screen.getByRole("button", { name: "Run process" });
+  const pause = async (id: string) => {
+    await waitFor(() =>
+      assert.match(
+        (screen.getByLabelText("Job status URL") as HTMLInputElement).value,
+        new RegExp(`/jobs/${id}`),
+      ),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Stop waiting" }));
+  };
+  fireEvent.click(run());
+  await pause("a");
+  fireEvent.change(screen.getByLabelText("Process"), { target: { value: "second" } });
+  await waitFor(() => assert.equal(run().hasAttribute("disabled"), false));
+  fireEvent.change(screen.getByLabelText("Name *"), { target: { value: "B" } });
+  fireEvent.click(run());
+  await pause("b");
+  fireEvent.change(screen.getByLabelText("Process"), { target: { value: "hello-world" } });
+  await waitFor(() =>
+    assert.match((screen.getByLabelText("Job status URL") as HTMLInputElement).value, /\/jobs\/a/),
+  );
+  assert.equal(run().hasAttribute("disabled"), true);
+  assert.deepEqual(posts, ["a", "b"]);
+  fireEvent.click(screen.getByRole("button", { name: "Dismiss job" }));
+  await waitFor(() => assert.equal(run().hasAttribute("disabled"), false));
+  fireEvent.change(screen.getByLabelText("Process"), { target: { value: "second" } });
+  await waitFor(() =>
+    assert.match((screen.getByLabelText("Job status URL") as HTMLInputElement).value, /\/jobs\/b/),
+  );
+  assert.equal(run().hasAttribute("disabled"), true);
 });
 
 test("JSON input editing preserves types when returning to schema fields", async () => {

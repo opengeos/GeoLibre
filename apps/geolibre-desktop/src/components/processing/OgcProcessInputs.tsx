@@ -137,14 +137,23 @@ export function OgcProcessInputs({
                       : representation === "geometries"
                         ? layer.geojson.features.map((feature) => feature.geometry)
                         : layer.geojson;
-                  set(key, JSON.stringify(value, null, 2));
+                  set(
+                    key,
+                    JSON.stringify(
+                      representation === "collection"
+                        ? { value, mediaType: "application/geo+json" }
+                        : value,
+                      null,
+                      2,
+                    ),
+                  );
                 }}
               >
                 <option value="">{t("processing.ogcProcesses.insertLayer")}</option>
                 {layers.map((layer) => (
                   <optgroup key={layer.id} label={layer.name}>
                     <option value={JSON.stringify([layer.id, "collection"])}>
-                      GeoJSON FeatureCollection
+                      {t("processing.ogcProcesses.featureCollection")}
                     </option>
                     <option value={JSON.stringify([layer.id, "features"])}>
                       {t("processing.ogcProcesses.features")}

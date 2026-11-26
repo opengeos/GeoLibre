@@ -1,3 +1,4 @@
+import { OgcProcessError, ogcProcessErrorText } from "../lib/ogc-process-errors";
 import { useAppStore } from "@geolibre/core";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
@@ -39,10 +40,12 @@ export function useOgcProcesses(open: boolean) {
   const [inputsJson, setInputsJson] = useState("{}");
   const [asynchronous, setAsynchronous] = useState(false);
   const [job, setJob] = useState<OgcProcessJob | null>(null);
+  const [jobsByProcess, setJobsByProcess] = useState(() => new Map<string, OgcProcessJob>());
   const [jobUrl, setJobUrl] = useState("");
   const [outputs, setOutputs] = useState<OgcProcessOutput[]>([]);
+  const [outputSourceUrl, setOutputSourceUrl] = useState("");
   const [phase, setPhase] = useState<Phase>("idle");
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<unknown>(null);
   const active = useRef<AbortController | null>(null);
 
   const stop = useCallback(() => {
@@ -60,8 +63,10 @@ export function useOgcProcesses(open: boolean) {
       setSelectedId("");
       setValues({});
       setJob(null);
+      setJobsByProcess(new Map());
       setJobUrl("");
       setOutputs([]);
+      setOutputSourceUrl("");
       setError(null);
       setInputsJson("{}");
     });
@@ -94,7 +99,7 @@ export function useOgcProcesses(open: boolean) {
         },
       });
     } catch (failure) {
-      if (current()) setError(failure instanceof Error ? failure.message : String(failure));
+      if (current()) setError(failure);
     } finally {
       if (active.current === request) {
         active.current = null;
@@ -114,6 +119,9 @@ export function useOgcProcesses(open: boolean) {
     const defaults = ogcProcessInputDefaults(full);
     context.commit(() => {
       setProcess(full);
+      const previousJob = jobsByProcess.get(full.url);
+      setJob(previousJob ?? null);
+      setJobUrl(previousJob?.url ?? "");
       setValues(defaults);
       setJsonMode(false);
       setInputsJson(JSON.stringify(parseOgcProcessInputs(full, defaults, false), null, 2));
@@ -140,17 +148,31 @@ export function useOgcProcesses(open: boolean) {
       const summary = processes.find((item) => item.id === id);
       if (summary) await loadDescription(summary, context);
     });
-  const updateJob = (context: RequestContext, next: OgcProcessJob) =>
+  const updateJob = (context: RequestContext, next: OgcProcessJob, processUrl?: string) =>
     context.commit(() => {
       setJob(next);
       setJobUrl(next.url);
+      if (processUrl) setJobsByProcess((previous) => new Map(previous).set(processUrl, next));
     });
-  const monitor = async (initial: OgcProcessJob | string, context: RequestContext) => {
-    context.commit(() => setPhase("monitoring"));
-    const result = await monitorOgcProcessJob(initial, context.signal, (next) =>
-      updateJob(context, next),
-    );
-    context.commit(() => setOutputs(result));
+  const monitor = async (
+    initial: OgcProcessJob | string,
+    context: RequestContext,
+    processUrl?: string,
+  ) => {
+    context.commit(() => {
+      setPhase("monitoring");
+      setOutputs([]);
+      setOutputSourceUrl("");
+    });
+    let sourceUrl = typeof initial === "string" ? initial : initial.url;
+    const result = await monitorOgcProcessJob(initial, context.signal, (next) => {
+      sourceUrl = next.url;
+      updateJob(context, next, processUrl);
+    });
+    context.commit(() => {
+      setOutputs(result);
+      setOutputSourceUrl(sourceUrl);
+    });
   };
   const execute = () =>
     run("executing", async (context) => {
@@ -159,7 +181,7 @@ export function useOgcProcesses(open: boolean) {
         ? JSON.parse(inputsJson)
         : parseOgcProcessInputs(process, values);
       if (!inputs || typeof inputs !== "object" || Array.isArray(inputs))
-        throw new Error("Process inputs must be a JSON object.");
+        throw new OgcProcessError("inputObject");
       context.commit(() => {
         setOutputs([]);
         setJob(null);
@@ -173,29 +195,56 @@ export function useOgcProcesses(open: boolean) {
       );
       context.signal.throwIfAborted();
       if (result.kind === "job") {
-        updateJob(context, result.job);
-        await monitor(result.job, context);
+        updateJob(context, result.job, process.url);
+        await monitor(result.job, context, process.url);
       } else {
         context.commit(() => {
           setOutputs(result.outputs);
+          setOutputSourceUrl(result.jobUrl ?? process.url);
           setJobUrl(result.jobUrl ?? "");
         });
         if (result.jobUrl) {
           try {
-            updateJob(context, await readOgcProcessJob(result.jobUrl, context.signal));
+            updateJob(
+              context,
+              {
+                ...(await readOgcProcessJob(result.jobUrl, context.signal)),
+                outputIds: Object.keys(process.outputs),
+              },
+              process.url,
+            );
           } catch (failure) {
             if (context.signal.aborted) throw failure;
           }
         }
       }
     });
-  const resume = () => run("monitoring", (context) => monitor(jobUrl.trim(), context));
+  const resume = () =>
+    run("monitoring", (context) => {
+      const tracked = [...jobsByProcess].find(([, value]) => value.url === jobUrl.trim());
+      return monitor(
+        tracked?.[1] ?? (job?.url === jobUrl.trim() ? job : jobUrl.trim()),
+        context,
+        tracked?.[0],
+      );
+    });
   const dismiss = () =>
     run("dismissing", async (context) => {
       await dismissOgcProcessJob(jobUrl.trim(), context.signal);
-      context.commit(() =>
-        setJob((previous) => (previous ? { ...previous, status: "dismissed" } : null)),
-      );
+      context.commit(() => {
+        setJob((previous) =>
+          previous?.url === jobUrl.trim() ? { ...previous, status: "dismissed" } : null,
+        );
+        setJobsByProcess(
+          (previous) =>
+            new Map(
+              [...previous].map(([key, value]) => [
+                key,
+                value.url === jobUrl.trim() ? { ...value, status: "dismissed" as const } : value,
+              ]),
+            ),
+        );
+      });
     });
   const changeEndpoint = (value: string) => {
     stop();
@@ -210,7 +259,7 @@ export function useOgcProcesses(open: boolean) {
       try {
         setInputsJson(JSON.stringify(parseOgcProcessInputs(process, values, false), null, 2));
       } catch (failure) {
-        setError(failure instanceof Error ? failure.message : String(failure));
+        setError(failure);
         return;
       }
     }
@@ -218,9 +267,9 @@ export function useOgcProcesses(open: boolean) {
       try {
         const parsed: unknown = JSON.parse(inputsJson);
         if (!parsed || typeof parsed !== "object" || Array.isArray(parsed))
-          throw new Error("Process inputs must be a JSON object.");
+          throw new OgcProcessError("inputObject");
         if (Object.keys(parsed).some((key) => !Object.hasOwn(process.inputs, key)))
-          throw new Error("Keep JSON mode for inputs that are not in the advertised schema.");
+          throw new OgcProcessError("unknownInputs");
         setValues(
           Object.fromEntries(
             Object.entries(parsed).map(([key, value]) => [
@@ -230,7 +279,7 @@ export function useOgcProcesses(open: boolean) {
           ),
         );
       } catch (failure) {
-        setError(failure instanceof Error ? failure.message : String(failure));
+        setError(failure);
         return;
       }
     }
@@ -251,12 +300,16 @@ export function useOgcProcesses(open: boolean) {
     asynchronous,
     setAsynchronous,
     job,
+    runningForProcess: ["accepted", "running"].includes(
+      jobsByProcess.get(process?.url ?? "")?.status ?? "",
+    ),
     jobUrl,
     setJobUrl,
     outputs,
+    outputSourceUrl,
     phase,
     busy: phase !== "idle",
-    error,
+    error: error === null ? null : ogcProcessErrorText(error),
     retrieve,
     select,
     execute,

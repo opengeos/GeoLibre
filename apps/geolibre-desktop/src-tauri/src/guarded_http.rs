@@ -184,7 +184,7 @@ fn is_ssrf_guard_error(error: &dyn std::error::Error) -> bool {
 /// `isBlockedUrlError` in `src/lib/vector-url-fetch.ts` matches on that wording
 /// to decide whether retrying in the webview is safe, so a guard rejection that
 /// reaches it as a generic transport error fails *open* into an unguarded fetch.
-fn request_error_message(error: &reqwest::Error) -> String {
+pub(crate) fn request_error_message(error: &reqwest::Error) -> String {
     if is_ssrf_guard_error(error) {
         return SSRF_BLOCKED_MESSAGE.to_string();
     }
@@ -354,8 +354,10 @@ fn client_identity() -> Result<Option<ClientIdentity>, String> {
     }
 }
 
-/// A blocking HTTP client that enforces the SSRF guard at connect time (via
-/// [`GuardedDnsResolver`]) and re-validates redirect hops.
+/// A blocking HTTP client that guards direct connections with
+/// [`GuardedDnsResolver`] and re-validates redirect URLs. A configured system
+/// proxy is a trusted network boundary and must enforce the destination-address
+/// policy when it resolves names. See docs/network-endpoints.md.
 ///
 /// The client trusts the OS certificate store (via the `rustls-tls-native-roots`
 /// feature) so enterprise CAs work, and presents a client certificate for
@@ -405,8 +407,9 @@ fn build_guarded_http_client_with_redirects(
     redirects: reqwest::redirect::Policy,
 ) -> Result<reqwest::blocking::Client, String> {
     // The SSRF guard (GuardedDnsResolver + redirect re-validation) is applied
-    // here, independent of the TLS backend chosen below, so it holds on both the
-    // rustls and native-tls paths.
+    // here, independent of the TLS backend chosen below, for direct connections
+    // on both rustls and native-tls. A configured proxy resolves destinations
+    // itself and must enforce the same address policy at that network boundary.
     let mut builder = reqwest::blocking::Client::builder()
         .connect_timeout(Duration::from_secs(REMOTE_TILE_CONNECT_TIMEOUT_SECS))
         .redirect(redirects)
@@ -459,6 +462,7 @@ pub(crate) async fn fetch_url_bytes(
 #[derive(Serialize)]
 pub(crate) struct NativeHttpResponse {
     status: u16,
+    final_url: String,
     content_type: Option<String>,
     body: Vec<u8>,
 }
@@ -471,9 +475,17 @@ pub(crate) async fn fetch_url_response(
     url: String,
     timeout_secs: Option<u64>,
     max_bytes: Option<u64>,
+    accept: Option<String>,
+    discard_error_body: Option<bool>,
 ) -> Result<NativeHttpResponse, String> {
     tauri::async_runtime::spawn_blocking(move || {
-        fetch_url_response_blocking(url, timeout_secs, max_bytes)
+        fetch_url_response_blocking(
+            url,
+            timeout_secs,
+            max_bytes,
+            accept,
+            discard_error_body.unwrap_or(false),
+        )
     })
     .await
     .map_err(|error| format!("Fetch task failed: {error}"))?
@@ -483,24 +495,31 @@ fn fetch_url_response_blocking(
     url: String,
     timeout_secs: Option<u64>,
     max_bytes: Option<u64>,
+    accept: Option<String>,
+    discard_error_body: bool,
 ) -> Result<NativeHttpResponse, String> {
     ensure_fetchable_url(&url)?;
 
     let client = guarded_http_client()?;
     let timeout = resolve_fetch_timeout_secs(timeout_secs);
 
-    let response = client
-        .get(&url)
-        .timeout(Duration::from_secs(timeout))
+    let mut request = client.get(&url).timeout(Duration::from_secs(timeout));
+    if let Some(value) = accept {
+        request = request.header(reqwest::header::ACCEPT, value);
+    }
+    let response = request
         .send()
         .map_err(|error| request_error_message(&error))?;
     let status = response.status().as_u16();
+    let final_url = response.url().as_str().to_owned();
     let content_type = response
         .headers()
         .get(reqwest::header::CONTENT_TYPE)
         .and_then(|value| value.to_str().ok())
         .map(str::to_owned);
-    let body = if let Some(limit) = max_bytes {
+    let body = if discard_error_body && !(200..300).contains(&status) {
+        Vec::new()
+    } else if let Some(limit) = max_bytes {
         let content_length = response.content_length();
         crate::http_body::read_limited_body(response, content_length, limit)?
     } else {
@@ -511,6 +530,7 @@ fn fetch_url_response_blocking(
     };
     Ok(NativeHttpResponse {
         status,
+        final_url,
         content_type,
         body,
     })
@@ -649,6 +669,95 @@ mod tests {
         REMOTE_TILE_TIMEOUT_SECS, SSRF_BLOCKED_MESSAGE,
     };
     use std::net::IpAddr;
+
+    #[test]
+    fn response_negotiates_content_and_preserves_redirect_url() {
+        use std::io::{BufRead, BufReader, Write};
+        use std::net::TcpListener;
+        use std::time::{Duration, Instant};
+
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        listener.set_nonblocking(true).unwrap();
+        let server = std::thread::spawn(move || {
+            for path in ["/start", "/resolved/coverage.json", "/error", "/error"] {
+                let deadline = Instant::now() + Duration::from_secs(10);
+                let mut socket = loop {
+                    match listener.accept() {
+                        Ok((socket, _)) => break socket,
+                        Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                            assert!(Instant::now() < deadline, "request did not arrive");
+                            std::thread::sleep(Duration::from_millis(10));
+                        }
+                        Err(error) => panic!("accept failed: {error}"),
+                    }
+                };
+                socket.set_nonblocking(false).unwrap();
+                socket
+                    .set_read_timeout(Some(Duration::from_secs(5)))
+                    .unwrap();
+                let mut reader = BufReader::new(socket.try_clone().unwrap());
+                let mut request = String::new();
+                loop {
+                    let mut line = String::new();
+                    assert!(reader.read_line(&mut line).unwrap() > 0);
+                    if line == "\r\n" {
+                        break;
+                    }
+                    request.push_str(&line);
+                }
+                assert!(request.starts_with(&format!("GET {path} HTTP/1.1")));
+                assert!(request
+                    .to_ascii_lowercase()
+                    .contains("accept: application/prs.coverage+json\r\n"));
+                if path == "/start" {
+                    socket.write_all(b"HTTP/1.1 302 Found\r\nLocation: /resolved/coverage.json\r\nContent-Length: 0\r\nConnection: close\r\n\r\n").unwrap();
+                } else if path == "/error" {
+                    let body = "x".repeat(64);
+                    write!(socket, "HTTP/1.1 503 Service Unavailable\r\nContent-Length: 64\r\nConnection: close\r\n\r\n{body}").unwrap();
+                } else {
+                    socket.write_all(b"HTTP/1.1 200 OK\r\nContent-Type: application/prs.coverage+json\r\nContent-Length: 2\r\nConnection: close\r\n\r\n{}").unwrap();
+                }
+            }
+        });
+        let response = super::fetch_url_response_blocking(
+            format!("http://{address}/start"),
+            Some(10),
+            Some(1024),
+            Some("application/prs.coverage+json".to_owned()),
+            false,
+        )
+        .unwrap();
+        assert_eq!(response.status, 200);
+        assert_eq!(
+            response.final_url,
+            format!("http://{address}/resolved/coverage.json")
+        );
+        assert_eq!(
+            response.content_type.as_deref(),
+            Some("application/prs.coverage+json")
+        );
+        assert_eq!(response.body, b"{}");
+        let error_response = super::fetch_url_response_blocking(
+            format!("http://{address}/error"),
+            Some(10),
+            Some(16),
+            Some("application/prs.coverage+json".to_owned()),
+            true,
+        )
+        .unwrap();
+        assert_eq!(error_response.status, 503);
+        assert!(error_response.body.is_empty());
+        let limited = super::fetch_url_response_blocking(
+            format!("http://{address}/error"),
+            Some(10),
+            Some(16),
+            Some("application/prs.coverage+json".to_owned()),
+            false,
+        );
+        assert!(limited.err().unwrap().contains("download limit"));
+        server.join().unwrap();
+    }
 
     // Issue #1220: a client certificate is read as PKCS#12 when its extension is
     // `.p12`/`.pfx` (case-insensitively) or a passphrase is supplied; everything

@@ -2,9 +2,10 @@
 
 use std::time::Duration;
 
+use base64::Engine;
 use serde::Serialize;
 
-use crate::guarded_http::{guarded_http_client, url_is_fetchable};
+use crate::guarded_http::{guarded_http_client, request_error_message, url_is_fetchable};
 
 const MAX_INPUT_BYTES: usize = 1024 * 1024;
 const MAX_RESPONSE_BYTES: u64 = 128 * 1024 * 1024;
@@ -16,7 +17,7 @@ pub(crate) struct ProcessHttpResponse {
     content_type: Option<String>,
     location: Option<String>,
     retry_after: Option<String>,
-    body: Vec<u8>,
+    body_base64: String,
 }
 
 fn request_method(method: &str, body: Option<&str>) -> Result<reqwest::Method, String> {
@@ -107,7 +108,7 @@ fn request_blocking(
     }
     let response = request
         .send()
-        .map_err(|error| format!("OGC process request failed: {error}"))?;
+        .map_err(|error| request_error_message(&error.without_url()))?;
     let status = response.status().as_u16();
     let final_url = response.url().as_str().to_owned();
     let header = |name: &str| {
@@ -136,7 +137,7 @@ fn request_blocking(
         content_type,
         location,
         retry_after,
-        body,
+        body_base64: base64::engine::general_purpose::STANDARD.encode(body),
     })
 }
 
@@ -163,6 +164,7 @@ mod tests {
 #[cfg(test)]
 mod transport_tests {
     use super::request_blocking;
+    use base64::Engine;
     use std::io::{BufRead, BufReader, Read, Write};
     use std::net::TcpListener;
     use std::time::{Duration, Instant};
@@ -295,7 +297,12 @@ mod transport_tests {
             .unwrap();
             assert_eq!(response.status, status);
             assert_eq!(
-                serde_json::from_slice::<serde_json::Value>(&response.body).unwrap()[field],
+                serde_json::from_slice::<serde_json::Value>(
+                    &base64::engine::general_purpose::STANDARD
+                        .decode(&response.body_base64)
+                        .unwrap()
+                )
+                .unwrap()[field],
                 value
             );
         }
@@ -322,8 +329,21 @@ mod transport_tests {
         )
         .unwrap();
         assert_eq!(unavailable.status, 503);
-        assert!(unavailable.body.is_empty());
+        assert!(unavailable.body_base64.is_empty());
         server.join().unwrap();
+        let failure = request_blocking(
+            url("/closed?token=private-value"),
+            "GET".into(),
+            None,
+            None,
+            false,
+            None,
+            Some(8),
+        )
+        .err()
+        .unwrap();
+        assert!(!failure.contains("private-value"));
+        assert!(!failure.contains("token="));
     }
 
     #[test]

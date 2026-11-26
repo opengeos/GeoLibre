@@ -2,6 +2,7 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import {
   fetchWithGuard,
   PROXY_MAX_REDIRECT_HOPS,
+  ProxyBodyLimitError,
   readBodyWithLimit,
   validatePublicUrl,
 } from "./vite-proxy-guard";
@@ -98,6 +99,11 @@ export async function proxyOgcProcessRequest(
     if (!res.writableEnded) abort.abort();
   };
   res.on("close", disconnected);
+  res.setHeader(
+    "content-security-policy",
+    "sandbox; default-src 'none'; base-uri 'none'; frame-ancestors 'none'",
+  );
+  res.setHeader("x-content-type-options", "nosniff");
   try {
     const origin = req.headers.origin;
     if (origin) {
@@ -162,7 +168,12 @@ export async function proxyOgcProcessRequest(
     } catch (error) {
       await upstream.response.body?.cancel().catch(() => {});
       if (upstream.response.ok)
-        throw new ProcessProxyError(502, "OGC process response exceeds its download limit.");
+        throw new ProcessProxyError(
+          502,
+          error instanceof ProxyBodyLimitError
+            ? "OGC process response exceeds its download limit."
+            : "OGC process response could not be read completely.",
+        );
       if (signal.aborted) throw error;
       data = Buffer.alloc(0);
     }

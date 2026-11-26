@@ -607,6 +607,10 @@
       "wcs": {
         "label": "WCS layer",
         "description": "Load a numerical GeoTIFF subset from a WCS 1.0.0 / 2.0.1 service."
+      },
+      "ogcCoverages": {
+        "label": "Add OGC API - Coverages",
+        "description": "Discover coverage collections and import a GeoTIFF or CoverageJSON numerical subset."
       }
     },
     "shared": {
@@ -1607,6 +1611,19 @@
         "response": "The service did not return a valid GeoTIFF.",
         "grid": "This coverage needs a supported two-dimensional rectified grid and WCS scaling support.",
         "crs": "This request CRS is unavailable. Without the WCS CRS extension, only a native EPSG:4326 or EPSG:3857 CRS is supported."
+      }
+    },
+    "ogcCoverages": {
+      "subset": "Additional axis subsets (optional)",
+      "parameter": "CoverageJSON fields (optional)",
+      "hint": "Enter a CRS84 bounding box. Leave fields blank to import every numeric CoverageJSON range, or enter comma-separated names. Extra axes must be sliced to one value. Downloads are limited to 128 MiB and 8 million samples. Layers are snapshots; export their GeoTIFF to keep the bytes.",
+      "errors": {
+        "response": "The service did not return a supported coverage document or GeoTIFF.",
+        "grid": "Select a numeric, regular two-dimensional grid in CRS84, EPSG:4326 or EPSG:3857. Slice other axes to one value.",
+        "empty": "No GeoTIFF or CoverageJSON coverage collections were advertised.",
+        "size": "The coverage exceeds the 128 MiB download limit or 8 million decoded samples.",
+        "metadata": "The service catalog is too large to retrieve safely.",
+        "bbox": "Enter valid west, south, east and north coordinates in CRS84. Split areas crossing the antimeridian into separate requests."
       }
     }
   },
@@ -4136,7 +4153,8 @@
       "postgres": "PostgreSQL layer",
       "mssql": "SQL Server layer",
       "iceberg": "Apache Iceberg layer",
-      "wcs": "WCS layer"
+      "wcs": "WCS layer",
+      "ogcCoverages": "OGC API - Coverages"
     },
     "conversion": {
       "vectorToVector": "Vector to vector",
@@ -9284,7 +9302,37 @@
         "successful": "Successful",
         "failed": "Failed",
         "dismissed": "Dismissed"
-      }
+      },
+      "errors": {
+        "invalidDocument": "The service returned an invalid OGC process document.",
+        "invalidUrl": "OGC process links must be HTTP(S) URLs without user information.",
+        "responseLimit": "Invalid OGC process response limit.",
+        "inputLimit": "OGC process inputs exceed 1 MiB.",
+        "inputObject": "Process inputs must be a JSON object.",
+        "requestBody": "Only an OGC process execution POST may have a request body.",
+        "responseTooLarge": "OGC process response exceeds its download limit.",
+        "rasterUnreadable": "The process result is not a readable GeoTIFF.",
+        "rasterPrecision": "Raster conversion did not preserve numerical precision. Download the original result instead.",
+        "geodataOnly": "Only GeoJSON and GeoTIFF results can be added to the map.",
+        "missingInput": "Missing process input: {{name}}",
+        "inputNumber": "Process input {{name}} must be a number.",
+        "inputInteger": "Process input {{name}} must be an integer.",
+        "inputBoolean": "Process input {{name}} must be a boolean.",
+        "inputJson": "Process input {{name}} must be valid JSON.",
+        "unknownInputs": "Keep JSON mode for inputs that are not in the advertised schema.",
+        "noIdentifier": "The process has no identifier.",
+        "catalogCycle": "The OGC process catalog contains a pagination cycle.",
+        "noService": "This service does not advertise OGC API Processes.",
+        "catalogLimit": "The OGC process catalog exceeds 5,000 processes.",
+        "noProcesses": "No OGC processes were found.",
+        "pageLimit": "The OGC process catalog exceeds 50 pages.",
+        "unknownJobStatus": "The service returned an unknown OGC job status.",
+        "noStatusUrl": "The service accepted the job but did not return a status URL.",
+        "resultTooLarge": "OGC process result exceeds its download limit.",
+        "jobFailed": "The OGC process job did not complete successfully.",
+        "http": "OGC process HTTP {{status}}{{detail}}"
+      },
+      "featureCollection": "GeoJSON FeatureCollection"
     }
   },
   "segmentation": {

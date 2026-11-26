@@ -125,6 +125,12 @@ export const DATA_SOURCE_CATALOG: readonly DataSourceCatalogEntry[] = [
     tier: "intermediate",
   },
   {
+    id: "ogc-coverages",
+    section: "webServices",
+    labelKey: "toolbar.layerType.ogcCoverages",
+    tier: "intermediate",
+  },
+  {
     id: "ogc-vector-tiles",
     section: "webServices",
     labelKey: "toolbar.layerType.ogcVectorTiles",

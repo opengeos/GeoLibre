@@ -229,6 +229,19 @@ allowing it, and use `plugins.allowed` to limit which ones load (see
 
 ## Restricting network access
 
+Native desktop HTTP retains system proxy support, including enterprise proxy
+deployments. For direct connections, GeoLibre's guarded DNS resolver checks
+destination addresses when connecting, and redirect URLs are checked again.
+A configured proxy resolves the destination itself, so GeoLibre cannot verify
+the address that proxy ultimately contacts. The proxy is therefore a trusted
+network component and must enforce the same destination-address policy on
+initial requests, redirects, and DNS resolution changes: block link-local and
+cloud-metadata addresses, unspecified addresses, multicast, and broadcast
+destinations. Loopback and private/LAN services are intentionally supported by
+GeoLibre. An untrusted proxy or one without the required filtering invalidates
+the DNS-rebinding protection for proxied requests. This is an operator
+deployment requirement, not a guarantee enforced by the desktop resolver.
+
 - **[`deployment.json`](deployment-policy.md)** turns off or redirects the
   GeoLibre-operated services: `sharing.shareUrl: "off"`, `sharing.collabUrl`,
   `plugins.registryUrl`, `plugins.allowed` and `plugins.sideload`,

@@ -1,3 +1,4 @@
+import { OgcProcessError } from "./ogc-process-errors";
 import type { OgcProcess } from "./ogc-api-processes";
 
 export type OgcInputDefinition = OgcProcess["inputs"][string];
@@ -49,10 +50,11 @@ export function parseOgcProcessInputs(
     Object.entries(process.inputs).flatMap(([key, definition]) => {
       const kind = ogcInputKind(definition);
       const present =
-        Object.hasOwn(values, key) && (kind === "string" || values[key].trim() !== "");
+        Object.hasOwn(values, key) &&
+        (kind === "string" ? values[key] !== "" : values[key].trim() !== "");
       if (!present) {
         if (requireInputs && definition.minOccurs !== 0)
-          throw new Error(`Missing process input: ${key}`);
+          throw new OgcProcessError("missingInput", { name: key });
         return [];
       }
       const text = values[key];
@@ -61,15 +63,17 @@ export function parseOgcProcessInputs(
       else if (kind === "number" || kind === "integer") {
         value = Number(text);
         if (!Number.isFinite(value) || (kind === "integer" && !Number.isInteger(value)))
-          throw new Error(`Process input ${key} must be a ${kind}.`);
+          throw new OgcProcessError(kind === "integer" ? "inputInteger" : "inputNumber", {
+            name: key,
+          });
       } else {
         try {
           value = JSON.parse(text);
         } catch {
-          throw new Error(`Process input ${key} must be valid JSON.`);
+          throw new OgcProcessError("inputJson", { name: key });
         }
         if (kind === "boolean" && typeof value !== "boolean")
-          throw new Error(`Process input ${key} must be a boolean.`);
+          throw new OgcProcessError("inputBoolean", { name: key });
       }
       return [[key, value]];
     }),

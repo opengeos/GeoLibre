@@ -1,3 +1,4 @@
+import { OgcProcessError } from "./ogc-process-errors";
 import {
   readOgcProcessJob,
   readOgcProcessResults,
@@ -43,8 +44,8 @@ export async function monitorOgcProcessJob(
     onUpdate?.(current);
     if (current.status === "successful") return readOgcProcessResults(current, abort);
     if (current.status === "failed" || current.status === "dismissed")
-      throw new Error(current.message || `OGC process job ${current.status}.`);
+      throw current.message ? new Error(current.message) : new OgcProcessError("jobFailed");
     await pollDelay(current.retryAfterMs, abort);
-    current = await readOgcProcessJob(current.url, abort);
+    current = { ...(await readOgcProcessJob(current.url, abort)), outputIds: current.outputIds };
   }
 }

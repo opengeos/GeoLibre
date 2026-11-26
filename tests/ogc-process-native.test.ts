@@ -32,7 +32,7 @@ test("native process execution preserves its method, inputs, headers and asynchr
           content_type: "application/json",
           location: "/jobs/one",
           retry_after: "1",
-          body: [123, 125],
+          body_base64: "e30=",
         };
       },
     },
@@ -50,6 +50,25 @@ test("native process execution preserves its method, inputs, headers and asynchr
   assert.equal(response.retryAfter, "1");
   assert.equal(response.url, "https://example.org/execution");
   assert.equal(new TextDecoder().decode(response.body), "{}");
+});
+
+test("compact native result transport retains all byte values", async () => {
+  const bytes = Uint8Array.from({ length: 256 }, (_, index) => index);
+  Object.defineProperty(window, "__TAURI_INTERNALS__", {
+    configurable: true,
+    value: {
+      invoke: async () => ({
+        status: 200,
+        final_url: "https://example.org/result",
+        content_type: "image/tiff",
+        location: null,
+        retry_after: null,
+        body_base64: btoa(String.fromCharCode(...bytes)),
+      }),
+    },
+  });
+  const result = await requestOgcProcess("https://example.org/result", { method: "GET" });
+  assert.deepEqual(result.body, bytes);
 });
 
 test("process diagnostics identify writes and redact URL credentials", () => {

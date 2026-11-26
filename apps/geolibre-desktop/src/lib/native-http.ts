@@ -52,6 +52,13 @@ interface FetchUrlBytesOptions extends NativeHttpOptions {
   maxBytes?: number;
 }
 
+interface FetchUrlResponseOptions extends FetchUrlBytesOptions {
+  /** Content negotiation for protocols whose representations share one URL. */
+  accept?: string;
+  /** Preserve non-2xx status without reading its body; defaults to false. */
+  discardErrorBody?: boolean;
+}
+
 function diagnosticUrl(url: string): string {
   try {
     const parsed = new URL(url);
@@ -135,7 +142,7 @@ export function nativeHttpFailureRecord(
 async function invokeNativeHttp<T>(
   command: NativeHttpCommand,
   url: string,
-  options?: FetchUrlBytesOptions,
+  options?: FetchUrlResponseOptions,
   payload?: { method: NativeHttpMethod; body?: string; accept?: string; preferAsync?: boolean },
 ): Promise<T> {
   const startedAt = performance.now();
@@ -146,6 +153,10 @@ async function invokeNativeHttp<T>(
       url,
       ...(options?.timeoutSecs === undefined ? {} : { timeoutSecs: options.timeoutSecs }),
       ...(options?.maxBytes === undefined ? {} : { maxBytes: options.maxBytes }),
+      ...(options?.accept === undefined ? {} : { accept: options.accept }),
+      ...(options?.discardErrorBody === undefined
+        ? {}
+        : { discardErrorBody: options.discardErrorBody }),
       ...payload,
     });
     appendDiagnostic(
@@ -191,6 +202,7 @@ export function fetchUrlBytes(
 
 /** A native response that keeps the status and body of a non-2xx answer. */
 export interface NativeHttpResponse {
+  url: string;
   status: number;
   contentType: string | null;
   body: Uint8Array;
@@ -209,15 +221,17 @@ export interface NativeHttpResponse {
  */
 export async function fetchUrlResponse(
   url: string,
-  options?: FetchUrlBytesOptions,
+  options?: FetchUrlResponseOptions,
 ): Promise<NativeHttpResponse> {
   const raw = await invokeNativeHttp<{
     status: number;
+    final_url?: string;
     content_type: string | null;
     body: number[] | Uint8Array;
   }>("fetch_url_response", url, options);
   return {
     status: raw.status,
+    url: raw.final_url ?? url,
     contentType: raw.content_type,
     body: raw.body instanceof Uint8Array ? raw.body : new Uint8Array(raw.body),
   };
@@ -259,19 +273,23 @@ export async function requestOgcProcess(
     content_type: string | null;
     location: string | null;
     retry_after: string | null;
-    body: number[] | Uint8Array;
+    body_base64: string;
   }>(
     "ogc_process_http_request",
     url,
     { ...limits, context: limits.context ?? "OGC API Processes" },
     { method, body, accept, preferAsync },
   );
+  const decoded = atob(raw.body_base64);
+  const bytes = new Uint8Array(decoded.length);
+  // Avoid the intermediate character array created by TypedArray.from(string).
+  for (let index = 0; index < decoded.length; index++) bytes[index] = decoded.charCodeAt(index);
   return {
     status: raw.status,
     url: raw.final_url,
     contentType: raw.content_type,
     location: raw.location,
     retryAfter: raw.retry_after,
-    body: raw.body instanceof Uint8Array ? raw.body : new Uint8Array(raw.body),
+    body: bytes,
   };
 }

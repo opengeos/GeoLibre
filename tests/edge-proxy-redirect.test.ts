@@ -18,6 +18,7 @@ import {
   guardedLookup,
   PROXY_MAX_BODY_BYTES,
   PROXY_MAX_REDIRECT_HOPS,
+  ProxyBodyLimitError,
   readBodyWithLimit,
   validatePublicUrl,
 } from "../apps/geolibre-desktop/vite-proxy-guard";
@@ -419,6 +420,20 @@ describe("Vite proxy guard — assertResolvedPublicHost", () => {
 });
 
 describe("Vite proxy guard — readBodyWithLimit", () => {
+  it("preserves interrupted-read errors instead of identifying them as size-limit errors", async () => {
+    const failure = new TypeError("Connection reset before the body completed");
+    const response = new Response(
+      new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.error(failure);
+        },
+      }),
+    );
+    await assert.rejects(
+      () => readBodyWithLimit(response, 100),
+      (error) => error === failure && !(error instanceof ProxyBodyLimitError),
+    );
+  });
   it("rejects an oversized Content-Length before reading", async () => {
     const response = new Response("ignored", {
       headers: { "content-length": String(PROXY_MAX_BODY_BYTES + 1) },

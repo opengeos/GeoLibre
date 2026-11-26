@@ -25,6 +25,7 @@ import { ZarrSource } from "./add-data/sources/ZarrSource";
 import { PmtilesSource } from "./add-data/sources/PmtilesSource";
 import { MbtilesSource } from "./add-data/sources/MbtilesSource";
 import { OgcFeaturesSource } from "./add-data/sources/OgcFeaturesSource";
+import { OgcCoveragesSource } from "./add-data/sources/OgcCoveragesSource";
 import { OgcVectorTilesSource } from "./add-data/sources/OgcVectorTilesSource";
 import { PhotosSource } from "./add-data/sources/PhotosSource";
 import { PolylineSource } from "./add-data/sources/PolylineSource";
@@ -115,6 +116,8 @@ function renderSource(
       return <WmtsSource initialUrl={initialUrl} />;
     case "ogc-features":
       return <OgcFeaturesSource initialUrl={initialUrl} />;
+    case "ogc-coverages":
+      return <OgcCoveragesSource initialUrl={initialUrl} />;
     case "ogc-vector-tiles":
       return (
         <OgcVectorTilesSource

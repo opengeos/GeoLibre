@@ -15,6 +15,42 @@ import {
 } from "../apps/geolibre-desktop/src/lib/ogc-api-processes";
 import { processHttp } from "../apps/geolibre-desktop/src/lib/ogc-process-http";
 import { monitorOgcProcessJob } from "../apps/geolibre-desktop/src/lib/ogc-process-job";
+import i18next from "i18next";
+import {
+  OgcProcessError,
+  ogcProcessErrorText,
+} from "../apps/geolibre-desktop/src/lib/ogc-process-errors";
+
+test("client errors follow the active language and retain original service details", async () => {
+  const previous = i18next.language;
+  const error = new OgcProcessError("inputObject");
+  i18next.addResourceBundle(
+    "fr",
+    "translation",
+    {
+      processing: {
+        ogcProcesses: {
+          errors: {
+            inputObject: "Les paramètres doivent être un objet JSON.",
+            http: "Erreur distante {{status}}{{detail}}",
+          },
+        },
+      },
+    },
+    true,
+    true,
+  );
+  try {
+    await i18next.changeLanguage("fr");
+    assert.equal(ogcProcessErrorText(error), "Les paramètres doivent être un objet JSON.");
+    assert.equal(
+      new OgcProcessError("http", { status: 400, detail: ": Original service detail" }).message,
+      "Erreur distante 400: Original service detail",
+    );
+  } finally {
+    await i18next.changeLanguage(previous);
+  }
+});
 
 function description() {
   return JSON.parse(
@@ -92,6 +128,62 @@ test("preserves real pygeometa GeoJSON outputs without a value wrapper", async (
   assert.deepEqual(JSON.parse(await downloaded.text()), record);
 });
 
+test("Core output identifiers are not reserved by legacy result envelopes", async () => {
+  const process = await processDescription();
+  process.outputs = { outputs: {}, stats: {}, type: {} };
+  for (const value of [{ type: "FeatureCollection", features: [] }, [{ id: "nested", value: 5 }]]) {
+    serve(() => ({ outputs: { value, mediaType: "application/json" }, stats: 3, type: "Feature" }));
+    const result = await executeOgcProcess(process, {}, new AbortController().signal);
+    assert.equal(result.kind, "results");
+    if (result.kind !== "results") throw Error("Expected results");
+    assert.deepEqual(result.outputs, [
+      { id: "outputs", value, mediaType: "application/json" },
+      { id: "stats", value: 3 },
+      { id: "type", value: "Feature" },
+    ]);
+  }
+  serve(() => ({ outputs: [{ id: "nested", value: 5 }] }));
+  const result = await executeOgcProcess(process, {}, new AbortController().signal);
+  if (result.kind !== "results") throw Error("Expected results");
+  assert.deepEqual(result.outputs, [{ id: "outputs", value: [{ id: "nested", value: 5 }] }]);
+});
+
+test("catalog and completed execution links use the document retrieval context", async () => {
+  serve((url, init) => {
+    const path = new URL(url).pathname;
+    if (init?.method === "POST")
+      return new Response(
+        JSON.stringify({
+          jobID: "j1",
+          status: "successful",
+          links: [{ rel: "results", href: "../../jobs/j1/results" }],
+        }),
+        { status: 201, headers: { "Content-Type": "application/json", Location: "/api/jobs/j1" } },
+      );
+    if (path.endsWith("/results")) return { result: 7 };
+    const value = {
+      ...description(),
+      id: "p",
+      links: [
+        { rel: "self", href: "./processes/p" },
+        { rel: "http://www.opengis.net/def/rel/ogc/1.0/execute", href: "./processes/p/execution" },
+      ],
+    };
+    return { processes: [value] };
+  });
+  const signal = new AbortController().signal;
+  const [process] = await discoverOgcProcesses(
+    "https://example.org/api/processes?token=secret&page=2",
+    signal,
+  );
+  assert.equal(new URL(process.url).pathname, "/api/processes/p");
+  const result = await executeOgcProcess(process, {}, signal);
+  assert.equal(result.kind, "job");
+  if (result.kind !== "job") throw Error("Expected job");
+  assert.equal(new URL(result.job.resultsUrl).pathname, "/api/jobs/j1/results");
+  assert.deepEqual(await monitorOgcProcessJob(result.job, signal), [{ id: "result", value: 7 }]);
+});
+
 test("does not copy credentials across origins and refuses non-HTTP or user-info links", () => {
   assert.equal(
     ogcProcessLink("https://other.example/result", "https://example.org/api?token=secret"),
@@ -134,6 +226,7 @@ test("bounded pagination deduplicates processes and skips unusable next links", 
   );
   assert.equal(items.length, 1);
   assert.equal(calls.length, 2);
+  assert.ok(calls.every(({ url }) => new URL(url).searchParams.get("f") === "json"));
   serve(() => ({ processes: [], links: [{ rel: "next", href: "?f=json" }] }));
   await assert.rejects(
     discoverOgcProcesses("https://example.org/api/processes", new AbortController().signal),

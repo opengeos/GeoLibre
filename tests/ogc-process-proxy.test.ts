@@ -57,6 +57,9 @@ test("process proxy preserves execution/job controls, redirect methods and respo
   pool.intercept({ path: "/jobs/one", method: "DELETE" }).reply(204, "");
   pool.intercept({ path: "/large", method: "GET" }).reply(200, "123456789");
   pool.intercept({ path: "/failure", method: "GET" }).reply(503, "123456789");
+  pool.intercept({ path: "/html", method: "GET" }).reply(200, "<script>unsafe()</script>", {
+    headers: { "Content-Type": "text/html" },
+  });
   pool
     .intercept({ path: "/redirect", method: "POST", body })
     .reply(303, "", { headers: { Location: "/results" } });
@@ -122,6 +125,12 @@ test("process proxy preserves execution/job controls, redirect methods and respo
     assert.equal(accepted.headers["retry-after"], "2");
     assert.equal(accepted.headers["x-geolibre-final-url"], "https://process.example/execution");
     assert.equal(accepted.headers["cache-control"], "no-store");
+    assert.match(String(accepted.headers["content-security-policy"]), /sandbox/);
+    assert.equal(accepted.headers["x-content-type-options"], "nosniff");
+    const html = await send("GET", "/html");
+    assert.equal(html.headers["content-type"], "text/html");
+    assert.equal(html.body, "<script>unsafe()</script>");
+    assert.match(String(html.headers["content-security-policy"]), /default-src 'none'/);
     assert.equal((await send("DELETE", "/jobs/one")).status, 204);
     assert.equal(
       (await send("GET", "/large", undefined, { "x-geolibre-max-bytes": "4" })).status,

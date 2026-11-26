@@ -55,6 +55,7 @@ see [vector import details](user-guide/adding-data.md#files).
 | [WCS 1.0.0 / 2.0.1](#wcs-raster-subsets) | WCS Layer | Numerical GeoTIFF subsets with chosen extent, pixel dimensions, and an EPSG:4326 or EPSG:3857 request CRS. |
 | WFS | WFS Layer | Vector features with feature-type discovery and optional refresh. Loads GeoJSON, or GML (2, 3.1, 3.2) from servers that offer no GeoJSON output; GML in other EPSG coordinate systems is reprojected. |
 | WMTS | WMTS Layer | Map tiles from a Web Map Tile Service. |
+| [OGC API - Coverages](#ogc-api-coverages-numerical-snapshots) | OGC API - Coverages | Discover collections and import bounded numerical GeoTIFF or regular CoverageJSON snapshots. |
 | OGC API - Features | OGC API - Features | Browse collections and load their features. |
 | OGC API - Tiles | OGC Vector Tiles | Vector tile services. |
 | [OGC API - Processes](#ogc-api-processes) | Processing > GeoLibre > OGC API - Processes | Discover remote processes, supply typed inputs, monitor jobs, and download or import their results. |
@@ -171,6 +172,18 @@ support on the hosted site.
 References: [OGC WCS 1.0.0 conformance tests](https://cite.opengeospatial.org/teamengine/about/wcs/1.0.0/site/testreq.html)
 and [GeoServer WCS documentation](https://docs.geoserver.org/main/en/user/services/wcs/reference/).
 
+## OGC API Coverages numerical snapshots
+
+Use **Add data > OGC API - Coverages** to discover collections from a service landing page, a collections catalog or a collection URL. Select a coverage, enter a longitude/latitude bounding box and add the layer. **Use map view** and **Full extent** can fill the box. Optional date/time and axis subsets are passed to the service. Use axis subsets such as `height(10)` to select one slice from a multidimensional coverage. The service must support the requested subset parameters.
+
+GeoLibre follows advertised coverage links and negotiates GeoTIFF or CoverageJSON. Regular CoverageJSON grids in CRS84, EPSG:4326 or EPSG:3857 become numerical GeoTIFFs with the original values preserved as Float64 and missing values represented as NoData. Latitude-first CRS axis order, reversed grid axes and row-major range dimension order are respected. EPSG:4979 horizontal coordinates are supported when the height axis is a single selected slice. Spatial axes with one cell require explicit cell bounds. Irregular grids, unsliced extra dimensions, other CRSes and nonnumeric range types are rejected. The optional CoverageJSON fields entry selects a comma-separated list of range names after download; it does not reduce the server response size.
+
+Metadata is limited to 2 MiB per response. A coverage and all linked domain/range components share a 128 MiB download limit. The decoded raster is limited to 8 million samples across all bands. Importing requires working memory beyond the download size, including additional copies during desktop transfer and raster decoding. Striped TIFFs are converted to COGs before loading. Non-byte samples from both CoverageJSON and striped server GeoTIFFs are encoded as Float64 to preserve numerical precision; this uses more memory and uncompressed storage than Float32 or integer samples. Already tiled server GeoTIFFs retain their sample types. This is a fixed numerical snapshot: panning does not request more data. Export the GeoTIFF before ending the session to retain its bytes; saving only the project does not preserve imported raster files.
+
+The sample preset uses the public pygeoapi GDPS temperature collection and a small bounding box near Toronto. It is sample weather data, not a current forecast. Desktop uses guarded native HTTP; the hosted web app requires CORS support from the service. A successful development-proxy request does not establish hosted-site CORS support.
+
+This import path implements coverage discovery and supported representations. Remote execution is available separately through [OGC API Processes](#ogc-api-processes).
+
 ## OGC API Processes
 
 Open **Processing > GeoLibre > OGC API - Processes**, or search for
@@ -182,7 +195,11 @@ Open **Processing > GeoLibre > OGC API - Processes**, or search for
    Boolean, enumeration, and JSON inputs. Expand **Input schema** for details,
    or choose **Edit all inputs as JSON** for compound or referenced schemas.
    An eligible vector layer can be inserted into a JSON input as a GeoJSON
-   FeatureCollection, feature array, or geometry array. Inputs and selected
+   FeatureCollection, feature array, or geometry array. FeatureCollections use
+   the qualified `{ "value": …, "mediaType": "application/geo+json" }` input
+   representation required for object values by OGC API Processes. Other JSON
+   fields and raw input editing accept the service's inline or referenced input
+   representation. Inputs and selected
    layer data are sent to the chosen service when you click **Run process**.
 3. Choose synchronous or asynchronous execution when the service advertises
    it. Asynchronous execution displays job status and progress when available.
@@ -197,14 +214,20 @@ Open **Processing > GeoLibre > OGC API - Processes**, or search for
    separately before ending the session. A saved project alone does not retain
    downloaded raster bytes.
 
-Execution submits once and does not retry automatically. Input documents are
+Execution submits once and does not retry automatically. Individual HTTP
+requests time out after 120 seconds; choose asynchronous execution for longer
+work when the service supports it. Input documents are
 limited to 1 MiB, process descriptions and status documents to 2 MiB, and result
 downloads to 128 MiB each. Decoding JSON and rasters requires additional working
-memory. Monitoring honors bounded `Retry-After` values and stops after 30
+memory. Native result transport uses base64 rather than JSON number arrays.
+Monitoring honors bounded `Retry-After` values and stops after 30
 minutes; the job URL can be used to resume. Closing and reopening retains
 dialog state in the current session. Changing projects clears inputs, job
 status, and results and aborts pending requests. Job history and input
 credentials are not saved in projects.
+
+Clearing an optional text input omits it from the request. Use raw JSON input
+editing when an explicit empty string is needed.
 
 Desktop uses guarded native HTTP. Development uses a guarded same-origin
 proxy. The hosted web app requires the remote service to permit cross-origin

@@ -1,3 +1,4 @@
+import { OgcProcessError } from "./ogc-process-errors";
 import { processHttp, processHttpUrl, type ProcessHttpResponse } from "./ogc-process-http";
 import { MAX_PROCESS_INPUT_BYTES, MAX_PROCESS_RESULT_BYTES } from "./ogc-process-limits";
 
@@ -27,6 +28,8 @@ export interface OgcProcessJob {
   progress?: number;
   resultsUrl: string;
   retryAfterMs: number;
+  /** Advertised identifiers disambiguate legacy pygeoapi result envelopes. */
+  outputIds?: string[];
 }
 export interface OgcProcessOutput {
   id: string;
@@ -42,7 +45,7 @@ export type OgcProcessExecution =
 
 const object = (value: unknown): JsonObject => {
   if (!value || typeof value !== "object" || Array.isArray(value))
-    throw new Error("The service returned an invalid OGC process document.");
+    throw new OgcProcessError("invalidDocument");
   return value as JsonObject;
 };
 function links(value: unknown): ProcessLink[] {
@@ -116,13 +119,19 @@ function successful(response: ProcessHttpResponse): void {
   } catch {
     /* Preserve HTTP status when an error body is missing or not JSON. */
   }
-  throw new Error(`OGC process HTTP ${response.status}${detail}`);
+  throw new OgcProcessError("http", { status: response.status, detail });
 }
-function processDocument(raw: unknown, base: string): OgcProcess {
+function processDocument(raw: unknown, base: string, fallback = base): OgcProcess {
   const value = object(raw);
-  if (typeof value.id !== "string" || !value.id) throw new Error("The process has no identifier.");
-  const items = links(value.links);
-  const url = linked(items, "self", base) ?? base;
+  if (typeof value.id !== "string" || !value.id) throw new OgcProcessError("noIdentifier");
+  const items = links(value.links).flatMap((link) => {
+    try {
+      return [{ ...link, href: ogcProcessLink(link.href, base) }];
+    } catch {
+      return [];
+    }
+  });
+  const url = linked(items, "self", base) ?? fallback;
   const definitions = (fields: unknown): Record<string, JsonObject> => {
     if (fields === undefined) return {};
     return Object.fromEntries(
@@ -153,7 +162,7 @@ export async function discoverOgcProcesses(
   const seen = new Set<string>(),
     result = new Map<string, OgcProcess>();
   for (let page = 0; page < 50; page++) {
-    if (seen.has(url)) throw new Error("The OGC process catalog contains a pagination cycle.");
+    if (seen.has(url)) throw new OgcProcessError("catalogCycle");
     seen.add(url);
     const response = await processHttp(url, abort);
     successful(response);
@@ -167,7 +176,7 @@ export async function discoverOgcProcesses(
         linked(items, REL + "execute", base));
     if (!Array.isArray(doc.processes) && !individual) {
       const catalog = linked(items, REL + "processes", base);
-      if (!catalog) throw new Error("This service does not advertise OGC API Processes.");
+      if (!catalog) throw new OgcProcessError("noService");
       url = jsonUrl(catalog);
       continue;
     }
@@ -177,18 +186,22 @@ export async function discoverOgcProcesses(
       const fallback = Array.isArray(doc.processes)
         ? append(base, `/${encodeURIComponent(value.id)}`)
         : base;
-      const process = processDocument(value, fallback);
+      const synthetic = new URL(fallback);
+      for (const key of [...synthetic.searchParams.keys()])
+        if (["limit", "offset", "page", "startindex"].includes(key.toLowerCase()))
+          synthetic.searchParams.delete(key);
+      const process = processDocument(value, base, synthetic.href);
       result.set(process.id, process);
-      if (result.size > 5000) throw new Error("The OGC process catalog exceeds 5,000 processes.");
+      if (result.size > 5000) throw new OgcProcessError("catalogLimit");
     }
     const next = linked(items, "next", base);
     if (!next) {
-      if (!result.size) throw new Error("No OGC processes were found.");
+      if (!result.size) throw new OgcProcessError("noProcesses");
       return [...result.values()];
     }
-    url = next;
+    url = jsonUrl(next);
   }
-  throw new Error("The OGC process catalog exceeds 50 pages.");
+  throw new OgcProcessError("pageLimit");
 }
 
 /** Fetch input/output schemas without resolving remote JSON Schema references. */
@@ -211,7 +224,7 @@ function job(response: ProcessHttpResponse, fallback: string): OgcProcessJob {
   const doc = object(decode(response));
   const status = doc.status;
   if (!["accepted", "running", "successful", "failed", "dismissed"].includes(String(status)))
-    throw new Error("The service returned an unknown OGC job status.");
+    throw new OgcProcessError("unknownJobStatus");
   const items = links(doc.links);
   const url = response.location
     ? ogcProcessLink(response.location, response.url)
@@ -228,13 +241,13 @@ function job(response: ProcessHttpResponse, fallback: string): OgcProcessJob {
       ? { progress: Math.max(0, Math.min(100, doc.progress)) }
       : {}),
     resultsUrl:
-      linked(items, REL + "results", url) ??
-      linked(items, "results", url) ??
+      linked(items, REL + "results", response.url) ??
+      linked(items, "results", response.url) ??
       append(url, "/results"),
     retryAfterMs: ogcProcessRetryDelay(response.retryAfter),
   };
 }
-function outputs(response: ProcessHttpResponse): OgcProcessOutput[] {
+function outputs(response: ProcessHttpResponse, outputIds?: readonly string[]): OgcProcessOutput[] {
   if (!response.body.length) return [];
   if (!/json/i.test(response.contentType ?? ""))
     return [
@@ -249,16 +262,22 @@ function outputs(response: ProcessHttpResponse): OgcProcessOutput[] {
     return [{ id: "result", value: document, mediaType: "application/json" }];
   const doc = document as JsonObject;
   if (
+    /geo\+json/i.test(response.contentType ?? "") &&
     typeof doc.type === "string" &&
     (doc.type === "FeatureCollection" || doc.type === "Feature" || Array.isArray(doc.coordinates))
   )
     return [{ id: "result", value: doc, mediaType: "application/geo+json" }];
-  const entries = Array.isArray(doc.outputs)
-    ? doc.outputs.map((raw) => {
+  const legacyArray =
+    outputIds !== undefined &&
+    !outputIds.includes("outputs") &&
+    Object.keys(doc).length === 1 &&
+    Array.isArray(doc.outputs);
+  const entries = legacyArray
+    ? (doc.outputs as unknown[]).map((raw) => {
         const value = object(raw);
         return [String(value.id ?? "result"), value] as const;
       })
-    : Object.entries(Object.hasOwn(doc, "outputs") ? object(doc.outputs) : doc);
+    : Object.entries(doc);
   return entries.map(([id, raw]) => {
     if (raw && typeof raw === "object" && !Array.isArray(raw)) {
       const value = raw as JsonObject;
@@ -291,7 +310,7 @@ export async function executeOgcProcess(
   object(inputs);
   const body = JSON.stringify({ inputs, response: "document" });
   if (new TextEncoder().encode(body).length > MAX_PROCESS_INPUT_BYTES)
-    throw new Error("OGC process inputs exceed 1 MiB.");
+    throw new OgcProcessError("inputLimit");
   const endpoint =
     linked(process.links, REL + "execute", process.url) ?? append(process.url, "/execution");
   const response = await processHttp(endpoint, signal, {
@@ -313,14 +332,23 @@ export async function executeOgcProcess(
           linked(links(document.links), "status", response.url) ??
           linked(links(document.links), "self", response.url);
     }
-    if (!fallback) throw new Error("The service accepted the job but did not return a status URL.");
+    if (!fallback) throw new OgcProcessError("noStatusUrl");
     if (!response.body.length)
-      return { kind: "job", job: await readOgcProcessJob(fallback, signal) };
-    return { kind: "job", job: job(response, fallback) };
+      return {
+        kind: "job",
+        job: {
+          ...(await readOgcProcessJob(fallback, signal)),
+          outputIds: Object.keys(process.outputs),
+        },
+      };
+    return {
+      kind: "job",
+      job: { ...job(response, fallback), outputIds: Object.keys(process.outputs) },
+    };
   }
   return {
     kind: "results",
-    outputs: outputs(response),
+    outputs: outputs(response, Object.keys(process.outputs)),
     ...(response.location ? { jobUrl: ogcProcessLink(response.location, response.url) } : {}),
   };
 }
@@ -341,7 +369,7 @@ export async function readOgcProcessResults(
     maxBytes: MAX_PROCESS_RESULT_BYTES,
   });
   successful(response);
-  return outputs(response);
+  return outputs(response, job.outputIds);
 }
 
 /** Dismiss only the particular job the caller selected. */
@@ -366,8 +394,7 @@ export async function downloadOgcProcessOutput(
   if (output.bytes) return new Blob([output.bytes], { type: output.mediaType });
   if (output.encoding === "base64" && typeof output.value === "string") {
     const value = atob(output.value);
-    if (value.length > MAX_PROCESS_RESULT_BYTES)
-      throw new Error("OGC process result exceeds its download limit.");
+    if (value.length > MAX_PROCESS_RESULT_BYTES) throw new OgcProcessError("resultTooLarge");
     return new Blob([Uint8Array.from(value, (c) => c.charCodeAt(0))], { type: output.mediaType });
   }
   return new Blob(

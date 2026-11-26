@@ -1,0 +1,103 @@
+{
+  "id": "gdps-temperature",
+  "links": [
+    {
+      "type": "text/html",
+      "rel": "canonical",
+      "title": "information",
+      "href": "https://eccc-msc.github.io/open-data/msc-data/nwp_gdps/readme_gdps_en",
+      "hreflang": "en-CA"
+    },
+    {
+      "type": "application/json",
+      "rel": "root",
+      "title": "The landing page of this server as JSON",
+      "href": "https://demo.pygeoapi.io/master?f=json"
+    },
+    {
+      "type": "text/html",
+      "rel": "root",
+      "title": "The landing page of this server as HTML",
+      "href": "https://demo.pygeoapi.io/master?f=html"
+    },
+    {
+      "type": "application/json",
+      "rel": "self",
+      "title": "This document as JSON",
+      "href": "https://demo.pygeoapi.io/master/collections/gdps-temperature?f=json"
+    },
+    {
+      "type": "application/ld+json",
+      "rel": "alternate",
+      "title": "This document as RDF (JSON-LD)",
+      "href": "https://demo.pygeoapi.io/master/collections/gdps-temperature?f=jsonld"
+    },
+    {
+      "type": "text/html",
+      "rel": "alternate",
+      "title": "This document as HTML",
+      "href": "https://demo.pygeoapi.io/master/collections/gdps-temperature?f=html"
+    },
+    {
+      "type": "application/schema+json",
+      "rel": "http://www.opengis.net/def/rel/ogc/1.0/schema",
+      "title": "Schema of collection in JSON",
+      "href": "https://demo.pygeoapi.io/master/collections/gdps-temperature/schema?f=json"
+    },
+    {
+      "type": "text/html",
+      "rel": "http://www.opengis.net/def/rel/ogc/1.0/schema",
+      "title": "Schema of collection in HTML",
+      "href": "https://demo.pygeoapi.io/master/collections/gdps-temperature/schema?f=html"
+    },
+    {
+      "type": "application/schema+json",
+      "rel": "http://www.opengis.net/def/rel/ogc/1.0/queryables",
+      "title": "Queryables for this collection as JSON",
+      "href": "https://demo.pygeoapi.io/master/collections/gdps-temperature/queryables?f=json"
+    },
+    {
+      "type": "text/html",
+      "rel": "http://www.opengis.net/def/rel/ogc/1.0/queryables",
+      "title": "Queryables for this collection as HTML",
+      "href": "https://demo.pygeoapi.io/master/collections/gdps-temperature/queryables?f=html"
+    },
+    {
+      "type": "application/vnd.cov+json",
+      "rel": "http://www.opengis.net/def/rel/ogc/1.0/coverage",
+      "title": "Coverage data",
+      "href": "https://demo.pygeoapi.io/master/collections/gdps-temperature/coverage?f=json"
+    },
+    {
+      "type": "text/html",
+      "rel": "http://www.opengis.net/def/rel/ogc/1.0/coverage",
+      "title": "Coverage data",
+      "href": "https://demo.pygeoapi.io/master/collections/gdps-temperature/coverage?f=html"
+    },
+    {
+      "type": "application/x-grib2",
+      "rel": "http://www.opengis.net/def/rel/ogc/1.0/coverage",
+      "title": "Coverage data as GRIB",
+      "href": "https://demo.pygeoapi.io/master/collections/gdps-temperature/coverage?f=GRIB"
+    }
+  ],
+  "title": "Global Deterministic Prediction System sample",
+  "description": "Global Deterministic Prediction System sample",
+  "keywords": ["gdps", "global"],
+  "extent": {
+    "spatial": {
+      "bbox": [[-180, -90, 180, 90]],
+      "crs": "http://www.opengis.net/def/crs/OGC/1.3/CRS84",
+      "grid": [
+        {
+          "cellsCount": 2400,
+          "resolution": 0.15000000000000002
+        },
+        {
+          "cellsCount": 1201,
+          "resolution": 0.15
+        }
+      ]
+    }
+  }
+}

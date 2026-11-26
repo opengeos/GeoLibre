@@ -42,7 +42,7 @@ export function OgcProcessesDialog({
   const processing = useAppCapability("processing:run");
   const adding = useAppCapability("layers:add-remote");
   const exporting = useAppCapability("export:data");
-  const running = client.job?.status === "accepted" || client.job?.status === "running";
+  const running = client.runningForProcess;
   const download = (output: OgcProcessOutput) => {
     if (!exporting.granted) return;
     void client.run("output", async ({ signal }) => {
@@ -68,7 +68,7 @@ export function OgcProcessesDialog({
     void client.run("output", async ({ signal }) => {
       await importOgcProcessOutput(
         output,
-        client.jobUrl || client.process?.url || client.endpoint,
+        client.outputSourceUrl,
         createAppAPI(mapControllerRef),
         signal,
       );

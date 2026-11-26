@@ -1,3 +1,4 @@
+import { OgcProcessError } from "./ogc-process-errors";
 import { readLimitedBody } from "../components/layout/add-data/helpers";
 import { isTauri } from "./is-tauri";
 import { normalizeFetchError } from "./ogc-json";
@@ -22,7 +23,7 @@ export interface ProcessHttpResponse {
 export function processHttpUrl(value: string, base?: string): URL {
   const url = new URL(value, base);
   if (!/^https?:$/.test(url.protocol) || url.username || url.password)
-    throw new Error("OGC process links must be HTTP(S) URLs without user information.");
+    throw new OgcProcessError("invalidUrl");
   url.hash = "";
   return url;
 }
@@ -43,15 +44,15 @@ export async function processHttp(
   const method = options.method ?? "GET";
   const maxBytes = options.maxBytes ?? MAX_PROCESS_METADATA_BYTES;
   if (!Number.isSafeInteger(maxBytes) || maxBytes < 1 || maxBytes > MAX_PROCESS_RESULT_BYTES)
-    throw new Error("Invalid OGC process response limit.");
+    throw new OgcProcessError("responseLimit");
   if (method === "POST") {
     if (!options.body || new TextEncoder().encode(options.body).length > MAX_PROCESS_INPUT_BYTES)
-      throw new Error("OGC process inputs must fit within 1 MiB.");
+      throw new OgcProcessError("inputLimit");
     const body: unknown = JSON.parse(options.body);
     if (!body || typeof body !== "object" || Array.isArray(body))
-      throw new Error("OGC process execution requires a JSON object.");
+      throw new OgcProcessError("inputObject");
   } else if (options.body !== undefined) {
-    throw new Error("Only an OGC process execution POST may have a request body.");
+    throw new OgcProcessError("requestBody");
   }
   const abort = AbortSignal.any([signal, AbortSignal.timeout(120_000)]);
   abort.throwIfAborted();
@@ -75,8 +76,7 @@ export async function processHttp(
         result.body.buffer instanceof ArrayBuffer
           ? new Uint8Array(result.body.buffer, result.body.byteOffset, result.body.byteLength)
           : new Uint8Array(result.body);
-      if (body.byteLength > maxBytes)
-        throw new Error("OGC process response exceeds its download limit.");
+      if (body.byteLength > maxBytes) throw new OgcProcessError("responseTooLarge");
       return { ...result, body };
     }
     const dev = Boolean((import.meta as ImportMeta & { env?: { DEV?: boolean } }).env?.DEV);
