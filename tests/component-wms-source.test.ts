@@ -88,12 +88,13 @@ describe("WmsSource", () => {
     await waitFor(() => assert.ok(text().includes("No layers were found for this service.")));
     serve("gateway down", 502);
     fireEvent.click(screen.getByRole("button", { name: "Retrieve layers" }));
-    await waitFor(() => assert.ok(/502|Could not retrieve layers/.test(text())));
+    await waitFor(() => assert.ok(/status 502/.test(text())));
   });
 
   it("refuses to add without layer names", async () => {
-    serve(CAPABILITIES);
     const { added } = renderSource({ initialUrl: `${ENDPOINT}/manual` });
+    // Type a layer, then clear it again.
+    fireEvent.change(screen.getByLabelText("Layers"), { target: { value: "topp:roads" } });
     fireEvent.change(screen.getByLabelText("Layers"), { target: { value: "" } });
     fireEvent.click(screen.getByRole("button", { name: "Add layer" }));
     await waitFor(() => assert.ok(text().includes("Enter one or more WMS layer names.")));

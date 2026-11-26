@@ -75,7 +75,9 @@ describe("DelimitedTextSource", () => {
     fireEvent.click(screen.getByRole("button", { name: "Add layer" }));
     // Add downloads again; wait for that request before checking nothing was added.
     await waitFor(() => assert.equal(requested.length, 2));
-    await waitFor(() => assert.ok(/404/.test(text())));
+    // The button reads "Add layer" again once the submit has settled.
+    await waitFor(() => screen.getByRole("button", { name: "Add layer" }));
+    assert.ok(/404/.test(text()));
     assert.equal(added.length, 0);
   });
 });
