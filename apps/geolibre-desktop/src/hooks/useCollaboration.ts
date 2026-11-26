@@ -96,6 +96,9 @@ export function useCollaboration(
   // The join can wait on the identity lookup; frames sent before it would be
   // refused by the relay, so project pushes hold until it is out.
   const joinSentRef = useRef(false);
+  // Set after an anonymous join by a possibly signed-in user: retries once
+  // with a fresh identity token if the relay answers identity-required.
+  const identityRetryRef = useRef<(() => Promise<boolean>) | null>(null);
   // A push skipped while the join was still out; sent once it is.
   const snapshotHeldRef = useRef(false);
   const pendingConnectRef = useRef<{
@@ -454,12 +457,31 @@ export function useCollaboration(
       void import("../lib/collab-identity")
         .then(({ fetchCollabIdentityToken }) => fetchCollabIdentityToken())
         .catch(() => null)
-        .then(sendJoin);
+        .then((token) => {
+          if (!token) {
+            // Joined anonymously: if the session requires sign-in, try once
+            // more with a fresh token and a longer deadline (the first lookup
+            // may have timed out, or a skewed clock kept an expired token).
+            identityRetryRef.current = async () => {
+              const { clearCollabIdentityCache, fetchCollabIdentityToken } =
+                await import("../lib/collab-identity");
+              clearCollabIdentityCache();
+              const fresh = await fetchCollabIdentityToken({ timeoutMs: 10_000 }).catch(() => null);
+              if (!fresh || connRef.current !== conn || joinGenerationRef.current !== generation) {
+                return false;
+              }
+              sendJoin(fresh);
+              return true;
+            };
+          }
+          sendJoin(token);
+        });
     }
 
     teardownRef.current = () => {
       joinGenerationRef.current += 1;
       joinSentRef.current = false;
+      identityRetryRef.current = null;
       snapshotHeldRef.current = false;
       if (debounce) clearTimeout(debounce);
       unsubscribe();
@@ -555,6 +577,18 @@ export function useCollaboration(
         },
         onMessage: (msg) => {
           if (connRef.current !== conn) return;
+          if (
+            msg.type === "error" &&
+            msg.code === "identity-required" &&
+            identityRetryRef.current
+          ) {
+            const retry = identityRetryRef.current;
+            identityRetryRef.current = null;
+            void retry().then((sent) => {
+              if (!sent && connRef.current === conn) handleMessage(msg);
+            });
+            return;
+          }
           if (msg.type !== "welcome" && msg.type !== "snapshot") {
             handleMessage(msg);
             return;

@@ -66,7 +66,8 @@ Configuration:
   organization identity providers in addition to the public CAs bundled with
   `certifi`, for providers behind a private CA (default empty: the public CAs
   only). An unreadable file fails startup.
-- `GEOLIBRE_COLLAB_IDENTITY_SECRET`: secret shared with a live-collaboration
+- `GEOLIBRE_COLLAB_IDENTITY_SECRET`: secret (at least 32 characters; startup
+  fails otherwise) shared with a live-collaboration
   relay (its `COLLAB_IDENTITY_SECRET`). When set,
   `POST /api/collab/identity-token` mints short-lived relay identity tokens for
   signed-in accounts, so collaboration sessions show who is who and a host can

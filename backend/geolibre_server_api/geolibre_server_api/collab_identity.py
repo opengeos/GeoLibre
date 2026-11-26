@@ -36,6 +36,7 @@ COLLAB_IDENTITY_TTL_ENV = "GEOLIBRE_COLLAB_IDENTITY_TTL_SECONDS"
 DEFAULT_TTL_SECONDS = 300
 MAX_TTL_SECONDS = 3600
 PROVIDER = "geolibre"
+MIN_SECRET_LENGTH = 32
 
 
 def _b64url(data: bytes) -> str:
@@ -94,6 +95,13 @@ def build_collab_identity_router(secret: str | None, ttl_seconds: int) -> APIRou
     Returns:
         The router to include in the app.
     """
+    # Anyone with write access can mint tokens and so obtain known-plaintext
+    # HMACs; a short secret could be brute-forced offline into forged
+    # identities for every account.
+    if secret and len(secret) < MIN_SECRET_LENGTH:
+        raise ValueError(
+            f"{COLLAB_IDENTITY_SECRET_ENV} must be at least {MIN_SECRET_LENGTH} characters"
+        )
     router = APIRouter()
 
     @router.post("/api/collab/identity-token")

@@ -249,7 +249,7 @@ accepts as the joiner's `identityToken` (see
 [Signed-in identity](collaboration.md#signed-in-identity-optional)). Requires a
 credential with `write:projects`; answers `404` with
 `{"error": "collaboration identity is not configured"}` unless the server has
-`GEOLIBRE_COLLAB_IDENTITY_SECRET`, which must equal the relay's
+`GEOLIBRE_COLLAB_IDENTITY_SECRET` (at least 32 characters), which must equal the relay's
 `COLLAB_IDENTITY_SECRET`. Responses are `Cache-Control: no-store`.
 
 ```json

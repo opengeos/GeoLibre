@@ -18,7 +18,7 @@ from geolibre_server_api.collab_identity import (
 )
 from helpers import account, auth, pat
 
-SECRET = "relay-shared-secret"
+SECRET = "relay-shared-secret-at-least-32-characters"
 
 
 def _decode(segment: str) -> bytes:
@@ -80,6 +80,11 @@ def test_refuses_an_account_without_a_username(tmp_path, monkeypatch, clock, fak
         response = client.post("/api/collab/identity-token", headers=auth(token))
         assert response.status_code == 400
         assert response.json() == {"error": "username required"}
+
+
+def test_refuses_a_short_secret(tmp_path, monkeypatch, clock, fake_idp):
+    with pytest.raises(ValueError, match="at least 32"):
+        _client(tmp_path, monkeypatch, clock, fake_idp, "short")
 
 
 def test_is_disabled_without_a_shared_secret(tmp_path, monkeypatch, clock, fake_idp):
