@@ -4607,7 +4607,8 @@ def _read_public_arcgis_json(url: str, label: str, limit: int = 2 * 1024 * 1024)
         )
     except RecursionError as exc:
         raise ValueError(f"{label} is too deeply nested") from exc
-    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+    except ValueError as exc:
+        # Decoding errors, JSONDecodeError and int() digit-limit errors.
         raise ValueError(f"{label} is not valid JSON") from exc
 
 
