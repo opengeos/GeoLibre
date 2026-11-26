@@ -81,7 +81,9 @@ export function MapContextTouchSheet({
 }: MapContextTouchSheetProps) {
   const { t } = useTranslation();
   // The same Earth-model switch as the desktop menu's checkbox and the Line of
-  // Sight panel, so a long-press viewshed honours (and can change) it.
+  // Sight panel, so a long-press viewshed honours (and can change) it. Unlike
+  // the desktop checkbox, selecting it closes the sheet (every touch action
+  // does); the description shows the state when the sheet reopens.
   const viewshedCurvature = useTerrainVisibility((s) => s.curvature);
   const updateTerrainVisibility = useTerrainVisibility((s) => s.update);
 

@@ -101,7 +101,14 @@ export async function runViewshed(options: RunViewshedOptions): Promise<Viewshed
   );
   // Captured before the terrain fetch, so toggling the setting while tiles
   // load affects only later runs, not this one.
-  const curvature = resolveCurvature(options.curvature ?? getTerrainVisibility());
+  // Merged per field, so a partial override keeps the rest of the stored model.
+  const stored = getTerrainVisibility();
+  const override = options.curvature ?? {};
+  const curvature = resolveCurvature({
+    curvature: override.curvature ?? stored.curvature,
+    refractionCoefficient: override.refractionCoefficient ?? stored.refractionCoefficient,
+    earthRadiusMeters: override.earthRadiusMeters ?? stored.earthRadiusMeters,
+  });
   const dem = await assembleTerrainDem({
     lng: options.lng,
     lat: options.lat,

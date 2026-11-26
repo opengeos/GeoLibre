@@ -2997,7 +2997,7 @@
     "curvature": "Earth curvature and refraction",
     "refractionCoefficient": "Refraction coefficient",
     "earthRadius": "Earth radius (km)",
-    "usingValue": "Using {{value}} (allowed range).",
+    "usingValue": "Using {{value, number}} (allowed range).",
     "pickObserver": "Click the map to place the observer.",
     "pickTarget": "Click the map to place the target.",
     "pickAgain": "Click the map to start a new line.",
