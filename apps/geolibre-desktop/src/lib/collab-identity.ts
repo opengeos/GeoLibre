@@ -19,7 +19,7 @@ const REUSE_MARGIN_MS = 60_000;
 
 let cached: { issuer: string; accessToken: string; token: string; expiresAt: number } | null = null;
 
-/** Forget the reusable token (tests, sign-out). */
+/** Forget the reusable token (tests). Signing out needs no call: without an access token the cache is never consulted. */
 export function clearCollabIdentityCache(): void {
   cached = null;
 }

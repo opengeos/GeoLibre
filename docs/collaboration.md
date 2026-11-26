@@ -277,8 +277,9 @@ mints these tokens for its accounts at `POST /api/collab/identity-token` (see
 enable it, give the server `GEOLIBRE_COLLAB_IDENTITY_SECRET` and the relay the
 same value as `COLLAB_IDENTITY_SECRET` (the root `docker-compose.yml` passes
 one `COLLAB_IDENTITY_SECRET` to both). When the user is signed in to that server
-(the share server's OAuth sign-in), `useCollaboration` requests a fresh token
-on every (re)connect and presents it on `join`
+(the share server's OAuth sign-in), `useCollaboration` presents a token on
+every (re)connect's `join`, reusing one while it has more than a minute left
+and otherwise requesting a new one
 (`lib/collab-identity.ts`), so the roster shows the account, the session log
 attributes joins to it, blocks and permission overrides key on `user:<id>`,
 and the host can turn on "require a signed-in account". Only this five-minute,
@@ -292,6 +293,9 @@ identity goes to whichever relay the deployment configures
 verify (not mint) tokens, and the server only issues them when it shares a
 secret with a relay, so this pairing is an operator decision; a deployment
 should not point the app at a relay it does not trust with its users' names.
+Tokens carry no audience: any relay holding the same secret accepts one until
+it expires (five minutes by default), so share a secret only among relays of
+one deployment.
 
 The stock hosted relay leaves the secret unset, so the identity path stays
 dormant there until a deployment pairs a relay with its server API.

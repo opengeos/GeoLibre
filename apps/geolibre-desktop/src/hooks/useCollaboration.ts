@@ -471,6 +471,11 @@ export function useCollaboration(
     if (!surface) return () => {};
     const container = surface.getContainer();
     let lastCursor = 0;
+    // A reconnect keeps these listeners while its join may still wait on the
+    // identity lookup; presence sent before the join would be dropped.
+    const sendPresence = (message: Parameters<CollabConnection["send"]>[0]) => {
+      if (joinSentRef.current) conn.send(message);
+    };
     const onPointerMove = (event: PointerEvent) => {
       const now = Date.now();
       if (now - lastCursor < CURSOR_THROTTLE_MS) return;
@@ -478,17 +483,17 @@ export function useCollaboration(
       const bounds = container.getBoundingClientRect();
       const lngLat = surface.unproject([event.clientX - bounds.left, event.clientY - bounds.top]);
       if (lngLat)
-        conn.send({
+        sendPresence({
           type: "presence",
           cursor: lngLat,
           view: engine.readView(),
         });
     };
     const onPointerLeave = () =>
-      conn.send({ type: "presence", cursor: null, view: engine.readView() });
+      sendPresence({ type: "presence", cursor: null, view: engine.readView() });
     const onCameraIdle = (event?: { storyCamera: boolean }) => {
       if (event?.storyCamera) return;
-      conn.send({ type: "presence", view: engine.readView() });
+      sendPresence({ type: "presence", view: engine.readView() });
     };
     container.addEventListener("pointermove", onPointerMove);
     container.addEventListener("pointerleave", onPointerLeave);
