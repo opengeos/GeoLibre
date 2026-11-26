@@ -486,7 +486,10 @@ function ensureAttributeLabelLayer(
       type: "symbol",
       ...sourceRef,
       ...labelZoom,
-      ...(dedupedLabelFc ? {} : { filter: withFeatureFilters(layer, labelBaseFilter) }),
+      // The deduped points carry only the aggregated label, so no filter
+      // applies to them. `undefined` (not an absent key) clears a filter left
+      // by one-per-polygon points, which share the same label source.
+      filter: dedupedLabelFc ? undefined : withFeatureFilters(layer, labelBaseFilter),
       layout: {
         "text-field": textField,
         "text-font": textFontForMapStyle(map),

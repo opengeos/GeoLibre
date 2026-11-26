@@ -5389,6 +5389,7 @@
         ["getLayoutProperty", "layer-pts-label", "symbol-sort-key"],
         ["setLayoutProperty", "layer-pts-label", "symbol-sort-key", null],
         ["getLayoutProperty", "layer-pts-label", "visibility"],
+        ["getFilter", "layer-pts-label"],
         ["getLayer", "layer-pts-label"],
         ["getLayer", "layer-pts-label"],
         ["getLayer", "anchor-layer"],
