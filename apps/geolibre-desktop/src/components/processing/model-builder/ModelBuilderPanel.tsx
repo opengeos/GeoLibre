@@ -26,9 +26,7 @@ import {
   DropdownMenuLabel,
   DropdownMenuTrigger,
   Input,
-  Label,
   ScrollArea,
-  Select,
   cn,
 } from "@geolibre/ui";
 import {
@@ -49,7 +47,6 @@ import {
   Plus,
   Redo2,
   Save,
-  Trash2,
   Undo2,
   Upload,
   X,
@@ -65,13 +62,11 @@ import {
   useState,
   type CSSProperties,
   type DragEvent as ReactDragEvent,
-  type KeyboardEvent as ReactKeyboardEvent,
   type PointerEvent as ReactPointerEvent,
   type ReactElement,
 } from "react";
 import { useTranslation } from "react-i18next";
 import type { ParseKeys } from "i18next";
-import { clamp } from "../../../lib/clamp";
 import { createDuckDbCapability } from "../../../lib/duckdb-processing";
 import { modelGraphToPython } from "../../../lib/model-python-script";
 import {
@@ -81,8 +76,6 @@ import {
 } from "../../../lib/model-tool-catalog";
 import {
   modelProviderCatalog,
-  translateModelToolGroup,
-  translateToolDescription,
   translateToolGroup,
   translateToolName,
 } from "../../../lib/processing-tool-i18n";
@@ -103,14 +96,10 @@ import {
   layoutGraph,
   moveNode,
   moveNodes,
-  portFeedsOutput,
   pushModelHistory,
   redoModelHistory,
   removeEdge,
-  removeNode,
   removeNodes,
-  setNodeField,
-  setNodeParameter,
   settleNode,
   undoModelHistory,
   type ModelHistoryState,
@@ -135,50 +124,10 @@ import { translateIssue } from "./model-builder-labels";
 import { stepsToGraph, layerToModelValue, executeModelTool } from "./model-tool-execution";
 import { GraphEdges } from "./GraphEdges";
 import { GraphNodeCard } from "./GraphNodeCard";
-import { NodeInspector } from "./NodeInspector";
-
-/** MIME type carrying a palette tool key through an HTML5 drag. */
-const TOOL_DRAG_TYPE = "application/x-geolibre-model-tool";
-/** Bounds on the draggable palette and inspector columns, in pixels. */
-const MIN_SIDE_WIDTH = 140;
-const MAX_SIDE_WIDTH = 480;
-const DEFAULT_PALETTE_WIDTH = 208;
-const DEFAULT_INSPECTOR_WIDTH = 224;
-/** Bounds on the draggable log pane, in pixels. */
-const MIN_LOG_HEIGHT = 56;
-const MAX_LOG_HEIGHT = 420;
-const DEFAULT_LOG_HEIGHT = 96;
-/** Share of the panel height the log pane may take, so the canvas survives. */
-const MAX_LOG_FRACTION = 0.6;
-
-/**
- * Share of the panel a single side column may take. Both columns are
- * `shrink-0`, so without this two columns dragged wide (or a panel later
- * resized narrow) would squeeze the canvas between them to nothing with no way
- * left to grab a node and drag the column back.
- */
-const MAX_SIDE_FRACTION = 0.4;
-
-/**
- * Preferred floors. They are *preferences*, not hard limits: a container
- * narrower than this gets a panel narrower than this, because a panel that
- * refuses to shrink below 820px on a 420px screen simply hangs off the edge
- * with its Run and Close buttons unreachable.
- */
-const MIN_WIDTH = 820;
-const MIN_HEIGHT = 420;
-/** Absolute floors, below which the panel stops being usable at all. */
-const FLOOR_WIDTH = 260;
-const FLOOR_HEIGHT = 220;
-/** Width a side pane takes when it overlays the canvas in compact mode. */
-const COMPACT_PANE_WIDTH = 240;
-/**
- * Below this the palette, canvas and inspector cannot share a row: three
- * columns leave the canvas a sliver. The side panes become overlays opened one
- * at a time from the title bar instead, so the canvas keeps the full width.
- */
-const COMPACT_WIDTH = 720;
-const EDGE_MARGIN = 12;
+import { TOOL_DRAG_TYPE } from "./model-builder-constants";
+import { ModelBuilderInspectorPane } from "./ModelBuilderInspectorPane";
+import { ModelBuilderPalette } from "./ModelBuilderPalette";
+import { useModelBuilderWindow } from "./useModelBuilderWindow";
 
 interface ModelBuilderPanelProps {
   mapControllerRef: React.RefObject<MapEngine | null>;
@@ -244,19 +193,28 @@ export function ModelBuilderPanel({
   const saveModel = useAppStore((s) => s.saveModel);
   const deleteModel = useAppStore((s) => s.deleteModel);
   const addGeoJsonLayer = useAppStore((s) => s.addGeoJsonLayer);
-
-  const [position, setPosition] = useState({ x: 48, y: 48 });
-  const [size, setSize] = useState({ width: 980, height: 560 });
-  const [maximized, setMaximized] = useState(false);
-  const [paletteWidth, setPaletteWidth] = useState(DEFAULT_PALETTE_WIDTH);
-  const [inspectorWidth, setInspectorWidth] = useState(DEFAULT_INSPECTOR_WIDTH);
-  const [logHeight, setLogHeight] = useState(DEFAULT_LOG_HEIGHT);
-  /**
-   * Collapsed to just the title bar, so the map underneath can be read without
-   * closing the panel and losing the model on the canvas. A run keeps going
-   * while collapsed — the point is to watch its results land.
-   */
-  const [minimized, setMinimized] = useState(false);
+  const {
+    position,
+    size,
+    maximized,
+    paletteWidth,
+    inspectorWidth,
+    logHeight,
+    minimized,
+    setMinimized,
+    sectionRef,
+    handleDragStart,
+    compact,
+    maxSideWidth,
+    handleSideResizeStart,
+    maxLogHeight,
+    handleLogResizeStart,
+    handleLogResizeKey,
+    handleSideResizeKey,
+    handleResizeKey,
+    handleResizeStart,
+    toggleMaximized,
+  } = useModelBuilderWindow({ open });
   /**
    * Which side pane is showing in compact mode, where they overlay the canvas
    * rather than sit beside it. Null means neither, which is the useful default
@@ -422,7 +380,6 @@ export function ModelBuilderPanel({
     armedPortRef.current = armedPort;
   }, [armedPort]);
   const abortRef = useRef<AbortController | null>(null);
-  const sectionRef = useRef<HTMLElement | null>(null);
   const canvasRef = useRef<HTMLDivElement | null>(null);
   /**
    * The canvas and run state as of the latest render, so a sample that is
@@ -434,58 +391,8 @@ export function ModelBuilderPanel({
     latestRef.current = { graph, modelName, running };
   }, [graph, modelName, running]);
   const importRef = useRef<HTMLInputElement | null>(null);
-  const restoredGeometryRef = useRef<{
-    position: { x: number; y: number };
-    size: { width: number; height: number };
-  } | null>(null);
 
   const appendLog = useCallback((line: string) => setLog((prev) => [...prev, line]), []);
-
-  /**
-   * Keep the panel inside the map area.
-   *
-   * The default size assumes a full-width map; open side panels, a small
-   * window or a phone leave much less. The floors here are the *smaller* of
-   * the preferred minimum and what the container actually offers, so the panel
-   * shrinks to fit instead of hanging off the edge with its buttons out of
-   * reach.
-   */
-  const sizeRef = useRef(size);
-  sizeRef.current = size;
-
-  const fitToContainer = useCallback(() => {
-    const bounds = sectionRef.current?.parentElement?.getBoundingClientRect();
-    if (!bounds) return;
-    if (maximized) {
-      setPosition({ x: 0, y: 0 });
-      setSize({ width: bounds.width, height: bounds.height });
-      return;
-    }
-    const currentSize = sizeRef.current;
-    const maxWidth = Math.max(FLOOR_WIDTH, bounds.width - EDGE_MARGIN * 2);
-    const maxHeight = Math.max(FLOOR_HEIGHT, bounds.height - EDGE_MARGIN * 2);
-    const width = clamp(currentSize.width, Math.min(MIN_WIDTH, maxWidth), maxWidth);
-    const height = clamp(currentSize.height, Math.min(MIN_HEIGHT, maxHeight), maxHeight);
-    if (width !== currentSize.width || height !== currentSize.height) setSize({ width, height });
-    setPosition((current) => ({
-      x: clamp(current.x, 0, Math.max(0, bounds.width - width - EDGE_MARGIN)),
-      y: clamp(current.y, 0, Math.max(0, bounds.height - height - EDGE_MARGIN)),
-    }));
-  }, [maximized]);
-
-  // Re-fit whenever the map area changes, not just when the panel opens: a
-  // resized window or a side panel opening would otherwise leave the panel
-  // sized for a viewport that is gone. The observed element is the map area,
-  // which the panel does not affect, so this cannot feed back on itself.
-  useLayoutEffect(() => {
-    if (!open) return;
-    fitToContainer();
-    const host = sectionRef.current?.parentElement;
-    if (!host || typeof ResizeObserver === "undefined") return;
-    const observer = new ResizeObserver(() => fitToContainer());
-    observer.observe(host);
-    return () => observer.disconnect();
-  }, [open, fitToContainer]);
 
   // Load both registries once the panel is first opened. The Whitebox catalog is
   // a fetched snapshot and the WASM manifests load the binary, so they run
@@ -1012,6 +919,7 @@ export function ModelBuilderPanel({
     handleDeleteSelected,
     selectedNodeId,
     selectedNodeIds.size,
+    sectionRef,
   ]);
 
   const handleCanvasDrop = useCallback(
@@ -1439,265 +1347,6 @@ export function ModelBuilderPanel({
     }
   }, [pythonScript, appendLog, t]);
 
-  // --- Panel chrome -------------------------------------------------------
-
-  const handleDragStart = (event: ReactPointerEvent<HTMLDivElement>) => {
-    if (maximized) return;
-    if ((event.target as HTMLElement).closest("button, input")) return;
-    const handle = event.currentTarget;
-    // React bubbles events from portaled content (the Samples menu) through
-    // the component tree, so a click on a menu item reaches this handler
-    // although the item is not inside the title bar. Capturing the pointer
-    // here would steal the item's click.
-    if (!handle.contains(event.target as Node)) return;
-    event.preventDefault();
-    handle.setPointerCapture(event.pointerId);
-    const card = handle.closest("section") as HTMLElement;
-    const startX = event.clientX;
-    const startY = event.clientY;
-    const origin = position;
-    const handleMove = (move: PointerEvent) => {
-      const bounds = card.parentElement?.getBoundingClientRect();
-      const maxX = bounds ? bounds.width - card.offsetWidth - EDGE_MARGIN : Infinity;
-      const maxY = bounds ? bounds.height - card.offsetHeight - EDGE_MARGIN : Infinity;
-      setPosition({
-        x: clamp(origin.x + (move.clientX - startX), 0, Math.max(0, maxX)),
-        y: clamp(origin.y + (move.clientY - startY), 0, Math.max(0, maxY)),
-      });
-    };
-    const handleEnd = () => {
-      if (handle.hasPointerCapture(event.pointerId)) handle.releasePointerCapture(event.pointerId);
-      handle.removeEventListener("pointermove", handleMove);
-      handle.removeEventListener("pointerup", handleEnd);
-      handle.removeEventListener("pointercancel", handleEnd);
-    };
-    handle.addEventListener("pointermove", handleMove);
-    handle.addEventListener("pointerup", handleEnd);
-    handle.addEventListener("pointercancel", handleEnd);
-  };
-
-  /**
-   * Drag one of the two column splitters.
-   *
-   * The palette grows as the pointer moves towards the canvas and the
-   * inspector grows as it moves away from it, which in a mirrored (RTL) layout
-   * is the opposite screen direction — hence the sign taken from the element's
-   * computed `direction` rather than assuming left-to-right.
-   */
-  /**
-   * Too narrow for three columns. The side panes overlay the canvas instead of
-   * splitting the row with it, and the toolbar drops its button labels.
-   */
-  const compact = size.width < COMPACT_WIDTH;
-
-  /** Resize floors, matching what {@link fitToContainer} allows. */
-  const hostBounds = sectionRef.current?.parentElement?.getBoundingClientRect();
-  const minWidth = Math.min(
-    MIN_WIDTH,
-    Math.max(FLOOR_WIDTH, (hostBounds?.width ?? MIN_WIDTH) - EDGE_MARGIN * 2),
-  );
-  const minHeight = Math.min(
-    MIN_HEIGHT,
-    Math.max(FLOOR_HEIGHT, (hostBounds?.height ?? MIN_HEIGHT) - EDGE_MARGIN * 2),
-  );
-
-  /** Upper bound for one side column at the panel's current width. */
-  const maxSideWidth = Math.max(
-    MIN_SIDE_WIDTH,
-    Math.min(MAX_SIDE_WIDTH, size.width * MAX_SIDE_FRACTION),
-  );
-
-  const handleSideResizeStart = useCallback(
-    (event: ReactPointerEvent<HTMLDivElement>, side: "palette" | "inspector") => {
-      event.preventDefault();
-      event.stopPropagation();
-      const handle = event.currentTarget;
-      handle.setPointerCapture(event.pointerId);
-      const dirSign = getComputedStyle(handle).direction === "rtl" ? -1 : 1;
-      const sideSign = side === "palette" ? 1 : -1;
-      const startX = event.clientX;
-      const start = side === "palette" ? paletteWidth : inspectorWidth;
-      const setWidth = side === "palette" ? setPaletteWidth : setInspectorWidth;
-      const handleMove = (move: PointerEvent) => {
-        setWidth(
-          clamp(start + (move.clientX - startX) * dirSign * sideSign, MIN_SIDE_WIDTH, maxSideWidth),
-        );
-      };
-      const handleEnd = () => {
-        if (handle.hasPointerCapture(event.pointerId))
-          handle.releasePointerCapture(event.pointerId);
-        handle.removeEventListener("pointermove", handleMove);
-        handle.removeEventListener("pointerup", handleEnd);
-        handle.removeEventListener("pointercancel", handleEnd);
-      };
-      handle.addEventListener("pointermove", handleMove);
-      handle.addEventListener("pointerup", handleEnd);
-      handle.addEventListener("pointercancel", handleEnd);
-    },
-    [paletteWidth, inspectorWidth, maxSideWidth],
-  );
-
-  /** Upper bound for the log pane at the panel's current height. */
-  const maxLogHeight = Math.max(
-    MIN_LOG_HEIGHT,
-    Math.min(MAX_LOG_HEIGHT, size.height * MAX_LOG_FRACTION),
-  );
-
-  /**
-   * Drag the splitter above the log pane. Dragging up grows it, which is the
-   * direction that reveals more of the run output. Vertical, so unlike the
-   * column splitters this needs no writing-direction handling.
-   */
-  const handleLogResizeStart = useCallback(
-    (event: ReactPointerEvent<HTMLDivElement>) => {
-      event.preventDefault();
-      event.stopPropagation();
-      const handle = event.currentTarget;
-      handle.setPointerCapture(event.pointerId);
-      const startY = event.clientY;
-      const start = logHeight;
-      const handleMove = (move: PointerEvent) => {
-        setLogHeight(clamp(start - (move.clientY - startY), MIN_LOG_HEIGHT, maxLogHeight));
-      };
-      const handleEnd = () => {
-        if (handle.hasPointerCapture(event.pointerId))
-          handle.releasePointerCapture(event.pointerId);
-        handle.removeEventListener("pointermove", handleMove);
-        handle.removeEventListener("pointerup", handleEnd);
-        handle.removeEventListener("pointercancel", handleEnd);
-      };
-      handle.addEventListener("pointermove", handleMove);
-      handle.addEventListener("pointerup", handleEnd);
-      handle.addEventListener("pointercancel", handleEnd);
-    },
-    [logHeight, maxLogHeight],
-  );
-
-  /** Keyboard path for the log splitter. */
-  const handleLogResizeKey = useCallback(
-    (event: ReactKeyboardEvent<HTMLDivElement>) => {
-      const step = event.key === "ArrowUp" ? 16 : event.key === "ArrowDown" ? -16 : 0;
-      if (!step) return;
-      event.preventDefault();
-      setLogHeight((current) => clamp(current + step, MIN_LOG_HEIGHT, maxLogHeight));
-    },
-    [maxLogHeight],
-  );
-
-  /** Keyboard path for the splitters, so a column is resizable without a mouse. */
-  const handleSideResizeKey = useCallback(
-    (event: ReactKeyboardEvent<HTMLDivElement>, side: "palette" | "inspector") => {
-      const step = event.key === "ArrowLeft" ? -16 : event.key === "ArrowRight" ? 16 : 0;
-      if (!step) return;
-      event.preventDefault();
-      const dirSign = getComputedStyle(event.currentTarget).direction === "rtl" ? -1 : 1;
-      const sideSign = side === "palette" ? 1 : -1;
-      const setWidth = side === "palette" ? setPaletteWidth : setInspectorWidth;
-      setWidth((current) =>
-        clamp(current + step * dirSign * sideSign, MIN_SIDE_WIDTH, maxSideWidth),
-      );
-    },
-    [maxSideWidth],
-  );
-
-  /**
-   * Keyboard path for the panel's own resize grip, matching the column
-   * splitters: arrows grow or shrink the panel a step at a time. The panel is
-   * clamped to its container the same way the pointer drag is.
-   */
-  const handleResizeKey = useCallback(
-    (event: ReactKeyboardEvent<HTMLDivElement>) => {
-      const dx = event.key === "ArrowLeft" ? -16 : event.key === "ArrowRight" ? 16 : 0;
-      const dy = event.key === "ArrowUp" ? -16 : event.key === "ArrowDown" ? 16 : 0;
-      if (!dx && !dy) return;
-      event.preventDefault();
-      const dirSign = getComputedStyle(event.currentTarget).direction === "rtl" ? -1 : 1;
-      const bounds = (
-        event.currentTarget.closest("section") as HTMLElement | null
-      )?.parentElement?.getBoundingClientRect();
-      const maxWidth = bounds ? bounds.width - position.x - EDGE_MARGIN : Infinity;
-      const maxHeight = bounds ? bounds.height - position.y - EDGE_MARGIN : Infinity;
-      setSize((current) => ({
-        width: clamp(current.width + dx * dirSign, minWidth, Math.max(minWidth, maxWidth)),
-        height: clamp(current.height + dy, minHeight, Math.max(minHeight, maxHeight)),
-      }));
-    },
-    [position.x, position.y, minWidth, minHeight],
-  );
-
-  const handleResizeStart = (event: ReactPointerEvent<HTMLDivElement>) => {
-    event.preventDefault();
-    event.stopPropagation();
-    const handle = event.currentTarget;
-    handle.setPointerCapture(event.pointerId);
-    const isRtl = getComputedStyle(handle).direction === "rtl";
-    const startX = event.clientX;
-    const startY = event.clientY;
-    const start = size;
-    const startLeft = position.x;
-    const startRight = startLeft + start.width;
-    const handleMove = (move: PointerEvent) => {
-      const bounds = (
-        handle.closest("section") as HTMLElement
-      )?.parentElement?.getBoundingClientRect();
-      const maxHeight = bounds ? bounds.height - position.y - EDGE_MARGIN : Infinity;
-      const nextHeight = clamp(
-        start.height + (move.clientY - startY),
-        minHeight,
-        Math.max(minHeight, maxHeight),
-      );
-      if (isRtl) {
-        // In RTL the `end-0` grip sits on the left edge while the panel is
-        // positioned with `left: position.x`: keep the right edge anchored and
-        // shift `position.x` as the clamped width changes.
-        const maxWidth = bounds ? startRight - EDGE_MARGIN : Infinity;
-        const nextWidth = clamp(
-          start.width - (move.clientX - startX),
-          minWidth,
-          Math.max(minWidth, maxWidth),
-        );
-        setSize({ width: nextWidth, height: nextHeight });
-        setPosition((current) => ({ ...current, x: startRight - nextWidth }));
-        return;
-      }
-      const maxWidth = bounds ? bounds.width - startLeft - EDGE_MARGIN : Infinity;
-      setSize({
-        width: clamp(start.width + (move.clientX - startX), minWidth, Math.max(minWidth, maxWidth)),
-        height: nextHeight,
-      });
-    };
-    const handleEnd = () => {
-      if (handle.hasPointerCapture(event.pointerId)) handle.releasePointerCapture(event.pointerId);
-      handle.removeEventListener("pointermove", handleMove);
-      handle.removeEventListener("pointerup", handleEnd);
-      handle.removeEventListener("pointercancel", handleEnd);
-    };
-    handle.addEventListener("pointermove", handleMove);
-    handle.addEventListener("pointerup", handleEnd);
-    handle.addEventListener("pointercancel", handleEnd);
-  };
-
-  const toggleMaximized = useCallback(() => {
-    if (maximized) {
-      const restored = restoredGeometryRef.current;
-      if (restored) {
-        setPosition(restored.position);
-        setSize(restored.size);
-      }
-      restoredGeometryRef.current = null;
-      setMaximized(false);
-      return;
-    }
-
-    const bounds = sectionRef.current?.parentElement?.getBoundingClientRect();
-    if (!bounds) return;
-    restoredGeometryRef.current = { position, size };
-    setMinimized(false);
-    setPosition({ x: 0, y: 0 });
-    setSize({ width: bounds.width, height: bounds.height });
-    setMaximized(true);
-  }, [maximized, position, size]);
-
   if (!open) return null;
 
   const canvasExtent = graph.nodes.reduce(
@@ -2048,153 +1697,20 @@ export function ModelBuilderPanel({
           {/* Palette. Compact: an overlay over the canvas, opened from the
               toolbar, so three columns never have to share a narrow row. */}
           {(!compact || compactPane === "palette") && (
-            <div
-              className={cn(
-                "flex flex-col bg-card",
-                compact ? "absolute inset-y-0 start-0 z-20 shadow-lg" : "shrink-0",
-                "border-e",
-              )}
-              style={{
-                width: compact
-                  ? Math.min(COMPACT_PANE_WIDTH, Math.max(160, size.width - 48))
-                  : Math.min(paletteWidth, maxSideWidth),
-              }}
-            >
-              <div className="space-y-1 border-b p-2">
-                <Input
-                  value={search}
-                  onChange={(event) => setSearch(event.target.value)}
-                  placeholder={t("processing.modelBuilder.searchTools")}
-                  aria-label={t("processing.modelBuilder.searchTools")}
-                  className="h-7 text-xs"
-                />
-                <div className="flex gap-1">
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="h-6 flex-1 px-1 text-[11px]"
-                    onClick={() => addNode("input")}
-                  >
-                    {t("processing.modelBuilder.addInputNode")}
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="h-6 flex-1 px-1 text-[11px]"
-                    onClick={() => addNode("output")}
-                  >
-                    {t("processing.modelBuilder.addOutputNode")}
-                  </Button>
-                </div>
-                <div className="pt-1">
-                  <div className="flex items-center justify-between pb-1">
-                    <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                      {t("processing.modelBuilder.controlFlow.heading")}
-                    </span>
-                  </div>
-                  <div className="grid grid-cols-2 gap-1">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="h-6 justify-start px-1.5 text-[10px] truncate"
-                      onClick={() => addControlFlowNode("iterate-features")}
-                      title={t("processing.modelBuilder.controlFlow.add.iterateFeaturesTitle")}
-                    >
-                      {t("processing.modelBuilder.controlFlow.add.iterateFeatures")}
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="h-6 justify-start px-1.5 text-[10px] truncate"
-                      onClick={() => addControlFlowNode("iterate-rasters")}
-                      title={t("processing.modelBuilder.controlFlow.add.iterateRastersTitle")}
-                    >
-                      {t("processing.modelBuilder.controlFlow.add.iterateRasters")}
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="h-6 justify-start px-1.5 text-[10px] truncate"
-                      onClick={() => addControlFlowNode("conditional-switch")}
-                      title={t("processing.modelBuilder.controlFlow.add.switchTitle")}
-                    >
-                      {t("processing.modelBuilder.controlFlow.add.switch")}
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="h-6 justify-start px-1.5 text-[10px] truncate"
-                      onClick={() => addControlFlowNode("conditional-merge")}
-                      title={t("processing.modelBuilder.controlFlow.add.mergeTitle")}
-                    >
-                      {t("processing.modelBuilder.controlFlow.add.merge")}
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="col-span-2 h-6 justify-center px-1.5 text-[10px] truncate"
-                      onClick={() => addControlFlowNode("collect-results")}
-                      title={t("processing.modelBuilder.controlFlow.add.collectTitle")}
-                    >
-                      {t("processing.modelBuilder.controlFlow.add.collect")}
-                    </Button>
-                  </div>
-                </div>
-              </div>
-              <ScrollArea className="min-h-0 flex-1 p-2">
-                {catalog.length === 0 ? (
-                  <p className="p-2 text-xs text-muted-foreground">
-                    {t("processing.modelBuilder.loadingTools")}
-                  </p>
-                ) : groups.length === 0 ? (
-                  <p className="p-2 text-xs text-muted-foreground">
-                    {t("processing.modelBuilder.noToolsMatch")}
-                  </p>
-                ) : (
-                  groups.map((group) => (
-                    <div key={group.group} className="mb-2">
-                      <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                        {translateModelToolGroup(t, group)}
-                      </p>
-                      {group.tools.map((tool) => {
-                        const catalog = modelProviderCatalog(tool.provider);
-                        const toolMeta = {
-                          id: tool.toolId,
-                          name: tool.name,
-                          description: tool.description,
-                        };
-                        const name = translateToolName(t, catalog, toolMeta);
-                        // `||`, not `??`: a tool with no description (or one whose
-                        // catalog entry is an empty string) should get the name as
-                        // its tooltip rather than an empty one.
-                        const tooltip = translateToolDescription(t, catalog, toolMeta) || name;
-                        return (
-                          // A real button, not a bare draggable div: dragging is the
-                          // only other way to add a tool node, so a div here would put
-                          // the panel's core interaction out of reach of the keyboard
-                          // entirely. Activating it drops the node onto the canvas.
-                          <button
-                            key={tool.key}
-                            type="button"
-                            draggable
-                            onDragStart={(event) => {
-                              event.dataTransfer.setData(TOOL_DRAG_TYPE, tool.key);
-                              event.dataTransfer.effectAllowed = "copy";
-                            }}
-                            onClick={() => addToolAtDefault(tool)}
-                            title={tooltip}
-                            aria-label={t("processing.modelBuilder.addToolNode", { tool: name })}
-                            className="w-full cursor-grab truncate rounded px-1.5 py-1 text-start text-xs hover:bg-accent active:cursor-grabbing"
-                          >
-                            {name}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  ))
-                )}
-              </ScrollArea>
-            </div>
+            <ModelBuilderPalette
+              compact={compact}
+              size={size}
+              paletteWidth={paletteWidth}
+              maxSideWidth={maxSideWidth}
+              search={search}
+              setSearch={setSearch}
+              t={t}
+              addNode={addNode}
+              addControlFlowNode={addControlFlowNode}
+              catalog={catalog}
+              groups={groups}
+              addToolAtDefault={addToolAtDefault}
+            />
           )}
           {!compact && (
             <div
@@ -2323,107 +1839,27 @@ export function ModelBuilderPanel({
 
           {/* Inspector */}
           {(!compact || compactPane === "inspector") && (
-            <div
-              className={cn(
-                "flex flex-col border-s bg-card",
-                compact ? "absolute inset-y-0 end-0 z-20 shadow-lg" : "shrink-0",
-              )}
-              style={{
-                width: compact
-                  ? Math.min(COMPACT_PANE_WIDTH, Math.max(160, size.width - 48))
-                  : Math.min(inspectorWidth, maxSideWidth),
-              }}
-            >
-              <ScrollArea className="min-h-0 flex-1 p-2">
-                <NodeInspector
-                  node={selectedNode}
-                  descriptor={
-                    selectedNode
-                      ? resolveDescriptor(selectedNode.provider, selectedNode.toolId)
-                      : undefined
-                  }
-                  layers={layers}
-                  graph={graph}
-                  fieldsByLayer={fieldsByLayer}
-                  issues={selectedNode ? (issuesByNode.get(selectedNode.id) ?? []) : []}
-                  keptPorts={
-                    selectedNode
-                      ? new Set(
-                          (
-                            resolveDescriptor(selectedNode.provider, selectedNode.toolId)
-                              ?.outputs ?? []
-                          )
-                            .filter((port) => portFeedsOutput(graph, selectedNode.id, port.id))
-                            .map((port) => port.id),
-                        )
-                      : new Set<string>()
-                  }
-                  onKeepResult={(portId, name) =>
-                    selectedNode && handleKeepResult(selectedNode.id, portId, name)
-                  }
-                  onFieldChange={(field, value) =>
-                    selectedNode &&
-                    commitGraph(
-                      (current) => setNodeField(current, selectedNode.id, field, value),
-                      `field:${selectedNode.id}:${field}`,
-                    )
-                  }
-                  onParamChange={(paramId, value) =>
-                    selectedNode &&
-                    commitGraph(
-                      (current) => setNodeParameter(current, selectedNode.id, paramId, value),
-                      `param:${selectedNode.id}:${paramId}`,
-                    )
-                  }
-                  onRemove={() => {
-                    if (!selectedNode) return;
-                    commitGraph((current) => removeNode(current, selectedNode.id));
-                    // An armed port on the node being deleted would otherwise stay
-                    // armed and wire the next activation to a node that is gone.
-                    setArmedPort((current) =>
-                      current?.nodeId === selectedNode.id ? null : current,
-                    );
-                    selectSingleNode(null);
-                  }}
-                />
-              </ScrollArea>
-              {savedModels.length > 0 && (
-                <div className="border-t p-2">
-                  <Label htmlFor="model-saved-picker" className="text-[11px]">
-                    {t("processing.modelBuilder.savedModels")}
-                  </Label>
-                  <div className="mt-1 flex items-center gap-1">
-                    <Select
-                      id="model-saved-picker"
-                      className="h-7 min-w-0 flex-1 text-xs"
-                      value=""
-                      onChange={(event) => {
-                        const model = savedModels.find((entry) => entry.id === event.target.value);
-                        if (model) handleLoadModel(model);
-                      }}
-                    >
-                      <option value="">{t("processing.modelBuilder.loadModelPlaceholder")}</option>
-                      {savedModels.map((model) => (
-                        <option key={model.id} value={model.id}>
-                          {model.name || t("processing.modelBuilder.untitledModel")}
-                        </option>
-                      ))}
-                    </Select>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="h-7 w-7 shrink-0 p-0"
-                      onClick={handleDeleteModel}
-                      disabled={!savedModels.some((model) => model.id === modelId)}
-                      title={t("processing.modelBuilder.deleteModel")}
-                      aria-label={t("processing.modelBuilder.deleteModel")}
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </Button>
-                  </div>
-                </div>
-              )}
-            </div>
+            <ModelBuilderInspectorPane
+              compact={compact}
+              size={size}
+              inspectorWidth={inspectorWidth}
+              maxSideWidth={maxSideWidth}
+              selectedNode={selectedNode}
+              resolveDescriptor={resolveDescriptor}
+              layers={layers}
+              graph={graph}
+              fieldsByLayer={fieldsByLayer}
+              issuesByNode={issuesByNode}
+              handleKeepResult={handleKeepResult}
+              commitGraph={commitGraph}
+              setArmedPort={setArmedPort}
+              selectSingleNode={selectSingleNode}
+              savedModels={savedModels}
+              t={t}
+              handleLoadModel={handleLoadModel}
+              handleDeleteModel={handleDeleteModel}
+              modelId={modelId}
+            />
           )}
         </div>
       )}

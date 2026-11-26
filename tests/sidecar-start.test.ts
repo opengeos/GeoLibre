@@ -5,10 +5,26 @@ import {
   startGeoLibreSidecar,
   StaleSidecarError,
   stopGeoLibreSidecar,
-  subscribeSidecarRelay,
-  updateLiveMcpAccess,
 } from "../apps/geolibre-desktop/src/lib/sidecar";
-import { useDesktopSettingsStore } from "../apps/geolibre-desktop/src/hooks/useDesktopSettings";
+import { checkSidecarHealth, setSidecarFetch } from "../packages/processing/src/sidecar-client";
+
+/**
+ * The token the sidecar client currently attaches: what a start publishes and a
+ * stop clears.
+ */
+async function currentSidecarToken(): Promise<string | null> {
+  let token: string | null = null;
+  setSidecarFetch(async (_input, init) => {
+    token = new Headers(init?.headers).get("X-GeoLibre-Token");
+    return new Response("{}", { status: 500 });
+  });
+  try {
+    await checkSidecarHealth("http://127.0.0.1:8765");
+  } finally {
+    setSidecarFetch(null);
+  }
+  return token;
+}
 
 // Tauri rejects a failed `Result<_, String>` command with the bare string. The
 // stale-sidecar case must become a StaleSidecarError so best-effort callers
@@ -84,103 +100,41 @@ it("does not republish a start response delivered after stop completes", async (
           : Promise.resolve(),
     },
   };
-  const seen: unknown[] = [];
-  const unsubscribe = subscribeSidecarRelay((info) => seen.push(info));
-  try {
-    const starting = startGeoLibreSidecar();
-    await stopGeoLibreSidecar();
-    finishStart({ baseUrl: "http://127.0.0.1:8765", port: 8765, token: "obsolete" });
-    await starting;
-    assert.deepEqual(seen, [null]);
-  } finally {
-    unsubscribe();
-  }
+  const starting = startGeoLibreSidecar();
+  await stopGeoLibreSidecar();
+  finishStart({ baseUrl: "http://127.0.0.1:8765", port: 8765, token: "obsolete" });
+  await starting;
+  assert.equal(await currentSidecarToken(), null);
 });
 
-it("keeps processing startup successful when relay access synchronization fails", async () => {
-  const originalFetch = globalThis.fetch;
-  const originalSettings = useDesktopSettingsStore.getState().desktopSettings;
-  useDesktopSettingsStore.setState({
-    desktopSettings: {
-      ...originalSettings,
-      startup: { ...originalSettings.startup, allowLiveMcp: true },
-    },
-  });
-  let requests = 0;
-  const info = { baseUrl: "http://127.0.0.1:8765", port: 8765, token: "processing" };
-  globals.window = { __TAURI_INTERNALS__: { invoke: async () => info } };
-  globalThis.fetch = async () => {
-    requests += 1;
-    throw new Error("relay unavailable");
-  };
-  try {
-    assert.deepEqual(await startGeoLibreSidecar(), info);
-    await updateLiveMcpAccess();
-    assert.ok(requests > 0);
-  } finally {
-    await stopGeoLibreSidecar();
-    globalThis.fetch = originalFetch;
-    useDesktopSettingsStore.setState({ desktopSettings: originalSettings });
-  }
-});
-
-it("applies opt-in and revocation to a running sidecar without stopping it", async () => {
-  const originalFetch = globalThis.fetch;
-  const originalSettings = useDesktopSettingsStore.getState().desktopSettings;
+it("never touches Live MCP access: the desktop shell hosts that relay", async () => {
   const commands: string[] = [];
-  const requests: { enabled: boolean }[] = [];
-  const relayStates: unknown[] = [];
-  const unsubscribe = subscribeSidecarRelay((info) => relayStates.push(info));
+  const info = { baseUrl: "http://127.0.0.1:8765", port: 8765, token: "processing" };
   globals.window = {
     __TAURI_INTERNALS__: {
       invoke: async (command: string) => {
         commands.push(command);
-        return { baseUrl: "http://127.0.0.1:8765", port: 8765, token: "current" };
+        return info;
       },
     },
   };
-  globalThis.fetch = async (input, init) => {
-    assert.equal(input, "http://127.0.0.1:8765/relay/access");
-    assert.equal(new Headers(init?.headers).get("X-GeoLibre-Token"), "current");
-    requests.push(JSON.parse(String(init?.body)));
-    return new Response("{}", { status: 200 });
+  const originalFetch = globalThis.fetch;
+  let requests = 0;
+  globalThis.fetch = async () => {
+    requests += 1;
+    return new Response("{}");
   };
-  const setAllowed = (enabled: boolean) =>
-    useDesktopSettingsStore.setState({
-      desktopSettings: {
-        ...originalSettings,
-        startup: { ...originalSettings.startup, allowLiveMcp: enabled },
-      },
-    });
   try {
-    setAllowed(false);
-    await startGeoLibreSidecar();
-    setAllowed(true);
-    await updateLiveMcpAccess();
-    assert.ok(relayStates.at(-1));
-    setAllowed(false);
-    const revocation = updateLiveMcpAccess();
-    assert.equal(relayStates.at(-1), null);
-    await revocation;
-    assert.deepEqual(requests, [{ enabled: true }, { enabled: false }]);
-    assert.deepEqual(commands, ["start_geolibre_sidecar"]);
-  } finally {
+    assert.deepEqual(await startGeoLibreSidecar(), info);
     await stopGeoLibreSidecar();
+    assert.deepEqual(commands, ["start_geolibre_sidecar", "stop_geolibre_sidecar"]);
+    assert.equal(requests, 0);
+  } finally {
     globalThis.fetch = originalFetch;
-    useDesktopSettingsStore.setState({ desktopSettings: originalSettings });
-    unsubscribe();
   }
 });
 
 it("reports a failed stop without claiming the running sidecar stopped", async () => {
-  const originalFetch = globalThis.fetch;
-  const originalSettings = useDesktopSettingsStore.getState().desktopSettings;
-  useDesktopSettingsStore.setState({
-    desktopSettings: {
-      ...originalSettings,
-      startup: { ...originalSettings.startup, allowLiveMcp: true },
-    },
-  });
   const info = { baseUrl: "http://127.0.0.1:8765", port: 8765, token: "still-running" };
   let failStop = true;
   globals.window = {
@@ -191,20 +145,13 @@ it("reports a failed stop without claiming the running sidecar stopped", async (
       },
     },
   };
-  globalThis.fetch = async () => Response.json({ enabled: false });
-  const seen: unknown[] = [];
-  const unsubscribe = subscribeSidecarRelay((state) => seen.push(state));
   try {
     await startGeoLibreSidecar();
-    await updateLiveMcpAccess();
     await assert.rejects(stopGeoLibreSidecar(), /stop failed/);
-    assert.equal(seen.at(-1), info);
+    assert.equal(await currentSidecarToken(), "still-running");
   } finally {
     failStop = false;
     await stopGeoLibreSidecar();
-    unsubscribe();
-    globalThis.fetch = originalFetch;
-    useDesktopSettingsStore.setState({ desktopSettings: originalSettings });
   }
 });
 
@@ -223,19 +170,16 @@ it("does not publish a start result while a requested stop is still pending", as
       invoke: (command: string) => (command === "start_geolibre_sidecar" ? startResult : stopped),
     },
   };
-  const states: unknown[] = [];
-  const unsubscribe = subscribeSidecarRelay((state) => states.push(state));
   try {
     const starting = startGeoLibreSidecar();
     const stopping = stopGeoLibreSidecar();
     finishStart(info);
     await starting;
-    assert.equal(states.at(-1), null);
+    assert.equal(await currentSidecarToken(), null);
     finishStop();
     await stopping;
-    assert.equal(states.at(-1), null);
+    assert.equal(await currentSidecarToken(), null);
   } finally {
     finishStop();
-    unsubscribe();
   }
 });
