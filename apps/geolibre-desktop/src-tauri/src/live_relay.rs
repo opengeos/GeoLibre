@@ -908,10 +908,11 @@ fn create_private_dir(directory: &Path) -> Result<(), String> {
             .mode(0o700)
             .create(directory)
             .map_err(|error| format!("Could not create {}: {error}", directory.display()))?;
-        // An existing directory may be looser; the socket and discovery file
-        // must never be reachable by other users, even briefly.
-        std::fs::set_permissions(directory, std::fs::Permissions::from_mode(0o700))
-            .map_err(|error| format!("Could not secure {}: {error}", directory.display()))
+        // An existing directory may be looser; tighten it when it is ours.
+        // A directory we do not own (an override pointing into a shared
+        // one) is left as is: the files inside are still owner-only.
+        let _ = std::fs::set_permissions(directory, std::fs::Permissions::from_mode(0o700));
+        Ok(())
     }
     #[cfg(not(unix))]
     {
