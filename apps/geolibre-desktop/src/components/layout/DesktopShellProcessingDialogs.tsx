@@ -10,6 +10,7 @@ import {
   ConversionDialog,
   GeocodeDialog,
   NetworkToolsDialog,
+  OgcProcessesDialog,
   ProcessingDialog,
   ProcessingHistoryDialog,
   RasterToolsDialog,
@@ -82,6 +83,11 @@ export function DesktopShellProcessingDialogs({
       <MountWhenOpened isOpen={(ui) => ui.networkToolOpen}>
         <Suspense fallback={null}>
           <NetworkToolsDialog mapControllerRef={mapControllerRef} />
+        </Suspense>
+      </MountWhenOpened>
+      <MountWhenOpened isOpen={(ui) => ui.ogcProcessesOpen}>
+        <Suspense fallback={null}>
+          <OgcProcessesDialog mapControllerRef={mapControllerRef} />
         </Suspense>
       </MountWhenOpened>
       <MountWhenOpened isOpen={(ui) => ui.batchToolsOpen}>

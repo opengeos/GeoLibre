@@ -1,6 +1,6 @@
 import { shortestLongitudeExtent } from "@geolibre/core";
 import { convertGeoTiffToCog, readGeoTiffInfo } from "@geolibre/processing";
-import { readLimitedBody } from "../components/layout/add-data/helpers";
+import { readLimitedBody } from "./bounded-response";
 import { OGC_COVERAGE_PROXY_PATH } from "../components/layout/add-data/constants";
 import { proxyFeedRequestUrl } from "./feed-request";
 import { isTauri } from "./is-tauri";

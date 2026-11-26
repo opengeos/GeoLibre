@@ -109,6 +109,7 @@ so and skips the relay; the table notes those cases.
 
 | Feature | Hosts | Builds | Route |
 | --- | --- | --- | --- |
+| OGC API Processes | `demo.pygeoapi.io` is the prefilled demo endpoint, contacted only after Retrieve processes or Run. Users can enter another server; advertised execution/result links may name other hosts. Inputs are sent only by the explicit Run action. | All | Direct (same-origin development proxy during local development) |
 | Basemap picker and Basemaps plugin | CARTO (`basemaps.cartocdn.com`), Esri (`server.arcgisonline.com`, `services.arcgisonline.com`), EOX (`tiles.maps.eox.at`), USGS (`basemap.nationalmap.gov`), NASA GIBS, OpenStreetMap, Protomaps, Mapbox, MapTiler, Stadia, TomTom, HERE, Amazon Location, Tianditu, Google, swisstopo, BKG, Waymarked Trails, OpenRailwayMap. OpenFreeMap is the default basemap (see above). Opening the Basemaps panel loads a thumbnail per visible row, which contacts many of these hosts before the user picks one. Keyed providers receive the key the user or build supplies. | All | Direct |
 | Print Layout overview map | OpenFreeMap styles, tiles, and glyphs (default hosts above), or `tile.openstreetmap.org` when the OpenStreetMap overview basemap is selected. Enabling the overview loads a separate basemap for the print preview and export. | All | Direct |
 | Other planetary basemaps | USGS Astrogeology WMS (`planetarymaps.usgs.gov`) for Mercury, Venus, the Galilean moons, Titan, Pluto, and Charon, reprojected to Web Mercator in the app. Only when the user selects one of those bodies. | All | Direct |
@@ -201,9 +202,9 @@ host the CSP allows, and GeoLibre does not track which. On the desktop,
 `app.nativeFetch` sends a plugin's requests through the native HTTP client,
 which the webview CSP does not govern. It can reach loopback and private LAN
 addresses; it refuses only link-local addresses (including the
-`169.254.169.254` cloud metadata address), unspecified, multicast, and the
-limited broadcast address `255.255.255.255`. Other metadata endpoints, such as
-AWS's IPv6 `fd00:ec2::254`, and subnet-directed broadcasts are not blocked.
+`169.254.169.254` cloud metadata address), AWS's IPv6 metadata address
+`fd00:ec2::254`, unspecified, multicast, and the limited broadcast address
+`255.255.255.255`. Subnet-directed broadcasts are not blocked.
 Review a plugin before
 allowing it, and use `plugins.allowed` to limit which ones load (see
 [Plugin API](plugin-api.md)).
@@ -228,6 +229,20 @@ allowing it, and use `plugins.allowed` to limit which ones load (see
   GeoJSON URLs passed to it.
 
 ## Restricting network access
+
+Native desktop HTTP retains system proxy support, including enterprise proxy
+deployments. For direct connections, GeoLibre's guarded DNS resolver checks
+destination addresses when connecting, and redirect URLs are checked again.
+A configured proxy resolves the destination itself, so GeoLibre cannot verify
+the address that proxy ultimately contacts. The proxy is therefore a trusted
+network component and must enforce the same destination-address policy on
+initial requests, redirects, and DNS resolution changes: block link-local and
+cloud-metadata addresses, unspecified addresses, multicast, and the limited
+broadcast address `255.255.255.255`. Subnet-directed broadcasts are not blocked
+by this policy. Loopback and private/LAN services are intentionally supported by
+GeoLibre. An untrusted proxy or one without the required filtering invalidates
+the DNS-rebinding protection for proxied requests. This is an operator
+deployment requirement, not a guarantee enforced by the desktop resolver.
 
 - **[`deployment.json`](deployment-policy.md)** turns off or redirects the
   GeoLibre-operated services: `sharing.shareUrl: "off"`, `sharing.collabUrl`,

@@ -58,6 +58,7 @@ see [vector import details](user-guide/adding-data.md#files).
 | [OGC API - Coverages](#ogc-api-coverages-numerical-snapshots) | OGC API - Coverages | Discover collections and import bounded numerical GeoTIFF or regular CoverageJSON snapshots. |
 | OGC API - Features | OGC API - Features | Browse collections and load their features. |
 | OGC API - Tiles | OGC Vector Tiles | Vector tile services. |
+| [OGC API - Processes](#ogc-api-processes) | Processing > GeoLibre > OGC API - Processes | Discover remote processes, supply typed inputs, monitor jobs, and download or import their results. |
 | ArcGIS FeatureServer | ArcGIS Layer: Feature layer | Features and attributes from a service URL or portal item. |
 | ArcGIS VectorTileServer | ArcGIS Layer: Vector tile layer | Vector tiles and their styling. |
 | ArcGIS MapServer | ArcGIS Layer: Map service | Cached tiles or rendered exports, with sublayer selection. |
@@ -181,4 +182,116 @@ Metadata is limited to 2 MiB per response. A coverage and all linked domain/rang
 
 The sample preset uses the public pygeoapi GDPS temperature collection and a small bounding box near Toronto. It is sample weather data, not a current forecast. Desktop uses guarded native HTTP; the hosted web app requires CORS support from the service. A successful development-proxy request does not establish hosted-site CORS support.
 
-This import path implements coverage discovery and supported representations. OGC API Processes is a separate capability and is not included.
+This import path implements coverage discovery and supported representations. Remote execution is available separately through [OGC API Processes](#ogc-api-processes).
+
+## OGC API Processes
+
+Open **Processing > GeoLibre > OGC API - Processes**, or search for
+**OGC API - Processes** in the command palette.
+
+1. Enter a landing-page, process-list, or individual-process URL and click
+   **Retrieve processes**.
+2. Select a process. Its advertised schema supplies string, number, integer,
+   Boolean, enumeration, and JSON inputs. Expand **Input schema** for details,
+   or choose **Edit all inputs as JSON** for compound or referenced schemas.
+   An eligible vector layer can be inserted into a JSON input as a GeoJSON
+   FeatureCollection, feature array, or geometry array. FeatureCollections use
+   the qualified `{ "value": …, "mediaType": "application/geo+json" }` input
+   representation required for object values by OGC API Processes. Other JSON
+   fields and raw input editing accept the service's inline or referenced input
+   representation. Inputs and selected
+   layer data are sent to the chosen service when you click **Run process**.
+3. Choose synchronous or asynchronous execution when the service advertises
+   it. Asynchronous execution displays job status and progress when available.
+   **Stop waiting** and closing the dialog stop monitoring without deleting the
+   remote job. Reopen the dialog and choose **Resume monitoring**, or paste an
+   existing job status URL. **Dismiss job** explicitly requests remote job
+   dismissal; the service determines whether this cancels running work or
+   deletes a completed job.
+4. Download an output, or use **Add to map** for supported GeoJSON and GeoTIFF
+   results. Imported results are fixed snapshots. GeoJSON becomes a vector
+   layer; GeoTIFF becomes a file-backed raster, whose bytes should be exported
+   separately before ending the session. A saved project alone does not retain
+   downloaded raster bytes.
+
+Execution submits once and does not retry automatically. Individual HTTP
+requests time out after 120 seconds; choose asynchronous execution for longer
+work when the service supports it. Stopping or closing during submission keeps
+the bounded request alive to retain an eventual accepted job URL, and prevents
+another submission until that outcome arrives. Reopening shows the pending
+state and recovery notice. A failed request can still leave work running remotely;
+check the service before retrying, since a retry starts a new execution.
+A successful execution with a monitor URL remains recoverable if its result
+body cannot be read. Synchronous jobs retain their Resume and Dismiss controls
+after switching processes, including when their response arrives after Stop.
+The actual advertised execution endpoint is
+shown before submission, including when it differs from the catalog host.
+Input documents are
+limited to 1 MiB and 127 nested JSON containers in the execution document,
+matching the native parser limit. Input strings and property names must contain
+valid Unicode characters; surrogate pairs are supported. Process descriptions
+and status documents are limited to 2 MiB, and result downloads to 128 MiB each.
+Decoding JSON and rasters requires additional working
+memory. Native result transport uses base64 rather than JSON number arrays.
+Modern hosts decode native results directly into bytes; older hosts use a
+compatibility decoder with an intermediate string. Unusable output links are
+retained as downloadable metadata with a warning, without discarding other
+outputs. If a completed synchronous execution returns malformed result JSON
+without a job URL, its original response remains downloadable with a warning
+that running the process again starts another execution.
+Standalone JSON values retain their original bytes for download, including
+quoted strings and numeric representations. Resumed jobs use a process
+description's output schemas only when its identifier matches a reported
+process identifier.
+Empty HTTP 200 raw results remain downloadable. When a sole advertised object
+output makes a JSON response ambiguous, **Complete JSON response** provides the
+original download alongside parsed outputs, preserving their identifiers.
+Multipart job results expose each part by its advertised output identifier,
+including binary GeoTIFF values and explicit `Content-Location` references.
+MIME framing is parsed without decoding raster bytes as text. Responses retain
+the 128 MiB limit, with at most 5,000 parts and 16 KiB of headers per part;
+malformed envelopes remain downloadable with a warning. Resuming the same job
+keeps its accepted outputs until a successful refresh replaces them.
+Monitoring honors bounded `Retry-After` values and stops after 30
+minutes; the job URL can be used to resume. Closing and reopening retains
+dialog state in the current session. Changing projects clears inputs, job
+status, and results and aborts pending observation. A dispatched execution keeps
+its submission lock until the bounded transport settles, including in the browser.
+Already-dispatched native writes remain bounded by the host timeout; their late
+results cannot enter a replacement project. Job history and input
+credentials are not saved in projects.
+
+Resumed jobs can return raw reference results as HTTP 204 with `Link` headers;
+those output references remain available for download, including their media
+types when advertised. Native requests use the host deadline after dispatch,
+while cancelling observation still stops GET requests promptly.
+
+Clearing an optional text input omits it from the request. Use raw JSON input
+editing when an explicit empty string is needed.
+
+Desktop uses guarded native HTTP. Development uses a guarded same-origin
+proxy that permits public HTTP(S) hosts on their default ports; local/LAN services
+and custom ports supported by desktop are unavailable through that development proxy.
+Execution POSTs and job DELETEs do not follow redirects in any build: use the
+final execution/job URL. Discovery and result GETs retain guarded redirects.
+The hosted web app requires the remote service to permit cross-origin GET for
+discovery and monitoring, and POST with `Content-Type` for execution. Asynchronous
+execution also sends `Prefer`; job dismissal requires DELETE. Response headers
+need exposure only when used for routing or retry timing. Synchronous JSON
+results and usable JSON status links work without exposed job headers. A successful
+development test does not establish hosted-site CORS support. Credentials may
+be supplied in the service URL query; they follow same-origin links only and
+are redacted from imported-layer provenance.
+
+For header-based job routing, configure the service response with
+`Access-Control-Expose-Headers: Location, Link, Retry-After`; these headers are
+not exposed to cross-origin browser scripts by default. See the
+[response-header exposure reference](https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Access-Control-Expose-Headers).
+When routing headers are unavailable, the client can use JSON status/self links,
+or a job identifier with an advertised job-list URL. An accepted response must
+provide a recoverable job URL through at least one of those paths.
+
+Advertised job and result links may use a different origin from the process
+endpoint. Native HTTP permits supported local/LAN destinations under its
+documented destination policy. Review the displayed **Job status URL** before
+using **Dismiss job**: that explicit action sends DELETE to the displayed target.

@@ -15,6 +15,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { isCredentialUrlParam, redactUrlCredentials } from "@geolibre/core";
 import { appendDiagnostic, formatUnknown, type DiagnosticInput } from "./diagnostics";
 import { classifyFetchFailure } from "./fetch-error";
+import { decodeProcessBase64 } from "./ogc-process-base64";
 
 // Diagnostics URL/detail text is redacted for every native command so a fetch of
 // a token-bearing WFS, tile, or archive URL never records the secret. The key
@@ -22,7 +23,12 @@ import { classifyFetchFailure } from "./fetch-error";
 // credential name added there is covered here too.
 
 /** The native HTTP commands exposed by the Tauri backend. */
-export type NativeHttpCommand = "fetch_url_bytes" | "fetch_url_response" | "resolve_url_redirect";
+export type NativeHttpCommand =
+  | "fetch_url_bytes"
+  | "fetch_url_response"
+  | "resolve_url_redirect"
+  | "ogc_process_http_request";
+type NativeHttpMethod = "GET" | "POST" | "DELETE";
 
 interface NativeHttpOptions {
   /** Short feature label (e.g. "WFS GetCapabilities") added to the record. */
@@ -90,13 +96,14 @@ export function nativeHttpSuccessRecord(
   url: string,
   durationMs: number,
   context?: string,
+  method: NativeHttpMethod = "GET",
 ): DiagnosticInput {
   return {
     category: "network",
     level: "info",
-    message: `GET ${command}`,
+    message: `${method} ${command}`,
     durationMs,
-    method: "GET",
+    method,
     source: recordSource(command, context),
     url: diagnosticUrl(url),
   };
@@ -113,6 +120,7 @@ export function nativeHttpFailureRecord(
   error: unknown,
   durationMs: number,
   context?: string,
+  method: NativeHttpMethod = "GET",
 ): DiagnosticInput {
   const { kind, label, hint } = classifyFetchFailure(error);
   const rawError = diagnosticError(error);
@@ -122,10 +130,11 @@ export function nativeHttpFailureRecord(
     // Only append the classification when it says something useful; an ordinary
     // non-2xx status is "unknown" (label "request failed"), and appending it
     // would read as the redundant "failed (request failed)".
-    message: kind !== "unknown" ? `GET ${command} failed (${label})` : `GET ${command} failed`,
+    message:
+      kind !== "unknown" ? `${method} ${command} failed (${label})` : `${method} ${command} failed`,
     detail: hint ? `${hint}\n\n${rawError}` : rawError,
     durationMs,
-    method: "GET",
+    method,
     source: recordSource(command, context),
     url: diagnosticUrl(url),
   };
@@ -135,6 +144,7 @@ async function invokeNativeHttp<T>(
   command: NativeHttpCommand,
   url: string,
   options?: FetchUrlResponseOptions,
+  payload?: { method: NativeHttpMethod; body?: string; accept?: string; preferAsync?: boolean },
 ): Promise<T> {
   const startedAt = performance.now();
   try {
@@ -148,6 +158,7 @@ async function invokeNativeHttp<T>(
       ...(options?.discardErrorBody === undefined
         ? {}
         : { discardErrorBody: options.discardErrorBody }),
+      ...payload,
     });
     appendDiagnostic(
       nativeHttpSuccessRecord(
@@ -155,6 +166,7 @@ async function invokeNativeHttp<T>(
         url,
         Math.round(performance.now() - startedAt),
         options?.context,
+        payload?.method,
       ),
     );
     return result;
@@ -166,6 +178,7 @@ async function invokeNativeHttp<T>(
         error,
         Math.round(performance.now() - startedAt),
         options?.context,
+        payload?.method,
       ),
     );
     throw error;
@@ -235,4 +248,51 @@ export async function fetchUrlResponse(
  */
 export function resolveUrlRedirect(url: string, options?: NativeHttpOptions): Promise<string> {
   return invokeNativeHttp<string>("resolve_url_redirect", url, options);
+}
+
+/** Status and routing headers needed by asynchronous OGC process jobs. */
+export interface NativeProcessHttpResponse extends NativeHttpResponse {
+  url: string;
+  location: string | null;
+  retryAfter: string | null;
+  link: string | null;
+  bodyReadFailed?: boolean;
+}
+
+/** Execute a bounded OGC process request through the guarded native command. */
+export async function requestOgcProcess(
+  url: string,
+  options: FetchUrlBytesOptions & {
+    method: NativeHttpMethod;
+    body?: string;
+    accept?: string;
+    preferAsync?: boolean;
+  },
+): Promise<NativeProcessHttpResponse> {
+  const { method, body, accept, preferAsync, ...limits } = options;
+  const raw = await invokeNativeHttp<{
+    status: number;
+    final_url: string;
+    content_type: string | null;
+    location: string | null;
+    retry_after: string | null;
+    link: string | null;
+    body_base64: string;
+    body_read_failed?: boolean;
+  }>(
+    "ogc_process_http_request",
+    url,
+    { ...limits, context: limits.context ?? "OGC API Processes" },
+    { method, body, accept, preferAsync },
+  );
+  return {
+    status: raw.status,
+    url: raw.final_url,
+    contentType: raw.content_type,
+    location: raw.location,
+    retryAfter: raw.retry_after,
+    link: raw.link ?? null,
+    body: decodeProcessBase64(raw.body_base64),
+    ...(raw.body_read_failed ? { bodyReadFailed: true } : {}),
+  };
 }

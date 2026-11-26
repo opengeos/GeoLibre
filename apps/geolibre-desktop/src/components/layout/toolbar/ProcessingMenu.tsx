@@ -90,6 +90,7 @@ export function ProcessingMenu({
   const setStatisticsToolOpen = useAppStore((s) => s.setStatisticsToolOpen);
   const setGeocodeOpen = useAppStore((s) => s.setGeocodeOpen);
   const setBatchToolsOpen = useAppStore((s) => s.setBatchToolsOpen);
+  const setOgcProcessesOpen = useAppStore((s) => s.setOgcProcessesOpen);
   const setModelBuilderOpen = useAppStore((s) => s.setModelBuilderOpen);
   const setRasterToolOpen = useAppStore((s) => s.setRasterToolOpen);
   const setSegmentationOpen = useAppStore((s) => s.setSegmentationOpen);
@@ -172,6 +173,7 @@ export function ProcessingMenu({
   const showGeolibreActions =
     show("processing.geocode") ||
     show("processing.batchTools") ||
+    show("processing.ogcProcesses") ||
     (!mobile && show("processing.segmentation")) ||
     show("processing.objectDetection") ||
     show("processing.segmentEverything");
@@ -793,6 +795,15 @@ export function ProcessingMenu({
               {show("processing.geocode") && (
                 <DropdownMenuItem onSelect={() => setGeocodeOpen(true)}>
                   {t("toolbar.item.geocode")}
+                </DropdownMenuItem>
+              )}
+              {show("processing.ogcProcesses") && (
+                <DropdownMenuItem
+                  onSelect={() => setOgcProcessesOpen(true)}
+                  disabled={processingDenied}
+                  aria-describedby={processingDeniedBy}
+                >
+                  {t("toolbar.item.ogcProcesses")}
                 </DropdownMenuItem>
               )}
               {show("processing.batchTools") && (

@@ -362,6 +362,8 @@ export async function fetchWithGuard(
   init: RequestInit = {},
   options: {
     timeoutMs?: number;
+    /** Callers implementing method-aware redirect handling can request one hop. */
+    followRedirects?: boolean;
     /** Test-only fetch substitute. Still resolves+validates the hostname. */
     fetchImpl?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
     /** Test-only DNS override used with `fetchImpl`. */
@@ -393,7 +395,7 @@ export async function fetchWithGuard(
         dispatcher: guardedDispatcher,
       })) as unknown as Response;
     }
-    if (!REDIRECT_STATUSES.has(response.status)) {
+    if (!REDIRECT_STATUSES.has(response.status) || options.followRedirects === false) {
       return response;
     }
     const location = response.headers.get("location");
@@ -403,6 +405,12 @@ export async function fetchWithGuard(
     current = next;
   }
   throw new Error("Too many proxy redirects");
+}
+
+export class ProxyBodyLimitError extends Error {
+  constructor() {
+    super("Upstream response exceeds size limit");
+  }
 }
 
 /**
@@ -416,7 +424,7 @@ export async function readBodyWithLimit(
 ): Promise<Buffer> {
   const declared = Number(response.headers.get("content-length"));
   if (Number.isFinite(declared) && declared > maxBytes) {
-    throw new Error("Upstream response exceeds size limit");
+    throw new ProxyBodyLimitError();
   }
 
   if (!response.body) {
@@ -433,11 +441,11 @@ export async function readBodyWithLimit(
     total += value.byteLength;
     if (total > maxBytes) {
       await reader.cancel().catch(() => undefined);
-      throw new Error("Upstream response exceeds size limit");
+      throw new ProxyBodyLimitError();
     }
     chunks.push(value);
   }
-  return Buffer.concat(chunks.map((c) => Buffer.from(c)));
+  return Buffer.concat(chunks, total);
 }
 
 /**

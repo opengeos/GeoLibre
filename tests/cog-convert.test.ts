@@ -45,6 +45,31 @@ describe("convertGeoTiffToCog", () => {
     assert.equal(await isTiledGeoTiff(stripedTiff), false);
   });
 
+  it("preserves Float64 process result samples and NaN NoData when tiling", async () => {
+    const source = new Uint8Array(
+      readFileSync(new URL("./fixtures/ogc-processes/gdps-striped-float64.tif", import.meta.url)),
+    );
+    const original = await (await fromArrayBuffer(source.buffer)).getImage();
+    const expected = (await original.readRasters())[0];
+    assert.equal(await isTiledGeoTiff(source), false);
+    const converted = await convertGeoTiffToCog(source, { float64: true });
+    const info = await readGeoTiffInfo(converted);
+    assert.equal(info.tiled, true);
+    assert.equal(info.bits_per_sample, 64);
+    assert.equal(info.sample_format, "ieeefloat");
+    assert.equal(info.epsg, 4326);
+    const output = await (await fromArrayBuffer(Uint8Array.from(converted).buffer)).getImage();
+    // geotiff_info is JSON and represents non-finite values as null. Inspect
+    // the actual GDAL tag through the independent TIFF reader instead.
+    assert.ok(Number.isNaN(output.getGDALNoData()));
+    const actual = (await output.readRasters())[0];
+    assert.deepEqual(actual, expected);
+    assert.ok(Number.isNaN(actual[0]));
+    assert.ok(
+      Array.from(expected).some((value) => Number.isFinite(value) && Math.fround(value) !== value),
+    );
+  });
+
   it("re-encodes a striped GeoTIFF as a tiled COG, preserving georeferencing", async () => {
     const cog = await convertGeoTiffToCog(stripedTiff);
     const out = await readGeoTiffInfo(cog);

@@ -33,6 +33,8 @@ import {
   proxyNswCctvFrameRequestGuarded,
 } from "./vite-proxy-guard";
 import { fastPathProxyPlugin } from "./vite-fast-path-proxy";
+import { proxyOgcProcessRequest } from "./vite-ogc-process-proxy";
+import { OGC_PROCESS_PROXY_PATH } from "./src/lib/ogc-process-limits";
 import { MAX_COVERAGE_DOWNLOAD_BYTES } from "./src/lib/ogc-coverage-limits";
 
 const GEOAGENT_BROWSER_BUNDLE = "maplibre-gl-geoagent/dist/browser-";
@@ -864,6 +866,7 @@ function wmsProxyPlugin(): Plugin {
           res.end(message);
         }
       });
+      server.middlewares.use(OGC_PROCESS_PROXY_PATH, proxyOgcProcessRequest);
       server.middlewares.use(GPX_PROXY_PATH, async (req, res) => {
         try {
           await proxyBinaryRequestGuarded(req, res, GPX_PROXY_PATH);

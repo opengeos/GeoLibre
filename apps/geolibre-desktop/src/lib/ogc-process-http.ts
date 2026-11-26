@@ -1,0 +1,186 @@
+import { OgcProcessError } from "./ogc-process-errors";
+import { readLimitedBody } from "./bounded-response";
+import { isTauri } from "./is-tauri";
+import { normalizeFetchError } from "./ogc-json";
+import { waitForWcsRequest } from "./wcs";
+import {
+  MAX_PROCESS_INPUT_BYTES,
+  MAX_PROCESS_INPUT_DEPTH,
+  processInputProblem,
+  MAX_PROCESS_METADATA_BYTES,
+  MAX_PROCESS_RESULT_BYTES,
+  OGC_PROCESS_PROXY_PATH,
+} from "./ogc-process-limits";
+
+export interface ProcessHttpResponse {
+  status: number;
+  url: string;
+  contentType: string | null;
+  location: string | null;
+  retryAfter: string | null;
+  link: string | null;
+  body: Uint8Array<ArrayBuffer>;
+  bodyReadFailed?: boolean;
+}
+
+/** Mutation acknowledgements remain useful without their optional response bodies. */
+function acknowledged(method: string, status: number): boolean {
+  return (method === "DELETE" || method === "POST") && status >= 200 && status < 300;
+}
+
+/** Validate service links without allowing URL user information or non-HTTP schemes. */
+export function processHttpUrl(value: string, base?: string): URL {
+  let url: URL;
+  try {
+    url = new URL(value, base);
+  } catch {
+    throw new OgcProcessError("invalidUrl");
+  }
+  if (!/^https?:$/.test(url.protocol) || url.username || url.password)
+    throw new OgcProcessError("invalidUrl");
+  url.hash = "";
+  return url;
+}
+
+/** One bounded request; an execution POST is never retried as a GET on an older host. */
+export async function processHttp(
+  value: string,
+  signal: AbortSignal,
+  options: {
+    method?: "GET" | "POST" | "DELETE";
+    body?: string;
+    preferAsync?: boolean;
+    maxBytes?: number;
+    accept?: string;
+  } = {},
+): Promise<ProcessHttpResponse> {
+  const url = processHttpUrl(value).href;
+  const method = options.method ?? "GET";
+  const maxBytes = options.maxBytes ?? MAX_PROCESS_METADATA_BYTES;
+  if (!Number.isSafeInteger(maxBytes) || maxBytes < 1 || maxBytes > MAX_PROCESS_RESULT_BYTES)
+    throw new OgcProcessError("responseLimit");
+  if (method === "POST") {
+    if (!options.body || new TextEncoder().encode(options.body).length > MAX_PROCESS_INPUT_BYTES)
+      throw new OgcProcessError("inputLimit");
+    let body: unknown;
+    try {
+      body = JSON.parse(options.body);
+    } catch {
+      throw new OgcProcessError("inputsJsonSyntax");
+    }
+    if (!body || typeof body !== "object" || Array.isArray(body))
+      throw new OgcProcessError("inputObject");
+    const problem = processInputProblem(body);
+    if (problem) throw new OgcProcessError(problem, { depth: MAX_PROCESS_INPUT_DEPTH });
+  } else if (options.body !== undefined) {
+    throw new OgcProcessError("requestBody");
+  }
+  const deadline = AbortSignal.timeout(120_000);
+  const abort = AbortSignal.any([signal, deadline]);
+  let nativeDispatched = false;
+  abort.throwIfAborted();
+  try {
+    if (isTauri()) {
+      const { requestOgcProcess } = await import("./native-http");
+      // In particular, do not submit a job cancelled while the module loaded.
+      abort.throwIfAborted();
+      nativeDispatched = true;
+      const pending = requestOgcProcess(url, {
+        ...options,
+        method,
+        maxBytes,
+        timeoutSecs: 120,
+        context: "OGC API Processes",
+      });
+      // Once dispatched, the bounded native write may outlive observation.
+      // Await its outcome so an accepted job is not discarded on cancellation.
+      // The native command bounds validation and network work itself. Keep
+      // caller cancellation responsive without racing away a received HTTP
+      // rejection while the host finishes its bounded error-body read.
+      const result = method === "GET" ? await waitForWcsRequest(pending, signal) : await pending;
+      const rejected = result.status < 200 || result.status >= 300;
+      if (!acknowledged(method, result.status)) signal.throwIfAborted();
+      const body =
+        result.body.buffer instanceof ArrayBuffer
+          ? new Uint8Array(result.body.buffer, result.body.byteOffset, result.body.byteLength)
+          : new Uint8Array(result.body);
+      if (body.byteLength > maxBytes) {
+        if (acknowledged(method, result.status) || rejected)
+          return { ...result, body: new Uint8Array(), bodyReadFailed: true };
+        throw new OgcProcessError("responseTooLarge");
+      }
+      return { ...result, body };
+    }
+    const dev = Boolean((import.meta as ImportMeta & { env?: { DEV?: boolean } }).env?.DEV);
+    const target = dev ? `${OGC_PROCESS_PROXY_PATH}?url=${encodeURIComponent(url)}` : url;
+    const headers = new Headers({ Accept: options.accept ?? "application/json" });
+    if (dev) headers.set("x-geolibre-max-bytes", String(maxBytes));
+    if (method === "POST") headers.set("Content-Type", "application/json");
+    if (method === "POST" && options.preferAsync) headers.set("Prefer", "respond-async");
+    const response = await fetch(target, {
+      method,
+      body: options.body,
+      headers,
+      signal: abort,
+      redirect: method === "GET" ? "follow" : "error",
+    });
+    let body: Uint8Array<ArrayBuffer>;
+    let bodyReadFailed = false;
+    try {
+      body = await readLimitedBody(
+        response,
+        response.ok ? maxBytes : Math.min(maxBytes, 64 * 1024),
+      );
+    } catch (error) {
+      void response.body?.cancel().catch(() => {});
+      const accepted = acknowledged(method, response.status);
+      if (!accepted && (response.ok || signal.aborted)) {
+        abort.throwIfAborted();
+        if (error instanceof TypeError && !abort.aborted)
+          throw new OgcProcessError("responseInterrupted");
+        throw error;
+      }
+      body = new Uint8Array();
+      bodyReadFailed = true;
+    }
+    if (!acknowledged(method, response.status) && (response.ok || signal.aborted))
+      abort.throwIfAborted();
+    return {
+      status: response.status,
+      url: dev ? (response.headers.get("x-geolibre-final-url") ?? url) : response.url || url,
+      contentType: response.headers.get("content-type"),
+      location: response.headers.get("location"),
+      retryAfter: response.headers.get("retry-after"),
+      link: response.headers.get("link"),
+      body,
+      ...(bodyReadFailed ? { bodyReadFailed: true } : {}),
+    };
+  } catch (error) {
+    if (nativeDispatched) {
+      // Match only errors owned by this native protocol command. Server details
+      // and arbitrary connection errors must retain their original meaning.
+      const message = error instanceof Error ? error.message : String(error);
+      const nativeCodes = {
+        "OGC process request timed out": "requestTimeout",
+        "Too many OGC process redirects": "redirectLimit",
+        "Invalid OGC process URL": "invalidUrl",
+        "Invalid OGC process redirect": "invalidUrl",
+        "OGC process URLs must not contain user information": "invalidUrl",
+        "OGC process inputs must be valid JSON": "inputsJsonSyntax",
+        "OGC process inputs exceed the 1 MiB limit": "inputLimit",
+        "OGC process execution requires a JSON object": "inputObject",
+        "OGC process execution requires a request body": "inputObject",
+        "Only an OGC process execution POST may have a request body": "requestBody",
+      } as const;
+      if (Object.hasOwn(nativeCodes, message))
+        throw new OgcProcessError(nativeCodes[message as keyof typeof nativeCodes]);
+    }
+    if (
+      !signal.aborted &&
+      ((!nativeDispatched && deadline.aborted) ||
+        (error instanceof DOMException && error.name === "TimeoutError"))
+    )
+      throw new OgcProcessError("requestTimeout");
+    throw normalizeFetchError(error);
+  }
+}

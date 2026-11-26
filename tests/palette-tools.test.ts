@@ -223,6 +223,7 @@ describe("command-profile-gates", () => {
   });
 
   it("maps command ids onto the menu-item catalog", () => {
+    assert.equal(commandMenuItem("proc.ogcProcesses"), "processing.ogcProcesses");
     assert.equal(commandMenuItem("proc.whitebox"), "processing.whitebox");
     assert.equal(commandMenuItem("proc.whitebox.slope"), "processing.whitebox");
     assert.equal(commandMenuItem("project.save-as"), "project.saveAs");
@@ -237,6 +238,13 @@ describe("command-profile-gates", () => {
     assert.equal(commandMenuItem("project.examples"), "project.new");
     assert.equal(commandMenuItem("view.color-vision.protanopia"), "view.colorVision");
     assert.equal(commandMenuItem("view.color-vision.off"), "view.colorVision");
+  });
+
+  it("hides OGC Processes in the menu and palette under the same profile", () => {
+    const hidden = profile({ hiddenMenuItems: ["processing.ogcProcesses"] });
+    assert.equal(isCommandVisibleInProfile(hidden, "proc.ogcProcesses"), false);
+    assert.equal(isCommandVisibleInProfile(profile({}), "proc.ogcProcesses"), true);
+    assert.deepEqual(filterCommandsForPalette([command("proc.ogcProcesses")], hidden, false), []);
   });
 
   it("hides commands for hidden menus, items, data sources, and plugins", () => {

@@ -1,4 +1,5 @@
 /** WCS 1.0.0 and 2.0.1 KVP discovery and numerical GeoTIFF subset requests. */
+import { multipartBytes } from "./multipart-bytes";
 export type WcsBounds = [number, number, number, number];
 export interface WcsCoverage {
   name: string;
@@ -437,82 +438,28 @@ export function wcsCoverageUrl(
   });
 }
 
-/** Locate a byte sequence without decoding binary raster payloads as text. */
-function byteIndex(
-  bytes: Uint8Array,
-  needle: Uint8Array,
-  start: number,
-  end = bytes.length,
-): number {
-  const bounded = end === bytes.length ? bytes : bytes.subarray(0, end);
-  outer: for (
-    let i = bounded.indexOf(needle[0], start);
-    i >= 0 && i <= end - needle.length;
-    i = bounded.indexOf(needle[0], i + 1)
-  ) {
-    for (let j = 1; j < needle.length; j++) if (bytes[i + j] !== needle[j]) continue outer;
-    return i;
-  }
-  return -1;
-}
-
 /** Extract the single TIFF from WCS multipart output, preserving every byte. */
 export function wcsTiffBytes<T extends ArrayBufferLike>(bytes: Uint8Array<T>): Uint8Array<T> {
   if (bytes[0] !== 45 || bytes[1] !== 45) {
     assertWcsTiff(bytes);
     return bytes;
   }
-  const firstLine = new TextDecoder().decode(bytes.subarray(0, 80));
-  const boundary = /^--([0-9A-Za-z'()+_,\-./:=? ]{1,70})(\r?\n)/.exec(firstLine);
-  if (!boundary) throw new WcsError("response");
-  const encoder = new TextEncoder();
-  const delimiter = encoder.encode(`${boundary[2]}--${boundary[1]}`);
-  let position = boundary[0].length;
-  let raster: Uint8Array<T> | undefined;
-  for (let part = 0; part < 32; part++) {
-    const limit = Math.min(bytes.length, position + 16384);
-    const crlf = byteIndex(bytes, encoder.encode("\r\n\r\n"), position, limit);
-    const lf = byteIndex(bytes, encoder.encode("\n\n"), position, limit);
-    const headerEnd = crlf < 0 ? lf : lf < 0 ? crlf : Math.min(crlf, lf);
-    if (headerEnd < 0) throw new WcsError("response");
-    const headers = new TextDecoder().decode(bytes.subarray(position, headerEnd));
-    const bodyStart = headerEnd + (headerEnd === crlf ? 4 : 2);
-    let next = byteIndex(bytes, delimiter, bodyStart);
-    // A boundary-like byte sequence inside a TIFF is not a MIME delimiter.
-    while (next >= 0) {
-      const suffix = next + delimiter.length;
-      const closing = bytes[suffix] === 45 && bytes[suffix + 1] === 45;
-      const afterClose = suffix + 2;
-      if (
-        bytes[suffix] === 10 ||
-        (bytes[suffix] === 13 && bytes[suffix + 1] === 10) ||
-        (closing &&
-          (afterClose === bytes.length ||
-            bytes[afterClose] === 10 ||
-            (bytes[afterClose] === 13 && bytes[afterClose + 1] === 10)))
-      )
-        break;
-      next = byteIndex(bytes, delimiter, next + 1);
-    }
-    if (next < 0) throw new WcsError("response");
-    if (/^content-type:\s*image\/(?:geo|x-)?tiff(?:\s*;[^\r\n]*)?\s*$/im.test(headers)) {
-      const encoding = /^content-transfer-encoding:\s*([^\r\n]*)/im
-        .exec(headers)?.[1]
-        .trim()
-        .toLowerCase();
+  try {
+    let raster: Uint8Array<T> | undefined;
+    for (const part of multipartBytes(bytes, undefined, 32)) {
+      if (!/^image\/(?:geo|x-)?tiff(?:\s*;.*)?$/i.test(part.headers.get("content-type") ?? ""))
+        continue;
+      const encoding = part.headers.get("content-transfer-encoding")?.toLowerCase();
       if (raster || (encoding && !["binary", "8bit"].includes(encoding)))
         throw new WcsError("response");
-      raster = bytes.subarray(bodyStart, next);
-      assertWcsTiff(raster);
+      assertWcsTiff(part.body);
+      raster = part.body;
     }
-    position = next + delimiter.length;
-    if (bytes[position] === 45 && bytes[position + 1] === 45) {
-      if (!raster) throw new WcsError("response");
-      return raster;
-    }
-    position += bytes[position] === 13 ? 2 : 1;
+    if (!raster) throw new WcsError("response");
+    return raster;
+  } catch {
+    throw new WcsError("response");
   }
-  throw new WcsError("response");
 }
 
 /** Reject XML/HTML error bodies even when the server returns HTTP 200. */

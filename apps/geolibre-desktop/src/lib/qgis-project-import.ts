@@ -17,10 +17,10 @@ import type { FeatureCollection } from "geojson";
 import {
   createWmsTileUrl,
   normalizeWmsVersion,
-  readLimitedBody,
   stripOgcOperationParams,
 } from "../components/layout/add-data/helpers";
 import { collectionMetadata } from "./field-collection";
+import { readLimitedBody } from "./bounded-response";
 import {
   MAX_RELATION_ENTRIES,
   parseQgisLayerForm,

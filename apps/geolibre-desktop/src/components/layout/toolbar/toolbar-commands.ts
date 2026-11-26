@@ -162,6 +162,7 @@ export interface ToolbarCommandContext {
   setGeocodeOpen: AppState["setGeocodeOpen"];
   setModelBuilderOpen: AppState["setModelBuilderOpen"];
   setBatchToolsOpen: AppState["setBatchToolsOpen"];
+  setOgcProcessesOpen: AppState["setOgcProcessesOpen"];
   setSegmentationOpen: AppState["setSegmentationOpen"];
   setObjectDetectionOpen: AppState["setObjectDetectionOpen"];
   setSegmentEverythingOpen: AppState["setSegmentEverythingOpen"];
@@ -234,6 +235,7 @@ export function buildToolbarCommands(context: ToolbarCommandContext): Command[] 
     setGeocodeOpen,
     setModelBuilderOpen,
     setBatchToolsOpen,
+    setOgcProcessesOpen,
     setSegmentationOpen,
     setObjectDetectionOpen,
     setSegmentEverythingOpen,
@@ -540,6 +542,14 @@ export function buildToolbarCommands(context: ToolbarCommandContext): Command[] 
       keywords: "batch bulk many layers repeat vector tool",
       icon: Layers,
       run: () => setBatchToolsOpen(true),
+    },
+    {
+      id: "proc.ogcProcesses",
+      title: t("toolbar.command.ogcProcesses"),
+      group: t("toolbar.commandGroup.processing"),
+      keywords: "ogc api processes remote execution jobs",
+      icon: Wrench,
+      run: () => setOgcProcessesOpen(true),
     },
     // The Mac App Store build omits AI Segmentation: it is sidecar-only (the
     // App Sandbox forbids the sidecar) and has no client-side fallback.

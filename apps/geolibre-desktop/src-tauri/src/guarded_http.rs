@@ -184,7 +184,7 @@ fn is_ssrf_guard_error(error: &dyn std::error::Error) -> bool {
 /// `isBlockedUrlError` in `src/lib/vector-url-fetch.ts` matches on that wording
 /// to decide whether retrying in the webview is safe, so a guard rejection that
 /// reaches it as a generic transport error fails *open* into an unguarded fetch.
-fn request_error_message(error: &reqwest::Error) -> String {
+pub(crate) fn request_error_message(error: &reqwest::Error) -> String {
     if is_ssrf_guard_error(error) {
         return SSRF_BLOCKED_MESSAGE.to_string();
     }
@@ -354,8 +354,10 @@ fn client_identity() -> Result<Option<ClientIdentity>, String> {
     }
 }
 
-/// A blocking HTTP client that enforces the SSRF guard at connect time (via
-/// [`GuardedDnsResolver`]) and re-validates redirect hops.
+/// A blocking HTTP client that guards direct connections with
+/// [`GuardedDnsResolver`] and re-validates redirect URLs. A configured system
+/// proxy is a trusted network boundary and must enforce the destination-address
+/// policy when it resolves names. See docs/network-endpoints.md.
 ///
 /// The client trusts the OS certificate store (via the `rustls-tls-native-roots`
 /// feature) so enterprise CAs work, and presents a client certificate for
@@ -368,7 +370,7 @@ fn client_identity() -> Result<Option<ClientIdentity>, String> {
 /// blocking `Client` is `Arc`-backed, so cloning the cached instance is cheap. A
 /// load error is cached too: the config is static, so re-reading a bad
 /// certificate would fail identically.
-fn guarded_http_client() -> Result<reqwest::blocking::Client, String> {
+pub(crate) fn guarded_http_client() -> Result<reqwest::blocking::Client, String> {
     static CLIENT: std::sync::OnceLock<Result<reqwest::blocking::Client, String>> =
         std::sync::OnceLock::new();
     CLIENT.get_or_init(build_guarded_http_client).clone()
@@ -405,8 +407,9 @@ fn build_guarded_http_client_with_redirects(
     redirects: reqwest::redirect::Policy,
 ) -> Result<reqwest::blocking::Client, String> {
     // The SSRF guard (GuardedDnsResolver + redirect re-validation) is applied
-    // here, independent of the TLS backend chosen below, so it holds on both the
-    // rustls and native-tls paths.
+    // here, independent of the TLS backend chosen below, for direct connections
+    // on both rustls and native-tls. A configured proxy resolves destinations
+    // itself and must enforce the same address policy at that network boundary.
     let mut builder = reqwest::blocking::Client::builder()
         .connect_timeout(Duration::from_secs(REMOTE_TILE_CONNECT_TIMEOUT_SECS))
         .redirect(redirects)

@@ -1,6 +1,16 @@
 // Code-split panels and dialogs mounted by DesktopShell. Each is loaded on
-// first render and falls back to a no-op component if its chunk fails to load.
+// first render, with fallbacks that keep the shell usable if a chunk fails to load.
 import { lazy } from "react";
+import { OgcProcessesLoadError } from "../processing/OgcProcessesLoadError";
+
+export const OgcProcessesDialog = lazy(() =>
+  import("../processing/OgcProcessesDialog")
+    .then((module) => ({ default: module.OgcProcessesDialog }))
+    .catch((error) => {
+      console.error("Failed to load OgcProcessesDialog", error);
+      return { default: OgcProcessesLoadError };
+    }),
+);
 
 export const ProcessingDialog = lazy(() =>
   import("../processing/ProcessingDialog")

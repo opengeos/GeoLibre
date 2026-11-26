@@ -1,9 +1,6 @@
-import {
-  fetchCapabilitiesText,
-  proxyFeedRequestUrl,
-  readLimitedBody,
-} from "../components/layout/add-data/helpers";
+import { fetchCapabilitiesText, proxyFeedRequestUrl } from "../components/layout/add-data/helpers";
 import { WMS_PROXY_PATH } from "../components/layout/add-data/constants";
+import { readLimitedBody } from "./bounded-response";
 import { convertGeoTiffToCog, readGeoTiffInfo } from "@geolibre/processing";
 import { isTauri } from "./is-tauri";
 import {

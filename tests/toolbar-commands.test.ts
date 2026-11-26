@@ -110,6 +110,7 @@ const FULL_REGISTRY_IDS = [
   "proc.modelBuilder",
   "proc.obiaWorkbench",
   "proc.batchTools",
+  "proc.ogcProcesses",
   "proc.segmentation",
   "proc.objectDetection",
   "proc.segmentEverything",
@@ -310,12 +311,13 @@ describe("buildToolbarCommands", () => {
     ]);
   });
 
-  it("opens the Georeferencer, Field Collection, GPS Tracking, and Settings → Interface", () => {
+  it("opens the Georeferencer, OGC Processes, Field Collection, GPS Tracking, and Settings → Interface", () => {
     const calls: string[] = [];
     const record = (name: string) => (open?: unknown) => calls.push(`${name}:${String(open)}`);
     const commands = buildToolbarCommands(
       context({
         setGeoreferencerOpen: record("georeferencer"),
+        setOgcProcessesOpen: record("ogcProcesses"),
         setFieldCollectionOpen: record("fieldCollection"),
         setGpsTrackingOpen: record("gpsTracking"),
         onSimplifyInterface: () => calls.push("simplifyInterface"),
@@ -323,6 +325,7 @@ describe("buildToolbarCommands", () => {
     );
     for (const id of [
       "proc.georeferencer",
+      "proc.ogcProcesses",
       "control.field-collection",
       "control.gps-tracking",
       "settings.simplify-interface",
@@ -331,6 +334,7 @@ describe("buildToolbarCommands", () => {
     }
     assert.deepEqual(calls, [
       "georeferencer:true",
+      "ogcProcesses:true",
       "fieldCollection:true",
       "gpsTracking:true",
       "simplifyInterface",
