@@ -60,6 +60,7 @@ test("process proxy preserves execution/job controls, redirect methods and respo
       },
     });
   pool.intercept({ path: "/jobs/one", method: "DELETE" }).reply(204, "");
+  pool.intercept({ path: "/delete-large", method: "DELETE" }).reply(200, "12345678");
   pool
     .intercept({ path: "/accepted-large", method: "POST", body })
     .reply(202, "12345678", { headers: { Location: "/jobs/retained" } });
@@ -137,6 +138,11 @@ test("process proxy preserves execution/job controls, redirect methods and respo
     assert.equal(retained.status, 202);
     assert.equal(retained.headers.location, "/jobs/retained");
     assert.equal(retained.body, "");
+    const dismissed = await send("DELETE", "/delete-large", undefined, {
+      "x-geolibre-max-bytes": "4",
+    });
+    assert.equal(dismissed.status, 200);
+    assert.equal(dismissed.body, "");
     assert.match(String(accepted.headers["content-security-policy"]), /sandbox/);
     assert.equal(accepted.headers["x-content-type-options"], "nosniff");
     const html = await send("GET", "/html");

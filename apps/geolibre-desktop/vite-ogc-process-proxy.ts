@@ -156,9 +156,10 @@ export async function proxyOgcProcessRequest(
     } catch (error) {
       await upstream.response.body?.cancel().catch(() => {});
       const accepted =
-        method === "POST" &&
-        [201, 202].includes(upstream.response.status) &&
-        upstream.response.headers.has("location");
+        (method === "POST" &&
+          [201, 202].includes(upstream.response.status) &&
+          upstream.response.headers.has("location")) ||
+        (method === "DELETE" && upstream.response.ok);
       if (!accepted && upstream.response.ok)
         throw new ProcessProxyError(
           502,

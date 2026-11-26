@@ -15,6 +15,7 @@ import {
 } from "../apps/geolibre-desktop/src/lib/ogc-api-processes";
 import { processHttp } from "../apps/geolibre-desktop/src/lib/ogc-process-http";
 import { monitorOgcProcessJob } from "../apps/geolibre-desktop/src/lib/ogc-process-job";
+import { validOgcProcessGeoJson } from "../apps/geolibre-desktop/src/lib/ogc-process-geometry";
 import {
   ogcProcessInputDefaults,
   parseOgcProcessInputs,
@@ -105,6 +106,104 @@ test("invalid URLs and an empty accepted response without routing use catalog er
     new AbortController().signal,
   );
   assert.equal(current.id, "bad%ZZ");
+});
+
+test("GeoJSON validation covers nested geometry types and rejects non-finite positions", () => {
+  const ring = [
+    [0, 0],
+    [2, 0],
+    [2, 2],
+    [0, 0],
+  ];
+  const geometries = [
+    { type: "Point", coordinates: [1, 2, 3] },
+    { type: "MultiPoint", coordinates: [[1, 2]] },
+    {
+      type: "LineString",
+      coordinates: [
+        [0, 0],
+        [1, 1],
+      ],
+    },
+    {
+      type: "MultiLineString",
+      coordinates: [
+        [
+          [0, 0],
+          [1, 1],
+        ],
+      ],
+    },
+    { type: "Polygon", coordinates: [ring] },
+    { type: "MultiPolygon", coordinates: [[ring]] },
+    { type: "GeometryCollection", geometries: [{ type: "Point", coordinates: [1, 2] }] },
+  ];
+  const collection = (geometry: unknown) => ({
+    type: "FeatureCollection",
+    features: [{ type: "Feature", properties: {}, geometry }],
+  });
+  for (const geometry of geometries)
+    assert.equal(validOgcProcessGeoJson(collection(geometry)), true);
+  for (const geometry of [
+    { type: "Point", coordinates: ["bad", 0] },
+    { type: "Point", coordinates: [NaN, 0] },
+    { type: "MultiPoint", coordinates: [[1, Infinity]] },
+    { type: "LineString", coordinates: [[1, 2]] },
+    {
+      type: "MultiLineString",
+      coordinates: [
+        [
+          [0, 0],
+          ["bad", 1],
+        ],
+      ],
+    },
+    {
+      type: "Polygon",
+      coordinates: [
+        [
+          [0, 0],
+          [2, 0],
+          [2, 2],
+          [1, 1],
+        ],
+      ],
+    },
+    {
+      type: "MultiPolygon",
+      coordinates: [
+        [
+          [
+            [0, 0],
+            [2, 0],
+            [2, "bad"],
+            [0, 0],
+          ],
+        ],
+      ],
+    },
+    { type: "GeometryCollection", geometries: [{ type: "Point", coordinates: [1, "bad"] }] },
+  ])
+    assert.equal(validOgcProcessGeoJson(collection(geometry)), false);
+  assert.equal(validOgcProcessGeoJson(collection(null)), true);
+});
+
+test("acknowledged or already-absent dismissals complete despite unreadable response bodies", async () => {
+  for (const status of [200, 404, 410]) {
+    const calls = serve(
+      () =>
+        new Response(
+          new ReadableStream({
+            start(controller) {
+              controller.error(new Error("interrupted body"));
+            },
+          }),
+          { status },
+        ),
+    );
+    await dismissOgcProcessJob("https://example.org/jobs/one", new AbortController().signal);
+    assert.equal(calls.length, 1);
+  }
 });
 
 test("a failed accepted body read preserves the job status and URL", async () => {

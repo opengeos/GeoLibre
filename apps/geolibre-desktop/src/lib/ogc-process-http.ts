@@ -20,6 +20,14 @@ export interface ProcessHttpResponse {
   body: Uint8Array<ArrayBuffer>;
 }
 
+/** Mutation acknowledgements remain useful without their optional response bodies. */
+function acknowledged(method: string, status: number, location: string | null): boolean {
+  return (
+    (method === "DELETE" && status >= 200 && status < 300) ||
+    (method === "POST" && [201, 202].includes(status) && Boolean(location))
+  );
+}
+
 /** Validate service links without allowing URL user information or non-HTTP schemes. */
 export function processHttpUrl(value: string, base?: string): URL {
   let url: URL;
@@ -78,14 +86,13 @@ export async function processHttp(
       // Once dispatched, the bounded native write may outlive observation.
       // Await its outcome so an accepted job is not discarded on cancellation.
       const result = method === "GET" ? await waitForWcsRequest(pending, abort) : await pending;
-      if (!(method === "POST" && [201, 202].includes(result.status) && result.location))
-        abort.throwIfAborted();
+      if (!acknowledged(method, result.status, result.location)) abort.throwIfAborted();
       const body =
         result.body.buffer instanceof ArrayBuffer
           ? new Uint8Array(result.body.buffer, result.body.byteOffset, result.body.byteLength)
           : new Uint8Array(result.body);
       if (body.byteLength > maxBytes) {
-        if (method === "POST" && [201, 202].includes(result.status) && result.location)
+        if (acknowledged(method, result.status, result.location))
           return { ...result, body: new Uint8Array() };
         throw new OgcProcessError("responseTooLarge");
       }
@@ -111,20 +118,11 @@ export async function processHttp(
         response.ok ? maxBytes : Math.min(maxBytes, 64 * 1024),
       );
     } catch (error) {
-      const accepted =
-        method === "POST" &&
-        [201, 202].includes(response.status) &&
-        response.headers.has("location");
+      const accepted = acknowledged(method, response.status, response.headers.get("location"));
       if (!accepted && (response.ok || abort.aborted)) throw error;
       body = new Uint8Array();
     }
-    if (
-      !(
-        method === "POST" &&
-        [201, 202].includes(response.status) &&
-        response.headers.has("location")
-      )
-    )
+    if (!acknowledged(method, response.status, response.headers.get("location")))
       abort.throwIfAborted();
     return {
       status: response.status,

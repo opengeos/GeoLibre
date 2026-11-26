@@ -20,6 +20,7 @@ import { useOgcProcesses } from "../../hooks/useOgcProcesses";
 import {
   downloadOgcProcessOutput,
   ogcProcessExecutionUrl,
+  sameOgcProcessJob,
   type OgcProcessOutput,
 } from "../../lib/ogc-api-processes";
 import {
@@ -303,7 +304,7 @@ export function OgcProcessesDialog({
                       !client.jobUrl.trim() ||
                       client.phase === "dismissing" ||
                       (client.job?.status === "dismissed" &&
-                        client.job.url === client.jobUrl.trim())
+                        sameOgcProcessJob(client.job.url, client.jobUrl.trim()))
                     }
                     onClick={() => {
                       void client.dismiss();

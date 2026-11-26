@@ -5,6 +5,7 @@ import { addRasterToMap } from "@geolibre/plugins/maplibre-raster";
 import { downloadOgcProcessOutput, type OgcProcessOutput } from "./ogc-api-processes";
 import { parseGeoJsonValue } from "./file-io/vector-text-formats";
 import { uniqueLayerName } from "./unique-layer-name";
+import { validOgcProcessGeoJson } from "./ogc-process-geometry";
 
 /** Bounded display copy; large results stay intact for downloading and import. */
 export function ogcProcessOutputPreview(output: OgcProcessOutput): string {
@@ -97,7 +98,7 @@ export async function importOgcProcessOutput(
       data = new Uint8Array(await convertGeoTiffToCog(data, { signal, float64: true }));
       const converted = await readGeoTiffInfo(data);
       if (
-        (info.bits_per_sample !== 8 || info.sample_format !== "uint") &&
+        (info.bits_per_sample > 8 || info.sample_format !== "uint") &&
         (converted.bits_per_sample !== 64 || converted.sample_format !== "ieeefloat")
       )
         throw new OgcProcessError("rasterPrecision");
@@ -155,6 +156,7 @@ export async function importOgcProcessOutput(
           : null;
   if (!collection) throw new OgcProcessError("geodataOnly");
   const data = await parseGeoJsonValue(collection);
+  if (!validOgcProcessGeoJson(data)) throw new OgcProcessError("invalidGeometry");
   signal.throwIfAborted();
   const state = useAppStore.getState();
   if (state.projectLoadCount !== project) throw new DOMException("Project changed", "AbortError");

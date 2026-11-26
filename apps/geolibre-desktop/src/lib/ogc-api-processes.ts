@@ -531,6 +531,7 @@ export async function readOgcProcessResults(
 /** Dismiss only the particular job the caller selected. */
 export async function dismissOgcProcessJob(url: string, signal: AbortSignal): Promise<void> {
   const response = await processHttp(url, signal, { method: "DELETE" });
+  if (response.status === 404 || response.status === 410) return;
   successful(response);
 }
 

@@ -9325,6 +9325,7 @@
         "rasterUnreadable": "The process result is not a readable GeoTIFF.",
         "rasterPrecision": "Raster conversion did not preserve numerical precision. Download the original result instead.",
         "geodataOnly": "Only GeoJSON and GeoTIFF results can be added to the map.",
+        "invalidGeometry": "The process result contains invalid GeoJSON geometry or coordinates.",
         "missingInput": "Missing process input: {{name}}",
         "inputNumber": "Process input {{name}} must be a number.",
         "inputInteger": "Process input {{name}} must be an integer.",

@@ -146,7 +146,8 @@ fn request_blocking(
     // must not hide the server's HTTP status behind a download-limit error.
     let accepted =
         method == reqwest::Method::POST && matches!(status, 201 | 202) && location.is_some();
-    let body = if accepted {
+    let dismissed = method == reqwest::Method::DELETE && (200..300).contains(&status);
+    let body = if accepted || dismissed {
         // Status/Location are sufficient to recover a submitted job even if
         // the optional response body is interrupted or exceeds its limit.
         crate::http_body::read_limited_body(response, length, max_bytes).unwrap_or_default()
@@ -363,6 +364,7 @@ mod transport_tests {
                 ),
                 ("POST", "/accepted-broken", "202 Accepted", "Location: /jobs/accepted\r\n", "{}"),
                 ("POST", "/accepted-large", "201 Created", "Location: /jobs/accepted\r\n", "12345678"),
+                ("DELETE", "/delete-broken", "200 OK", "", "{}"),
             ] {
                 let deadline = Instant::now() + Duration::from_secs(10);
                 let mut socket = loop {
@@ -411,7 +413,7 @@ mod transport_tests {
                 } else {
                     assert!(!lower.contains("prefer:"));
                 }
-                let length = if path == "/accepted-broken" { body.len() + 100 } else { body.len() };
+                let length = if path.ends_with("-broken") { body.len() + 100 } else { body.len() };
                 let response = format!("HTTP/1.1 {status}\r\nContent-Type: application/json\r\n{headers}Content-Length: {length}\r\nConnection: close\r\n\r\n{body}");
                 socket.write_all(response.as_bytes()).unwrap();
             }
@@ -501,6 +503,18 @@ mod transport_tests {
             assert_eq!(accepted.location.as_deref(), Some("/jobs/accepted"));
             assert!(accepted.body_base64.is_empty());
         }
+        let dismissed = request_blocking(
+            url("/delete-broken"),
+            "DELETE".into(),
+            None,
+            None,
+            false,
+            Some(1024),
+            Some(10),
+        )
+        .unwrap();
+        assert_eq!(dismissed.status, 200);
+        assert!(dismissed.body_base64.is_empty());
         server.join().unwrap();
         let failure = request_blocking(
             url("/closed?token=private-value"),

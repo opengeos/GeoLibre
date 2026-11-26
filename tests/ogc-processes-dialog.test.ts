@@ -322,6 +322,12 @@ test("equivalent resumed status URLs update the tracked process and unlock Run",
   await waitFor(() => assert.ok(screen.queryByText("Completed")), { timeout: 3000 });
   assert.equal(screen.getByRole("button", { name: "Run process" }).hasAttribute("disabled"), false);
   assert.equal(posts, 1);
+  fireEvent.change(screen.getByLabelText("Job status URL"), {
+    target: { value: url.href.replace("https://demo.pygeoapi.io", "https://DEMO.PYGEOAPI.IO:443") },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Dismiss job" }));
+  await waitFor(() => assert.ok(screen.queryByText("Dismissed")));
+  assert.equal(screen.getByRole("button", { name: "Dismiss job" }).hasAttribute("disabled"), true);
 });
 
 test("submission timeouts report uncertain remote completion without retrying", async () => {
@@ -428,6 +434,29 @@ test("base64 JSON geodata is importable while ordinary JSON messages stay downlo
   fireEvent.click(screen.getByRole("button", { name: "Add to map" }));
   await waitFor(() => assert.equal(useAppStore.getState().layers.length, 1));
   assert.deepEqual(useAppStore.getState().layers[0].geojson, collection);
+});
+
+test("invalid process geometry never enters the layer store", async () => {
+  serve(
+    async () =>
+      new Response(
+        JSON.stringify({
+          geometry: {
+            value: { type: "Point", coordinates: ["bad", 0] },
+            mediaType: "application/geo+json",
+          },
+        }),
+        { headers: { "Content-Type": "application/json" } },
+      ),
+  );
+  await form();
+  fireEvent.click(screen.getByRole("button", { name: "Run process" }));
+  await waitFor(() => assert.ok(screen.queryByRole("button", { name: "Add to map" })));
+  fireEvent.click(screen.getByRole("button", { name: "Add to map" }));
+  await waitFor(() =>
+    assert.match(screen.getByRole("alert").textContent ?? "", /invalid GeoJSON geometry/),
+  );
+  assert.equal(useAppStore.getState().layers.length, 0);
 });
 
 test("oversized layer inputs are rejected before replacing the editor value", async () => {
