@@ -3713,6 +3713,10 @@ export async function openArcGISOutboxSession(
         body: body.toString(),
         redirect: "error",
       });
+      // A 4xx is a definite refusal (nothing applied); a 5xx may follow a write.
+      if (!http.ok && http.status < 500 && http.status !== 408 && http.status !== 429) {
+        throw new ArcGISEditsRejectedError(`ArcGIS refused the edits (HTTP ${http.status}).`);
+      }
       if (!http.ok) throw new Error(`HTTP ${http.status}`);
       const response = (await http.json()) as ArcGISApplyEditsResponse;
       if (response.error) {

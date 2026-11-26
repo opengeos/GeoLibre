@@ -125,7 +125,7 @@ function entryFor(features: Feature[], baseline: GeoLensFeatureBaseline): Outbox
   const target = geolensOutboxTarget(BASE, DATASET, baseline, 1000);
   const collection = withGeoLensLocalIds({ type: "FeatureCollection", features });
   return {
-    id: geolensOutboxId(target),
+    id: geolensOutboxId(target, "geolens-layer"),
     backend: "geolens",
     target,
     targetLabel: "Buildings",

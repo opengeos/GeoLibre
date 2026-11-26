@@ -500,7 +500,7 @@ export async function writeLayerEditsToSource(
           const saveOutbox = deps?.saveOutbox ?? defaultSaveOutbox;
           return await saveOutbox(
             {
-              id: arcgisOutboxId(target),
+              id: arcgisOutboxId(target, layer.id),
               backend: "arcgis",
               target,
               targetLabel: layer.name,

@@ -181,7 +181,7 @@ function edit(layer: GeoLibreLayer, mutate: (features: Feature[]) => Feature[]):
 function entryFor(layer: GeoLibreLayer): OutboxEntry {
   const target = arcgisOutboxTarget(layer)!;
   return {
-    id: arcgisOutboxId(target),
+    id: arcgisOutboxId(target, layer.id),
     backend: "arcgis",
     target,
     targetLabel: layer.name,

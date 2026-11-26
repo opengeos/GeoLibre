@@ -97,7 +97,7 @@ export function ensureEditSyncBackends(): void {
     );
     const result = await saveThroughOutbox(
       {
-        id: geolensOutboxId(target),
+        id: geolensOutboxId(target, request.layerId),
         backend: "geolens",
         target,
         targetLabel: request.layerName,

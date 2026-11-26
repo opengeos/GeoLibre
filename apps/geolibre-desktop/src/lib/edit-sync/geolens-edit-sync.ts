@@ -67,9 +67,9 @@ export interface GeoLensOutboxTarget {
   maxGid: number;
 }
 
-/** Outbox entry id for a GeoLens dataset. */
-export function geolensOutboxId(target: GeoLensOutboxTarget): string {
-  return `geolens:${JSON.stringify([target.baseUrl, target.datasetId])}`;
+/** Outbox entry id for a GeoLens layer: one entry per dataset and store layer. */
+export function geolensOutboxId(target: GeoLensOutboxTarget, layerId: string): string {
+  return `geolens:${JSON.stringify([target.baseUrl, target.datasetId, layerId])}`;
 }
 
 function gidKey(feature: Feature): string | null {
@@ -244,6 +244,13 @@ export function createGeoLensSyncAdapter(
           await write();
           applied.push(op.id);
         } catch (error) {
+          // A revoked key or a rate limit stops the whole run, not one feature.
+          if (error instanceof GeoLensHttpError && (error.status === 401 || error.status === 403)) {
+            throw new EditSyncRejectedError(error.message);
+          }
+          if (error instanceof GeoLensHttpError && error.status === 429) {
+            throw new EditSyncOfflineError(error.message);
+          }
           if (error instanceof GeoLensHttpError && error.status < 500) {
             failed.push({ opId: op.id, message: error.message });
             return;
@@ -378,7 +385,10 @@ export async function reconcileGeoLensLayerAfterSync(
   for (const [key, server] of theirs) if (server && !present.has(key)) features.push(server);
   for (const op of settled) {
     // An insert is based under the gid the server assigned, not a local id.
-    const key = outcome.insertedKeys.get(op.id) ?? op.key ?? null;
+    const inserted = outcome.insertedKeys.get(op.id);
+    // An update re-created under a new gid leaves its old one behind.
+    if (inserted !== undefined && op.key !== null && op.key !== inserted) next.delete(op.key);
+    const key = inserted ?? op.key ?? null;
     if (key === null) continue;
     if (theirs.has(key) || unread.has(key)) continue;
     if (op.kind === "delete") {

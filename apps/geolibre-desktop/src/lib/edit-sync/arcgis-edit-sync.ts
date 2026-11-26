@@ -25,7 +25,6 @@
 
 import type { GeoLibreLayer } from "@geolibre/core";
 import {
-  arcGISObjectId,
   describeArcGISEditError,
   planArcGISEdits,
   type ArcGISEditInfo,
@@ -101,9 +100,12 @@ export function arcgisOutboxTarget(layer: GeoLibreLayer): ArcGISOutboxTarget | n
   };
 }
 
-/** Outbox entry id for an ArcGIS layer: one entry per service layer. */
-export function arcgisOutboxId(target: ArcGISOutboxTarget): string {
-  return `arcgis:${JSON.stringify([target.layerUrl])}`;
+/**
+ * Outbox entry id for an ArcGIS layer: one entry per service layer and store
+ * layer, since two layers on one service each diff against their own base.
+ */
+export function arcgisOutboxId(target: ArcGISOutboxTarget, layerId: string): string {
+  return `arcgis:${JSON.stringify([target.layerUrl, layerId])}`;
 }
 
 /**
@@ -480,7 +482,7 @@ export async function reconcileArcGISLayerAfterSync(
   const target = entry.target as ArcGISOutboxTarget;
   if (!layer?.geojson || !deps.session) return false;
   const current = arcgisOutboxTarget(layer);
-  if (!current || arcgisOutboxId(current) !== entry.id) return false;
+  if (!current || arcgisOutboxId(current, entry.layerId) !== entry.id) return false;
   const field = target.objectIdField;
   const keyOf = objectIdKey(field);
   const fingerprint = arcgisFingerprint(target);
@@ -499,6 +501,8 @@ export async function reconcileArcGISLayerAfterSync(
     if (insertedKey !== undefined && op.feature?.id !== undefined) {
       assigned.set(op.feature.id, Number(insertedKey));
     }
+    // An update re-created under a new object ID leaves its old one behind.
+    if (insertedKey !== undefined && op.key !== null && op.key !== insertedKey) deleted.add(op.key);
     const key = insertedKey ?? op.key;
     if (key === null || theirsKeys.has(key)) continue;
     if (op.kind === "delete") deleted.add(key);
