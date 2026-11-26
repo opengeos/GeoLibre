@@ -25,8 +25,14 @@ mod live_relay {
         const UNAVAILABLE: &str = "Live MCP is only available in GeoLibre Desktop.";
 
         #[tauri::command]
-        pub(crate) fn live_relay_set_access(_enabled: bool) -> Result<(), String> {
-            Err(UNAVAILABLE.to_string())
+        pub(crate) fn live_relay_set_access(enabled: bool) -> Result<(), String> {
+            // Turning it off is a no-op here; the app syncs the (default off)
+            // setting at every launch and must not see an error for that.
+            if enabled {
+                Err(UNAVAILABLE.to_string())
+            } else {
+                Ok(())
+            }
         }
 
         #[tauri::command]

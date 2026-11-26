@@ -275,6 +275,9 @@ struct Pending {
 struct Server {
     stop: Arc<AtomicBool>,
     socket_path: Option<PathBuf>,
+    /// `(device, inode)` of the socket this relay bound, so a disable never
+    /// removes a socket another GeoLibre process bound at the same path.
+    socket_id: Option<(u64, u64)>,
 }
 
 #[derive(Default)]
@@ -395,7 +398,12 @@ impl RelayCore {
             let mut state = self.lock();
             state.enabled = true;
             state.token = token;
-            state.server = Some(Server { stop, socket_path });
+            let socket_id = socket_path.as_deref().and_then(file_id);
+            state.server = Some(Server {
+                stop,
+                socket_path,
+                socket_id,
+            });
             state.published = Some(payload);
         }
         if let Err(error) = self.publish() {
@@ -422,8 +430,10 @@ impl RelayCore {
         }
         if let Some(server) = server {
             server.stop.store(true, Ordering::SeqCst);
-            if let Some(path) = server.socket_path {
-                let _ = std::fs::remove_file(path);
+            if let (Some(path), Some(id)) = (server.socket_path, server.socket_id) {
+                if file_id(&path) == Some(id) {
+                    let _ = std::fs::remove_file(path);
+                }
             }
         }
         self.unpublish()
@@ -478,6 +488,15 @@ impl RelayCore {
                     return Err(format!(
                         "The Live MCP discovery file cannot be named like its socket: {}",
                         discovery.display()
+                    ));
+                }
+                // A socket that still answers belongs to another running
+                // GeoLibre; never take its path. A dead one is left over
+                // from a crash and is replaced.
+                if std::os::unix::net::UnixStream::connect(&path).is_ok() {
+                    return Err(format!(
+                        "Another GeoLibre window is already serving Live MCP at {}",
+                        path.display()
                     ));
                 }
                 let _ = std::fs::remove_file(&path);
@@ -864,15 +883,35 @@ fn socket_path_in(directory: &Path) -> Result<PathBuf, String> {
         })
 }
 
+/// The `(device, inode)` of a file, to tell our socket from a replacement.
+fn file_id(path: &Path) -> Option<(u64, u64)> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        std::fs::symlink_metadata(path)
+            .ok()
+            .map(|metadata| (metadata.dev(), metadata.ino()))
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = path;
+        None
+    }
+}
+
 fn create_private_dir(directory: &Path) -> Result<(), String> {
     #[cfg(unix)]
     {
-        use std::os::unix::fs::DirBuilderExt;
+        use std::os::unix::fs::{DirBuilderExt, PermissionsExt};
         std::fs::DirBuilder::new()
             .recursive(true)
             .mode(0o700)
             .create(directory)
-            .map_err(|error| format!("Could not create {}: {error}", directory.display()))
+            .map_err(|error| format!("Could not create {}: {error}", directory.display()))?;
+        // An existing directory may be looser; the socket and discovery file
+        // must never be reachable by other users, even briefly.
+        std::fs::set_permissions(directory, std::fs::Permissions::from_mode(0o700))
+            .map_err(|error| format!("Could not secure {}: {error}", directory.display()))
     }
     #[cfg(not(unix))]
     {
@@ -1616,6 +1655,27 @@ mod tests {
         // A new grant uses a fresh token; the revoked one stays refused.
         fixture.core.set_access(true).unwrap();
         assert_ne!(discovery(&fixture)["token"], json!(token));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_live_socket_of_another_instance_is_never_taken() {
+        let first = fixture(Transport::Unix);
+        first.core.set_access(true).unwrap();
+        let dispatcher = Arc::new(EchoDispatcher {
+            core: Mutex::new(Weak::new()),
+            mode: Mutex::new("echo"),
+            seen: Mutex::new(Vec::new()),
+        });
+        let second = RelayCore::new(
+            Box::new(dispatcher),
+            Transport::Unix,
+            Some(first.discovery.clone()),
+        );
+        let error = second.set_access(true).unwrap_err();
+        assert!(error.contains("already serving"), "{error}");
+        // The first instance keeps answering on its socket.
+        assert_eq!(status(&first).0, 200);
     }
 
     #[cfg(unix)]
