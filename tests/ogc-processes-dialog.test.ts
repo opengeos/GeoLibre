@@ -337,6 +337,41 @@ test("layer FeatureCollections are sent as qualified GeoJSON inputs", async () =
   });
 });
 
+test("base64 JSON geodata is importable while ordinary JSON messages stay download-only", async () => {
+  const collection = {
+    type: "FeatureCollection" as const,
+    features: [
+      {
+        type: "Feature" as const,
+        properties: {},
+        geometry: { type: "Point" as const, coordinates: [3, 4] },
+      },
+    ],
+  };
+  serve(
+    async () =>
+      new Response(
+        JSON.stringify({
+          geometry: {
+            value: btoa(JSON.stringify(collection)),
+            encoding: "base64",
+            mediaType: "application/json",
+          },
+          message: { value: "Ordinary message", mediaType: "application/json" },
+        }),
+        { headers: { "Content-Type": "application/json" } },
+      ),
+  );
+  await form();
+  fireEvent.click(screen.getByRole("button", { name: "Run process" }));
+  await waitFor(() =>
+    assert.equal(screen.getAllByRole("button", { name: "Add to map" }).length, 1),
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Add to map" }));
+  await waitFor(() => assert.equal(useAppStore.getState().layers.length, 1));
+  assert.deepEqual(useAppStore.getState().layers[0].geojson, collection);
+});
+
 test("oversized layer inputs are rejected before replacing the editor value", async () => {
   const process = description();
   process.inputs.area = { title: "Area", schema: { type: "object" }, minOccurs: 0 };

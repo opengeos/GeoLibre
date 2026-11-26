@@ -29,6 +29,7 @@ export function ogcProcessOutputPreview(output: OgcProcessOutput): string {
 export function canImportOgcProcessOutput(output: OgcProcessOutput): boolean {
   if (output.href || output.bytes) return !output.mediaType || /json|tiff/i.test(output.mediaType);
   if (/geo\+json|tiff/i.test(output.mediaType ?? "")) return true;
+  if (output.encoding === "base64" && /json/i.test(output.mediaType ?? "")) return true;
   const value = output.value;
   return (
     !!value &&
