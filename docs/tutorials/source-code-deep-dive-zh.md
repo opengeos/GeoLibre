@@ -331,7 +331,7 @@ let total = distinctFeatureCount(pastStates[lastIndex], seen);
 
 ### 3.5 体积：懒加载做到什么程度
 
-`apps/geolibre-desktop/vite.config.ts` 里的分包配置（`manualChunks` 加上 Rolldown 的 `CODE_SPLITTING_GROUPS`）是这套东西的核心。举个最有代表性的例子——Cesium。源码注释记录过一次教训：Cesium 的 chunk 曾经吞进了共享的辅助模块，结果「the whole ~4.7 MB Cesium chunk was modulepreloaded on every boot」；现在它单独成组，因为 **「Cesium only loads when a pane switches to the 3D globe.」**
+`apps/geolibre-desktop/vite-chunking.ts` 里的分包配置（`manualChunks` 加上 Rolldown 的 `CODE_SPLITTING_GROUPS`）是这套东西的核心。举个最有代表性的例子——Cesium。源码注释记录过一次教训：Cesium 的 chunk 曾经吞进了共享的辅助模块，结果「the whole ~4.7 MB Cesium chunk was modulepreloaded on every boot」；现在它单独成组，因为 **「Cesium only loads when a pane switches to the 3D globe.」**
 
 **让它不进启动路径，是关键。** 对 Web 端 GIS 来说，最容易获得的性能提升就是这个：真正需要三维的用户可能只有 20%，没理由让 100% 的人为它承担首屏加载开销。
 
