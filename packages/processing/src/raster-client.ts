@@ -16,6 +16,7 @@ import {
   mapGeometry,
   rasterCrsDefinition,
   rasterEpsg,
+  toNorthUp,
 } from "./raster-geo";
 import { interpolatePoints } from "./raster-interpolate";
 import { dualPolRgb, floodMap, sarDbConvert, speckleFilter } from "./raster-sar";
@@ -1301,7 +1302,8 @@ export async function runRasterToolClientAsync(
       return rasterResult(out.raster, out.messages);
     }
     case "cut-fill": {
-      let existing = requireRaster(inputs, toolId);
+      // North-up first: the area-scale lattice is indexed by north-up rows.
+      let existing = toNorthUp(requireRaster(inputs, toolId));
       let surface =
         p.reference === "surface"
           ? requireSecondary(inputs, "surface_path", "reference surface")
@@ -1331,9 +1333,17 @@ export async function runRasterToolClientAsync(
           // The projection's own area distortion, via its inverse.
           const inverse = await crsTransform(definition, "EPSG:4326");
           areaScale = projectedAreaScale(existing, inverse, metersPerUnit);
-        } else if (existing.resX <= 0.01 && existing.resY <= 0.01) {
-          // Sub-centimetre cells are almost certainly degrees with no CRS tag;
-          // treating them as metres would understate volume ~10^10 times.
+        } else if (
+          existing.resX < 1 &&
+          existing.resY < 1 &&
+          existing.originX >= -180 &&
+          existing.originX + existing.width * existing.resX <= 360 &&
+          existing.originY <= 90 &&
+          existing.originY - existing.height * existing.resY >= -90
+        ) {
+          // Sub-metre cells inside the lon/lat range are almost certainly
+          // degrees with no CRS tag; treating them as metres would understate
+          // volume by about 10^10.
           throw new Error(
             "The raster has no usable CRS and its cell size looks like degrees, so cell areas cannot be computed. Assign a CRS first.",
           );

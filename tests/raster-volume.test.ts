@@ -300,10 +300,50 @@ describe("projectedAreaScale", () => {
   });
 
   it("refuses an untagged raster with degree-sized cells", async () => {
-    const raster = utm([12], 1, 1, { resX: 0.0001, resY: 0.0001, geoKeys: {} });
-    await assert.rejects(
-      runRasterToolClientAsync("cut-fill", { raster }, { plane_elevation: 10 }),
-      /looks like degrees/,
-    );
+    for (const res of [0.0001, 0.1]) {
+      const raster = utm([12], 1, 1, {
+        originX: -84,
+        originY: 36,
+        resX: res,
+        resY: res,
+        geoKeys: {},
+      });
+      await assert.rejects(
+        runRasterToolClientAsync("cut-fill", { raster }, { plane_elevation: 10 }),
+        /looks like degrees/,
+        `cell ${res}`,
+      );
+    }
+  });
+
+  it("gives a south-up raster the same areas as its north-up twin", async () => {
+    // Web Mercator rows at 40-41°N, once north-up and once flipped (south-up).
+    const y = (lat: number) => 6_378_137 * Math.log(Math.tan(((45 + lat / 2) * Math.PI) / 180));
+    const top = y(41);
+    const bottom = y(40);
+    const rows = 4;
+    const res = (top - bottom) / rows;
+    const values = [1, 2, 3, 4];
+    const keys = { GTModelTypeGeoKey: 1, ProjectedCSTypeGeoKey: 3857 };
+    const northUp = utm(values, 1, rows, {
+      originX: 0,
+      originY: top,
+      resX: res,
+      resY: res,
+      geoKeys: keys,
+    });
+    const southUp = utm([...values].reverse(), 1, rows, {
+      originX: 0,
+      originY: bottom,
+      resX: res,
+      resY: res,
+      flipY: true,
+      geoKeys: keys,
+    });
+    const volume = async (raster: RasterData) => {
+      const run = await runRasterToolClientAsync("cut-fill", { raster }, { plane_elevation: 0 });
+      return run.kind === "raster" ? run.cutFill!.cutVolume : Number.NaN;
+    };
+    near(await volume(southUp), await volume(northUp), 1e-6 * (await volume(northUp)));
   });
 });
