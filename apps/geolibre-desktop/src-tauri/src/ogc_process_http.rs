@@ -144,7 +144,13 @@ fn request_blocking(
     let max_bytes = max_bytes.unwrap_or(2 * 1024 * 1024).min(MAX_RESPONSE_BYTES);
     // Keep small OGC exception documents, but an oversized/broken error page
     // must not hide the server's HTTP status behind a download-limit error.
-    let body = if (200..300).contains(&status) {
+    let accepted =
+        method == reqwest::Method::POST && matches!(status, 201 | 202) && location.is_some();
+    let body = if accepted {
+        // Status/Location are sufficient to recover a submitted job even if
+        // the optional response body is interrupted or exceeds its limit.
+        crate::http_body::read_limited_body(response, length, max_bytes).unwrap_or_default()
+    } else if (200..300).contains(&status) {
         crate::http_body::read_limited_body(response, length, max_bytes)?
     } else {
         crate::http_body::read_limited_body(response, length, max_bytes.min(64 * 1024))
@@ -355,6 +361,8 @@ mod transport_tests {
                     "",
                     "12345678",
                 ),
+                ("POST", "/accepted-broken", "202 Accepted", "Location: /jobs/accepted\r\n", "{}"),
+                ("POST", "/accepted-large", "201 Created", "Location: /jobs/accepted\r\n", "12345678"),
             ] {
                 let deadline = Instant::now() + Duration::from_secs(10);
                 let mut socket = loop {
@@ -403,7 +411,8 @@ mod transport_tests {
                 } else {
                     assert!(!lower.contains("prefer:"));
                 }
-                let response = format!("HTTP/1.1 {status}\r\nContent-Type: application/json\r\n{headers}Content-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len());
+                let length = if path == "/accepted-broken" { body.len() + 100 } else { body.len() };
+                let response = format!("HTTP/1.1 {status}\r\nContent-Type: application/json\r\n{headers}Content-Length: {length}\r\nConnection: close\r\n\r\n{body}");
                 socket.write_all(response.as_bytes()).unwrap();
             }
         });
@@ -477,6 +486,21 @@ mod transport_tests {
         .unwrap();
         assert_eq!(unavailable.status, 503);
         assert!(unavailable.body_base64.is_empty());
+        for (path, max, status) in [("/accepted-broken", 1024, 202), ("/accepted-large", 4, 201)] {
+            let accepted = request_blocking(
+                url(path),
+                "POST".into(),
+                Some(r#"{"inputs":{"name":"GeoLibre"}}"#.into()),
+                None,
+                true,
+                Some(max),
+                Some(10),
+            )
+            .unwrap();
+            assert_eq!(accepted.status, status);
+            assert_eq!(accepted.location.as_deref(), Some("/jobs/accepted"));
+            assert!(accepted.body_base64.is_empty());
+        }
         server.join().unwrap();
         let failure = request_blocking(
             url("/closed?token=private-value"),

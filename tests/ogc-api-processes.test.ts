@@ -88,6 +88,194 @@ async function processDescription() {
   )[0];
 }
 
+test("invalid URLs and an empty accepted response without routing use catalog errors", async () => {
+  const process = await processDescription();
+  const calls = serve(() => new Response(null, { status: 202 }));
+  await assert.rejects(
+    discoverOgcProcesses("example.org/processes", new AbortController().signal),
+    { code: "invalidUrl" },
+  );
+  assert.equal(calls.length, 0);
+  await assert.rejects(executeOgcProcess(process, {}, new AbortController().signal), {
+    code: "noStatusUrl",
+  });
+  serve(() => ({ status: "successful" }));
+  const current = await readOgcProcessJob(
+    "https://example.org/jobs/bad%ZZ",
+    new AbortController().signal,
+  );
+  assert.equal(current.id, "bad%ZZ");
+});
+
+test("a failed accepted body read preserves the job status and URL", async () => {
+  const process = await processDescription();
+  const calls = serve(
+    () =>
+      new Response(
+        new ReadableStream({
+          start(controller) {
+            controller.error(new Error("interrupted body"));
+          },
+        }),
+        {
+          status: 202,
+          headers: { Location: "/api/jobs/accepted", "Content-Type": "application/json" },
+        },
+      ),
+  );
+  const result = await executeOgcProcess(process, {}, new AbortController().signal);
+  assert.equal(result.kind, "job");
+  if (result.kind === "job") assert.equal(new URL(result.job.url).pathname, "/api/jobs/accepted");
+  assert.equal(calls.length, 1);
+  serve(
+    () =>
+      new Response("{invalid-json", {
+        status: 201,
+        headers: { Location: "/api/jobs/accepted", "Content-Type": "application/json" },
+      }),
+  );
+  assert.equal((await executeOgcProcess(process, {}, new AbortController().signal)).kind, "job");
+});
+
+test("monitoring and request deadlines use localized errors and preserve caller cancellation", async (t) => {
+  const original = AbortSignal.timeout;
+  const observation = new AbortController();
+  t.mock.method(AbortSignal, "timeout", (ms: number) =>
+    ms === 30 * 60_000 ? observation.signal : original(ms),
+  );
+  serve(() => ({ jobID: "one", status: "running" }));
+  await assert.rejects(
+    monitorOgcProcessJob("https://example.org/jobs/one", new AbortController().signal, () =>
+      observation.abort(new DOMException("deadline", "TimeoutError")),
+    ),
+    { code: "monitoringTimeout" },
+  );
+  const caller = new AbortController();
+  caller.abort();
+  await assert.rejects(monitorOgcProcessJob("https://example.org/jobs/one", caller.signal), {
+    name: "AbortError",
+  });
+  globalThis.fetch = async () => {
+    throw new DOMException("deadline", "TimeoutError");
+  };
+  await assert.rejects(processHttp("https://example.org/processes", new AbortController().signal), {
+    code: "requestTimeout",
+  });
+});
+
+test("JSON GeoJSON and GeometryCollection results stay whole without reserving output IDs", async () => {
+  const process = await processDescription();
+  for (const mediaType of ["application/json", "application/geo+json"]) {
+    for (const document of [
+      { type: "FeatureCollection", features: [] },
+      { type: "GeometryCollection", geometries: [] },
+    ]) {
+      serve(
+        () => new Response(JSON.stringify(document), { headers: { "Content-Type": mediaType } }),
+      );
+      const result = await executeOgcProcess(process, {}, new AbortController().signal);
+      if (result.kind !== "results") throw Error("Expected results");
+      assert.equal(result.outputs.length, 1);
+      assert.deepEqual(
+        JSON.parse(
+          await (
+            await downloadOgcProcessOutput(result.outputs[0], new AbortController().signal)
+          ).text(),
+        ),
+        document,
+      );
+    }
+  }
+  process.outputs = {
+    type: { schema: { type: "string" } },
+    features: { schema: { type: "array" } },
+  };
+  serve(() => ({ type: "FeatureCollection", features: [] }));
+  const literal = await executeOgcProcess(process, {}, new AbortController().signal);
+  if (literal.kind !== "results") throw Error("Expected results");
+  assert.deepEqual(
+    literal.outputs.map((value) => value.id),
+    ["type", "features"],
+  );
+});
+
+test("binary output schemas survive synchronous execution and asynchronous polling", async () => {
+  const process = await processDescription();
+  process.outputs = {
+    binary: {
+      schema: {
+        type: "string",
+        contentEncoding: "binary",
+        contentMediaType: "application/octet-stream",
+      },
+    },
+    literal: { schema: { type: "string" } },
+    formatted: { schema: { type: "string", format: "byte" } },
+  };
+  const signal = new AbortController().signal;
+  for (const asynchronous of [false, true]) {
+    serve((url, init) => {
+      if (init?.method === "POST" && asynchronous)
+        return new Response(null, {
+          status: 202,
+          headers: { Location: "/api/jobs/one", "Retry-After": "0" },
+        });
+      if (new URL(url).pathname === "/api/jobs/one") return { jobID: "one", status: "successful" };
+      return { binary: "AAEC/w==", literal: "AAEC/w==", formatted: "AAEC/w==" };
+    });
+    const execution = await executeOgcProcess(process, {}, signal, asynchronous);
+    const result =
+      execution.kind === "job"
+        ? await monitorOgcProcessJob(execution.job, signal)
+        : execution.outputs;
+    assert.deepEqual(
+      new Uint8Array(await (await downloadOgcProcessOutput(result[0], signal)).arrayBuffer()),
+      new Uint8Array([0, 1, 2, 255]),
+    );
+    assert.equal(await (await downloadOgcProcessOutput(result[1], signal)).text(), "AAEC/w==");
+    assert.deepEqual(
+      new Uint8Array(await (await downloadOgcProcessOutput(result[2], signal)).arrayBuffer()),
+      new Uint8Array([0, 1, 2, 255]),
+    );
+  }
+});
+
+test("an untracked job resolves advertised process outputs before parsing legacy results", async () => {
+  const descriptionValue = description();
+  const calls = serve((url) => {
+    const path = new URL(url).pathname;
+    if (path === "/api/jobs/external")
+      return { jobID: "external", processID: "hello-world", status: "successful" };
+    if (path.endsWith("/results"))
+      return {
+        outputs: [
+          {
+            id: "echo",
+            value: { type: "FeatureCollection", features: [] },
+            mediaType: "application/geo+json",
+          },
+        ],
+      };
+    assert.equal(path, "/api/processes/hello-world");
+    return descriptionValue;
+  });
+  const result = await monitorOgcProcessJob(
+    "https://example.org/api/jobs/external?token=secret",
+    new AbortController().signal,
+  );
+  assert.equal(result[0].id, "echo");
+  assert.equal(result[0].mediaType, "application/geo+json");
+  assert.equal(calls.length, 3);
+  assert.ok(calls.every((call) => call.init?.method === "GET"));
+  descriptionValue.outputs = { outputs: { schema: { type: "array" } } };
+  const core = await monitorOgcProcessJob(
+    "https://example.org/api/jobs/external?token=secret",
+    new AbortController().signal,
+  );
+  assert.equal(core[0].id, "outputs");
+  assert.ok(Array.isArray(core[0].value));
+});
+
 test("incompatible primitive null defaults are omitted while nullable JSON defaults survive", async () => {
   const process = await processDescription();
   process.inputs.name.schema = { type: "string", default: null };

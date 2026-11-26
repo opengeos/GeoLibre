@@ -31,6 +31,9 @@ export interface OgcProcessJob {
   retryAfterMs: number;
   /** Advertised identifiers disambiguate legacy pygeoapi result envelopes. */
   outputIds?: string[];
+  outputDefinitions?: OgcProcess["outputs"];
+  processId?: string;
+  processUrl?: string;
 }
 export interface OgcProcessOutput {
   id: string;
@@ -110,6 +113,29 @@ function jsonUrl(url: string): string {
   const next = processHttpUrl(url);
   next.searchParams.set("f", "json");
   return next.href;
+}
+
+/** Compare status request identities while preserving service-specific query values. */
+export function sameOgcProcessJob(first: string, second: string): boolean {
+  try {
+    const key = (value: string) => {
+      const url = processHttpUrl(jsonUrl(value));
+      url.searchParams.sort();
+      return url.href;
+    };
+    return key(first) === key(second);
+  } catch {
+    return false;
+  }
+}
+
+function pathIdentifier(url: string): string {
+  const value = processHttpUrl(url).pathname.split("/").pop() ?? "";
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
 }
 function decode(response: ProcessHttpResponse): unknown {
   return JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(response.body));
@@ -237,16 +263,15 @@ function job(response: ProcessHttpResponse, fallback: string): OgcProcessJob {
   if (!["accepted", "running", "successful", "failed", "dismissed"].includes(String(status)))
     throw new OgcProcessError("unknownJobStatus");
   const items = links(doc.links);
+  const processUrl =
+    linked(items, REL + "process", response.url) ?? linked(items, "process", response.url);
   const url =
     optionalLink(response.location, response.url) ??
     linked(items, "status", response.url) ??
     linked(items, "self", response.url) ??
     fallback;
   return {
-    id:
-      typeof doc.jobID === "string"
-        ? doc.jobID
-        : decodeURIComponent(processHttpUrl(url).pathname.split("/").pop() ?? ""),
+    id: typeof doc.jobID === "string" ? doc.jobID : pathIdentifier(url),
     url,
     status: status as OgcProcessJobStatus,
     message: typeof doc.message === "string" ? doc.message : "",
@@ -258,9 +283,78 @@ function job(response: ProcessHttpResponse, fallback: string): OgcProcessJob {
       linked(items, "results", response.url) ??
       append(url, "/results"),
     retryAfterMs: ogcProcessRetryDelay(response.retryAfter),
+    ...(typeof doc.processID === "string" ? { processId: doc.processID } : {}),
+    ...(processUrl ? { processUrl } : {}),
   };
 }
-function outputs(response: ProcessHttpResponse, outputIds?: readonly string[]): OgcProcessOutput[] {
+
+/** Resolve advertised job context; unavailable descriptions leave normative Core results usable. */
+export async function resolveOgcProcessJobContext(
+  current: OgcProcessJob,
+  signal: AbortSignal,
+): Promise<OgcProcessJob> {
+  if (current.outputDefinitions) return current;
+  let url = current.processUrl;
+  if (!url && current.processId) {
+    const target = processHttpUrl(current.url);
+    if (/\/jobs\/[^/]+\/?$/.test(target.pathname)) {
+      target.pathname = target.pathname.replace(
+        /\/jobs\/[^/]+\/?$/,
+        `/processes/${encodeURIComponent(current.processId)}`,
+      );
+      url = target.href;
+    }
+  }
+  if (!url) return current;
+  try {
+    const response = await processHttp(jsonUrl(url), signal);
+    successful(response);
+    const description = processDocument(decode(response), response.url);
+    return {
+      ...current,
+      processUrl: description.url,
+      outputDefinitions: description.outputs,
+      outputIds: Object.keys(description.outputs),
+    };
+  } catch (error) {
+    if (signal.aborted) throw error;
+    return current;
+  }
+}
+
+function binaryFormat(
+  definition: JsonObject | undefined,
+  depth = 0,
+): { encoding?: string; mediaType?: string } {
+  const schema = definition?.schema;
+  if (!schema || typeof schema !== "object" || Array.isArray(schema) || depth > 8) return {};
+  const value = schema as JsonObject;
+  const mediaType = typeof value.contentMediaType === "string" ? value.contentMediaType : undefined;
+  if (
+    value.contentEncoding === "binary" ||
+    value.contentEncoding === "base64" ||
+    value.format === "byte"
+  )
+    return { encoding: "base64", mediaType };
+  const alternatives = value.oneOf ?? value.anyOf;
+  if (Array.isArray(alternatives) && alternatives.length) {
+    const formats = alternatives.map((schema) => binaryFormat({ schema }, depth + 1));
+    if (formats.every((format) => format.encoding === "base64"))
+      return {
+        encoding: "base64",
+        mediaType: formats.every((format) => format.mediaType === formats[0].mediaType)
+          ? formats[0].mediaType
+          : undefined,
+      };
+  }
+  return {};
+}
+
+function outputs(
+  response: ProcessHttpResponse,
+  outputIds?: readonly string[],
+  definitions?: OgcProcess["outputs"],
+): OgcProcessOutput[] {
   if (!response.body.length) return [];
   if (!/json/i.test(response.contentType ?? ""))
     return [
@@ -274,10 +368,19 @@ function outputs(response: ProcessHttpResponse, outputIds?: readonly string[]): 
   if (!document || typeof document !== "object" || Array.isArray(document))
     return [{ id: "result", value: document, mediaType: "application/json" }];
   const doc = document as JsonObject;
-  if (
-    /geo\+json/i.test(response.contentType ?? "") &&
+  const geoJson =
     typeof doc.type === "string" &&
-    (doc.type === "FeatureCollection" || doc.type === "Feature" || Array.isArray(doc.coordinates))
+    ((doc.type === "FeatureCollection" && Array.isArray(doc.features)) ||
+      doc.type === "Feature" ||
+      (doc.type === "GeometryCollection" && Array.isArray(doc.geometries)) ||
+      (["Point", "MultiPoint", "LineString", "MultiLineString", "Polygon", "MultiPolygon"].includes(
+        doc.type,
+      ) &&
+        Array.isArray(doc.coordinates)));
+  if (
+    geoJson &&
+    (/geo\+json/i.test(response.contentType ?? "") ||
+      (outputIds !== undefined && !Object.keys(doc).some((key) => outputIds.includes(key))))
   )
     return [{ id: "result", value: doc, mediaType: "application/geo+json" }];
   const legacyArray =
@@ -291,25 +394,35 @@ function outputs(response: ProcessHttpResponse, outputIds?: readonly string[]): 
         return [String(value.id ?? "result"), value] as const;
       })
     : Object.entries(doc);
-  return entries.map(([id, raw]) => {
+  return entries.map(([id, raw]): OgcProcessOutput => {
+    const format = binaryFormat(definitions?.[id]);
     if (raw && typeof raw === "object" && !Array.isArray(raw)) {
       const value = raw as JsonObject;
       if (typeof value.href === "string")
         return {
           id,
           href: ogcProcessLink(value.href, response.url),
+          ...(format.mediaType ? { mediaType: format.mediaType } : {}),
           ...(typeof value.type === "string" ? { mediaType: value.type } : {}),
           ...(typeof value.mediaType === "string" ? { mediaType: value.mediaType } : {}),
         };
-      if (Object.hasOwn(value, "value"))
+      if (Object.hasOwn(value, "value")) {
+        const mediaType = typeof value.mediaType === "string" ? value.mediaType : format.mediaType;
+        const encoding =
+          typeof value.encoding === "string"
+            ? value.encoding
+            : typeof value.value === "string"
+              ? format.encoding
+              : undefined;
         return {
           id,
           value: value.value,
-          ...(typeof value.mediaType === "string" ? { mediaType: value.mediaType } : {}),
-          ...(typeof value.encoding === "string" ? { encoding: value.encoding } : {}),
+          ...(mediaType ? { mediaType } : {}),
+          ...(encoding ? { encoding } : {}),
         };
+      }
     }
-    return { id, value: raw };
+    return { id, value: raw, ...(typeof raw === "string" ? format : {}) };
   });
 }
 
@@ -339,7 +452,7 @@ export async function executeOgcProcess(
   successful(response);
   if (response.status === 201 || response.status === 202) {
     let fallback = optionalLink(response.location, response.url);
-    if (!fallback) {
+    if (!fallback && response.body.length) {
       const document = object(decode(response));
       const jobs = linked(process.links, REL + "job-list", process.url);
       if (jobs && typeof document.jobID === "string")
@@ -350,22 +463,34 @@ export async function executeOgcProcess(
           linked(links(document.links), "self", response.url);
     }
     if (!fallback) throw new OgcProcessError("noStatusUrl");
-    if (!response.body.length)
-      return {
-        kind: "job",
-        job: {
-          id: processHttpUrl(fallback).pathname.split("/").pop() ?? "",
-          url: fallback,
-          status: "accepted",
-          message: "",
-          resultsUrl: append(fallback, "/results"),
-          retryAfterMs: ogcProcessRetryDelay(response.retryAfter),
-          outputIds: Object.keys(process.outputs),
-        },
-      };
+    if (response.body.length) {
+      try {
+        return {
+          kind: "job",
+          job: {
+            ...job(response, fallback),
+            outputIds: Object.keys(process.outputs),
+            outputDefinitions: process.outputs,
+            processUrl: process.url,
+          },
+        };
+      } catch {
+        /* An accepted status URL remains recoverable despite a malformed optional body. */
+      }
+    }
     return {
       kind: "job",
-      job: { ...job(response, fallback), outputIds: Object.keys(process.outputs) },
+      job: {
+        id: pathIdentifier(fallback),
+        url: fallback,
+        status: "accepted",
+        message: "",
+        resultsUrl: append(fallback, "/results"),
+        retryAfterMs: ogcProcessRetryDelay(response.retryAfter),
+        outputIds: Object.keys(process.outputs),
+        outputDefinitions: process.outputs,
+        processUrl: process.url,
+      },
     };
   }
   const retainedJob =
@@ -379,7 +504,7 @@ export async function executeOgcProcess(
     })[0];
   return {
     kind: "results",
-    outputs: outputs(response, Object.keys(process.outputs)),
+    outputs: outputs(response, Object.keys(process.outputs), process.outputs),
     ...(retainedJob ? { jobUrl: retainedJob } : {}),
   };
 }
@@ -400,7 +525,7 @@ export async function readOgcProcessResults(
     maxBytes: MAX_PROCESS_RESULT_BYTES,
   });
   successful(response);
-  return outputs(response, job.outputIds);
+  return outputs(response, job.outputIds, job.outputDefinitions);
 }
 
 /** Dismiss only the particular job the caller selected. */

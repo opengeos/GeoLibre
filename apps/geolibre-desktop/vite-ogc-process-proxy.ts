@@ -155,14 +155,18 @@ export async function proxyOgcProcessRequest(
       );
     } catch (error) {
       await upstream.response.body?.cancel().catch(() => {});
-      if (upstream.response.ok)
+      const accepted =
+        method === "POST" &&
+        [201, 202].includes(upstream.response.status) &&
+        upstream.response.headers.has("location");
+      if (!accepted && upstream.response.ok)
         throw new ProcessProxyError(
           502,
           error instanceof ProxyBodyLimitError
             ? "OGC process response exceeds its download limit."
             : "OGC process response could not be read completely.",
         );
-      if (signal.aborted) throw error;
+      if (!accepted && signal.aborted) throw error;
       data = Buffer.alloc(0);
     }
     res.statusCode = upstream.response.status;

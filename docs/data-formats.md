@@ -216,10 +216,12 @@ Open **Processing > GeoLibre > OGC API - Processes**, or search for
 
 Execution submits once and does not retry automatically. Individual HTTP
 requests time out after 120 seconds; choose asynchronous execution for longer
-work when the service supports it. Stopping or closing during submission can
-leave work running remotely without a returned job URL. The dialog retains an
-interruption notice when reopened; check the service before retrying, since a
-retry starts a new execution. The actual advertised execution endpoint is
+work when the service supports it. Stopping or closing during submission keeps
+the bounded request alive to retain an eventual accepted job URL, and prevents
+another submission until that outcome arrives. Reopening shows the pending
+state and recovery notice. A failed request can still leave work running remotely;
+check the service before retrying, since a retry starts a new execution.
+The actual advertised execution endpoint is
 shown before submission, including when it differs from the catalog host.
 Input documents are
 limited to 1 MiB, process descriptions and status documents to 2 MiB, and result
@@ -228,7 +230,9 @@ memory. Native result transport uses base64 rather than JSON number arrays.
 Monitoring honors bounded `Retry-After` values and stops after 30
 minutes; the job URL can be used to resume. Closing and reopening retains
 dialog state in the current session. Changing projects clears inputs, job
-status, and results and aborts pending requests. Job history and input
+status, and results and aborts pending observation and cancellable requests.
+Already-dispatched native writes remain bounded by the host timeout; their late
+results cannot enter a replacement project. Job history and input
 credentials are not saved in projects.
 
 Clearing an optional text input omits it from the request. Use raw JSON input

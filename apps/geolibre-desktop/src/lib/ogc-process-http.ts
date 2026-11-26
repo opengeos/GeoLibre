@@ -22,7 +22,12 @@ export interface ProcessHttpResponse {
 
 /** Validate service links without allowing URL user information or non-HTTP schemes. */
 export function processHttpUrl(value: string, base?: string): URL {
-  const url = new URL(value, base);
+  let url: URL;
+  try {
+    url = new URL(value, base);
+  } catch {
+    throw new OgcProcessError("invalidUrl");
+  }
   if (!/^https?:$/.test(url.protocol) || url.username || url.password)
     throw new OgcProcessError("invalidUrl");
   url.hash = "";
@@ -55,29 +60,35 @@ export async function processHttp(
   } else if (options.body !== undefined) {
     throw new OgcProcessError("requestBody");
   }
-  const abort = AbortSignal.any([signal, AbortSignal.timeout(120_000)]);
+  const deadline = AbortSignal.timeout(120_000);
+  const abort = AbortSignal.any([signal, deadline]);
   abort.throwIfAborted();
   try {
     if (isTauri()) {
       const { requestOgcProcess } = await import("./native-http");
       // In particular, do not submit a job cancelled while the module loaded.
       abort.throwIfAborted();
-      const result = await waitForWcsRequest(
-        requestOgcProcess(url, {
-          ...options,
-          method,
-          maxBytes,
-          timeoutSecs: 120,
-          context: "OGC API Processes",
-        }),
-        abort,
-      );
-      abort.throwIfAborted();
+      const pending = requestOgcProcess(url, {
+        ...options,
+        method,
+        maxBytes,
+        timeoutSecs: 120,
+        context: "OGC API Processes",
+      });
+      // Once dispatched, the bounded native write may outlive observation.
+      // Await its outcome so an accepted job is not discarded on cancellation.
+      const result = method === "GET" ? await waitForWcsRequest(pending, abort) : await pending;
+      if (!(method === "POST" && [201, 202].includes(result.status) && result.location))
+        abort.throwIfAborted();
       const body =
         result.body.buffer instanceof ArrayBuffer
           ? new Uint8Array(result.body.buffer, result.body.byteOffset, result.body.byteLength)
           : new Uint8Array(result.body);
-      if (body.byteLength > maxBytes) throw new OgcProcessError("responseTooLarge");
+      if (body.byteLength > maxBytes) {
+        if (method === "POST" && [201, 202].includes(result.status) && result.location)
+          return { ...result, body: new Uint8Array() };
+        throw new OgcProcessError("responseTooLarge");
+      }
       return { ...result, body };
     }
     const dev = Boolean((import.meta as ImportMeta & { env?: { DEV?: boolean } }).env?.DEV);
@@ -100,10 +111,21 @@ export async function processHttp(
         response.ok ? maxBytes : Math.min(maxBytes, 64 * 1024),
       );
     } catch (error) {
-      if (response.ok || abort.aborted) throw error;
+      const accepted =
+        method === "POST" &&
+        [201, 202].includes(response.status) &&
+        response.headers.has("location");
+      if (!accepted && (response.ok || abort.aborted)) throw error;
       body = new Uint8Array();
     }
-    abort.throwIfAborted();
+    if (
+      !(
+        method === "POST" &&
+        [201, 202].includes(response.status) &&
+        response.headers.has("location")
+      )
+    )
+      abort.throwIfAborted();
     return {
       status: response.status,
       url: dev ? (response.headers.get("x-geolibre-final-url") ?? url) : response.url || url,
@@ -114,6 +136,11 @@ export async function processHttp(
       body,
     };
   } catch (error) {
+    if (
+      !signal.aborted &&
+      (deadline.aborted || (error instanceof DOMException && error.name === "TimeoutError"))
+    )
+      throw new OgcProcessError("requestTimeout");
     throw normalizeFetchError(error);
   }
 }

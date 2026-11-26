@@ -1,4 +1,4 @@
-import "./helpers/dom";
+import { waitFor } from "./helpers/dom";
 import assert from "node:assert/strict";
 import { afterEach, test } from "node:test";
 
@@ -8,6 +8,39 @@ const descriptor = Object.getOwnPropertyDescriptor(window, "__TAURI_INTERNALS__"
 afterEach(() => {
   if (descriptor) Object.defineProperty(window, "__TAURI_INTERNALS__", descriptor);
   else Reflect.deleteProperty(window, "__TAURI_INTERNALS__");
+});
+
+test("a dispatched native submission retains a late accepted job after observation aborts", async () => {
+  const pending: { resolve?: (value: unknown) => void } = {};
+  Object.defineProperty(window, "__TAURI_INTERNALS__", {
+    configurable: true,
+    value: {
+      invoke: () =>
+        new Promise((resolve) => {
+          pending.resolve = resolve;
+        }),
+    },
+  });
+  const { processHttp } = await import("../apps/geolibre-desktop/src/lib/ogc-process-http");
+  const abort = new AbortController();
+  const result = processHttp("https://example.org/execution", abort.signal, {
+    method: "POST",
+    body: "{}",
+  });
+  await waitFor(() => assert.ok(pending.resolve));
+  abort.abort();
+  pending.resolve?.({
+    status: 202,
+    final_url: "https://example.org/execution",
+    content_type: "application/json",
+    location: "/jobs/late",
+    retry_after: null,
+    link: null,
+    body_base64: "",
+  });
+  const response = await result;
+  assert.equal(response.status, 202);
+  assert.equal(response.location, "/jobs/late");
 });
 
 test("native process execution preserves its method, inputs, headers and asynchronous job routing", async () => {

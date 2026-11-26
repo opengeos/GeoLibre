@@ -247,22 +247,80 @@ test("malformed JSON stays in the editor and produces a catalog-backed error", a
 test("closing an unacknowledged submission retains its uncertainty notice on reopening", async () => {
   let posts = 0;
   let signal: AbortSignal | undefined;
+  const pending: { resolve?: (value: Response) => void } = {};
   serve(async (_url, init) => {
     posts++;
     signal = init?.signal ?? undefined;
-    return new Promise<Response>((_resolve, reject) =>
-      signal?.addEventListener("abort", () => reject(signal?.reason), { once: true }),
-    );
+    return new Promise<Response>((resolve) => {
+      pending.resolve = resolve;
+    });
   });
   await form();
   fireEvent.click(screen.getByRole("button", { name: "Run process" }));
   await waitFor(() => assert.ok(signal));
   fireEvent.click(screen.getByRole("button", { name: "Close" }));
-  await waitFor(() => assert.ok(signal?.aborted));
+  assert.equal(
+    signal?.aborted,
+    false,
+    "closing must keep the submission alive to receive its job reference",
+  );
   await act(async () => useAppStore.getState().setOgcProcessesOpen(true));
   await waitFor(() =>
     assert.match(screen.getByRole("alert").textContent ?? "", /Retrying submits a new execution/),
   );
+  assert.equal(posts, 1);
+  assert.equal(screen.getByRole("button", { name: "Run process" }).hasAttribute("disabled"), true);
+  await act(async () =>
+    pending.resolve?.(
+      new Response(null, { status: 202, headers: { Location: "/master/jobs/late" } }),
+    ),
+  );
+  await waitFor(() =>
+    assert.match(
+      (screen.getByLabelText("Job status URL") as HTMLInputElement).value,
+      /\/jobs\/late/,
+    ),
+  );
+  assert.equal(
+    screen.getByRole("button", { name: "Resume monitoring" }).hasAttribute("disabled"),
+    false,
+  );
+  assert.equal(posts, 1);
+});
+
+test("equivalent resumed status URLs update the tracked process and unlock Run", async () => {
+  let complete = false,
+    posts = 0;
+  serve(async (url, init) => {
+    if (init?.method === "POST") {
+      posts++;
+      return new Response(null, {
+        status: 202,
+        headers: { Location: "/master/jobs/one", "Retry-After": "0" },
+      });
+    }
+    return new Response(
+      JSON.stringify(
+        new URL(url).pathname.endsWith("/results")
+          ? { echo: "Completed" }
+          : { jobID: "one", status: complete ? "successful" : "running" },
+      ),
+      { headers: { "Content-Type": "application/json" } },
+    );
+  });
+  await form();
+  fireEvent.click(screen.getByRole("button", { name: "Run process" }));
+  await waitFor(() =>
+    assert.match((screen.getByLabelText("Job status URL") as HTMLInputElement).value, /jobs\/one/),
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Stop waiting" }));
+  complete = true;
+  const url = new URL((screen.getByLabelText("Job status URL") as HTMLInputElement).value);
+  url.searchParams.set("f", "json");
+  fireEvent.change(screen.getByLabelText("Job status URL"), { target: { value: url.href } });
+  fireEvent.click(screen.getByRole("button", { name: "Resume monitoring" }));
+  await waitFor(() => assert.ok(screen.queryByText("Completed")), { timeout: 3000 });
+  assert.equal(screen.getByRole("button", { name: "Run process" }).hasAttribute("disabled"), false);
   assert.equal(posts, 1);
 });
 

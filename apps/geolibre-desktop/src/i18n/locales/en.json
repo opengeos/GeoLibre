@@ -9296,6 +9296,7 @@
         "discovering": "Retrieving processes…",
         "describing": "Loading process description…",
         "executing": "Submitting execution…",
+        "awaiting": "Waiting for the submission outcome…",
         "monitoring": "Monitoring job…",
         "dismissing": "Dismissing job…",
         "output": "Loading result…"
@@ -9317,6 +9318,9 @@
         "inputRepresentation": "Keep JSON mode for reference or qualified inputs that the schema fields cannot represent.",
         "executionUncertain": "The execution response was interrupted. The service may still be running or may have completed the work. Retrying submits a new execution. Check the service before retrying, or use asynchronous execution for a recoverable job URL when available. {{detail}}",
         "requestBody": "Only an OGC process execution POST may have a request body.",
+        "requestTimeout": "The OGC process request timed out after 120 seconds.",
+        "monitoringTimeout": "Monitoring paused after 30 minutes. Resume monitoring with the retained job URL.",
+        "submissionPending": "The previous submission is still awaiting its outcome. Wait for its job URL before starting another execution.",
         "responseTooLarge": "OGC process response exceeds its download limit.",
         "rasterUnreadable": "The process result is not a readable GeoTIFF.",
         "rasterPrecision": "Raster conversion did not preserve numerical precision. Download the original result instead.",
