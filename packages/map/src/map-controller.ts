@@ -114,7 +114,11 @@ import {
   type CogDemSourceRegistration,
 } from "./cog-dem-source";
 import { createTerrariumFallback } from "./terrarium-fallback";
-import { installMapTransformCompat } from "./map-transform-compat";
+import {
+  cameraAltitudeFromProjectedCamera,
+  installMapTransformCompat,
+  type ProjectedCameraLike,
+} from "./map-transform-compat";
 import {
   isInitialMapCrsFrameRequested,
   notifyMapCrsChange,
@@ -1403,22 +1407,29 @@ export class MapController implements MapEngine {
    * computes it from the Earth-based Mercator scale.
    *
    * v6 split `Camera` out of `Map`, moving the transform to `_camera`; v5
-   * exposed it on the map itself. Both are read because `getCameraAltitude` is
-   * also a newer addition, so the whole chain is probed defensively: a MapLibre
-   * bump that drops or renames either should blank the readout, not throw
-   * inside a `moveend` handler.
+   * exposed it on the map itself, and 6.19 replaced the transform with a
+   * derived `projectedCamera` whose camera math is not exported. All three are
+   * read, and the whole chain is probed defensively: a MapLibre bump that
+   * drops or renames any of them should blank the readout, not throw inside a
+   * `moveend` handler.
    */
   readCameraAltitude(): number | null {
     const host = this.map as
       | {
-          _camera?: { transform?: { getCameraAltitude?: () => number } };
+          _camera?: {
+            transform?: { getCameraAltitude?: () => number };
+            projectedCamera?: ProjectedCameraLike;
+          };
           transform?: { getCameraAltitude?: () => number };
         }
       | undefined;
-    const transform = host?._camera?.transform ?? host?.transform;
-    if (typeof transform?.getCameraAltitude !== "function") return null;
     try {
-      return scaleAltitudeToActiveBody(transform.getCameraAltitude());
+      const transform = host?._camera?.transform ?? host?.transform;
+      if (typeof transform?.getCameraAltitude === "function") {
+        return scaleAltitudeToActiveBody(transform.getCameraAltitude());
+      }
+      const altitude = cameraAltitudeFromProjectedCamera(host?._camera?.projectedCamera);
+      return altitude === null ? null : scaleAltitudeToActiveBody(altitude);
     } catch {
       return null;
     }

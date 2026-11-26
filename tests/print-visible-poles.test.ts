@@ -1,7 +1,20 @@
 import assert from "node:assert/strict";
 import { it } from "node:test";
-// Exercise the installed engine's projection, including its occluded-pole behavior.
-import { createGlobeTransform } from "../node_modules/maplibre-gl/src/geo/projection/globe_transform.ts";
+// Exercise the installed engine's projection, including its occluded-pole
+// behavior. MapLibre 6.19 replaced the transform classes with a camera view
+// state, a projected camera derived from it, and per-projection camera math.
+import { createCameraContext } from "../node_modules/maplibre-gl/src/camera/camera_context.ts";
+import { getCameraMath } from "../node_modules/maplibre-gl/src/camera/camera_math_factory.ts";
+import {
+  resize,
+  setBearing,
+  setCenter,
+  setMaxPitch,
+  setPitch,
+  setZoom,
+} from "../node_modules/maplibre-gl/src/camera/camera_updates.ts";
+import { createCameraViewState } from "../node_modules/maplibre-gl/src/camera/camera_view_state.ts";
+import { projectCamera } from "../node_modules/maplibre-gl/src/camera/project_camera.ts";
 import { LngLat } from "../node_modules/maplibre-gl/src/geo/lng_lat.ts";
 import Point from "../node_modules/maplibre-gl/node_modules/@mapbox/point-geometry/index.js";
 import {
@@ -17,15 +30,23 @@ import {
 } from "../apps/geolibre-desktop/src/lib/print-layout-cartography";
 import type { CapturedMap } from "../apps/geolibre-desktop/src/lib/print-layout-export";
 
+/** A fully globe-shaped 1000 x 600 camera, pitched and turned to face south. */
 function pitchedGlobe() {
-  const transform = createGlobeTransform({ maxPitch: 85 });
-  transform.resize(1000, 600);
-  transform.setTransitionState(1);
-  transform.setCenter(new LngLat(0, -30));
-  transform.setZoom(0);
-  transform.setPitch(40);
-  transform.setBearing(180);
-  return transform;
+  const context = createCameraContext({ projection: "globe", projectionTransition: 1 });
+  let view = setMaxPitch(createCameraViewState(), 85);
+  view = resize(view, context, 1000, 600);
+  view = setCenter(view, context, new LngLat(0, -30));
+  view = setZoom(view, context, 0);
+  view = setPitch(view, 40);
+  view = setBearing(view, 180);
+  const camera = projectCamera(view, context);
+  const math = getCameraMath(camera);
+  const helper = context.worldCoordinateHelper;
+  return {
+    screenPointToLocation: (point: Point) => math.screenPointToLocation(camera, helper, point),
+    locationToScreenPoint: (lngLat: LngLat) => math.locationToScreenPoint(camera, helper, lngLat),
+    isLocationOccluded: (lngLat: LngLat) => math.isLocationOccluded(camera, helper, lngLat),
+  };
 }
 
 it("uses the visible North Pole when a pitched globe's center lies south of the equator", () => {

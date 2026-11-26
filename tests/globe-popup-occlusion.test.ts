@@ -22,9 +22,11 @@ interface FakeTransform {
 
 /**
  * Where the transform hangs off the map: v5 exposes `map.transform`, v6 moved
- * it to `map._camera.transform` when `Map` stopped extending `Camera`.
+ * it to `map._camera.transform` when `Map` stopped extending `Camera`, and
+ * 6.19 removed it, computing occlusion with camera math it does not export
+ * (stood in for here by `_camera.cameraMath`, which the module cannot see).
  */
-type TransformShape = "v5" | "v6";
+type TransformShape = "v5" | "v6" | "v6.19";
 
 type TestPopup = {
   _container: HTMLElement;
@@ -67,6 +69,7 @@ function createContainer(): HTMLElement {
 }
 
 function createMap(transform: FakeTransform, shape: TransformShape): unknown {
+  if (shape === "v6.19") return { _camera: { projectedCamera: {}, cameraMath: transform } };
   return shape === "v6" ? { _camera: { transform } } : { transform };
 }
 
@@ -77,7 +80,10 @@ function neverOccluded(): FakeTransform {
 function createMaplibreStub(shape: TransformShape): MapLibrePopupNamespace {
   class FakePopup {
     _container = createContainer();
-    _map: { _camera?: { transform: FakeTransform }; transform?: FakeTransform } = {};
+    _map: {
+      _camera?: { transform?: FakeTransform; cameraMath?: FakeTransform };
+      transform?: FakeTransform;
+    } = {};
     _updateOpacity: () => void;
     options: PopupOptions;
 
@@ -88,7 +94,12 @@ function createMaplibreStub(shape: TransformShape): MapLibrePopupNamespace {
       // prototype. Each version reads the transform from its own location.
       this._updateOpacity = () => {
         if (this.options.locationOccludedOpacity === undefined) return;
-        const transform = shape === "v6" ? this._map._camera?.transform : this._map.transform;
+        const transform =
+          shape === "v6.19"
+            ? this._map._camera?.cameraMath
+            : shape === "v6"
+              ? this._map._camera?.transform
+              : this._map.transform;
         if (transform?.isLocationOccluded()) {
           this._container.style.opacity = `${this.options.locationOccludedOpacity}`;
         } else {
@@ -124,7 +135,7 @@ function openPopup(
   return popup;
 }
 
-for (const shape of ["v5", "v6"] as const) {
+for (const shape of ["v5", "v6", "v6.19"] as const) {
   describe(`installGlobePopupOcclusion (maplibre ${shape} transform)`, () => {
     it("defaults popups to hidden globe occlusion and restores interaction", () => {
       const maplibre = createMaplibreStub(shape);

@@ -525,11 +525,30 @@ describe("the maplibre-gl render-seam mirror", () => {
     // limitation (see the module comment and docs/user-guide/layers.md), not a
     // choice. If a future maplibre-gl adds `circle-layer-opacity` or
     // `fill-extrusion-layer-opacity`, this fails and the caveat can be lifted.
+    //
+    // Style spec 26.9 already lists `fill-extrusion-layer-opacity`, but its
+    // `sdk-support` for js is still an issue link (maplibre-gl-js#4492), not a
+    // version: the renderer does not composite extrusions yet. Count only the
+    // properties GL JS supports, which is what the composite path depends on.
+    // The bundled `v8` export drops `sdk-support`, so read the reference JSON.
+    const reference = JSON.parse(
+      readFileSync(
+        new URL(
+          "../node_modules/@maplibre/maplibre-gl-style-spec/src/reference/v8.json",
+          import.meta.url,
+        ),
+        "utf8",
+      ),
+    ) as Record<string, Record<string, { "sdk-support"?: Record<string, { js?: string }> }>>;
+    const supportedInJs = (key: string, property: string): boolean => {
+      const js = reference[key]?.[property]?.["sdk-support"]?.["basic functionality"]?.js;
+      return typeof js === "string" && /^\d/.test(js);
+    };
     const withComposite = Object.keys(v8)
       .filter((key) => key.startsWith("paint_"))
       .filter((key) =>
-        Object.keys(v8[key as keyof typeof v8] as object).some((property) =>
-          property.endsWith("-layer-opacity"),
+        Object.keys(v8[key as keyof typeof v8] as object).some(
+          (property) => property.endsWith("-layer-opacity") && supportedInJs(key, property),
         ),
       )
       .sort();

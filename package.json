@@ -99,7 +99,7 @@
     "@loaders.gl/compression": {
       "fflate": "^0.8.3"
     },
-    "@maplibre/maplibre-gl-style-spec": "26.7.0",
+    "@maplibre/maplibre-gl-style-spec": "26.9.0",
     "@typescript-eslint/typescript-estree": {
       "minimatch": "^11.0.5"
     },
@@ -115,7 +115,7 @@
       ".": "^2.0.2",
       "minimatch": "^11.0.5"
     },
-    "maplibre-gl": "6.18.0",
+    "maplibre-gl": "6.19.0",
     "miniflare": {
       "undici": "^7.29.0"
     },
