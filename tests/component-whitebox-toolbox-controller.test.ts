@@ -302,11 +302,11 @@ it("runs a WASM tool, imports its GeoJSON output and records History", async () 
 });
 
 it("drops a finished job's outputs after a different project loads", async () => {
-  let release: (value: WhiteboxJob) => void = () => {};
+  const pending: { release?: (value: WhiteboxJob) => void } = {};
   const stub = services({
     runWhiteboxToolWasm: () =>
       new Promise<WhiteboxJob>((resolve) => {
-        release = resolve;
+        pending.release = resolve;
       }),
   });
   useAppStore.getState().addLayer(geojsonLayer({ id: "pts", name: "Points", geojson: POINTS }));
@@ -317,10 +317,11 @@ it("drops a finished job's outputs after a different project loads", async () =>
   act(() => {
     run = hook.result.current.runSelectedTool();
   });
-  await waitFor(() => assert.equal(hook.result.current.running, true));
+  await waitFor(() => assert.ok(pending.release, "the WASM stub has started"));
+  assert.equal(hook.result.current.running, true);
   act(() => useAppStore.getState().newProject());
   await act(async () => {
-    release(job({ id: "late", outputs: { output: POINTS } }));
+    pending.release?.(job({ id: "late", outputs: { output: POINTS } }));
     await run;
   });
   assert.equal(hook.result.current.job?.id, "late");
