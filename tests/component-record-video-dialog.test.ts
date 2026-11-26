@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor } from "./helpers/dom";
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import { afterEach, describe, it } from "node:test";
 import { createElement } from "react";
 import type { MapEngine } from "@geolibre/map";
 
@@ -10,9 +10,15 @@ type Recorder =
   import("../apps/geolibre-desktop/src/components/layout/RecordVideoDialog").MapVideoRecorder;
 type RecordOptions = Parameters<Recorder["record"]>[0];
 
+const mapContainers: HTMLElement[] = [];
+afterEach(() => {
+  for (const container of mapContainers.splice(0)) container.remove();
+});
+
 /** A map surface whose container may hold an on-map legend. */
 function fakeEngine(withLegend = false): MapEngine {
   const container = document.createElement("div");
+  mapContainers.push(container);
   if (withLegend) {
     const legend = document.createElement("div");
     legend.className = "maplibre-gl-legend";

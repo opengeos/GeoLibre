@@ -108,7 +108,7 @@ describe("GeoreferencerDialog", () => {
     assert.equal((layer.metadata as { gcps: unknown[] }).gcps.length, 3);
   });
 
-  it("returns to the dialog when Escape cancels a pending map link", async () => {
+  it("asks to reopen the dialog when Escape cancels a pending map link", async () => {
     const { engine } = fakeEngine();
     const dialog = renderDialog(engine);
     await loadImage();
