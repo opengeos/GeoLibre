@@ -9,11 +9,10 @@ import {
   relayReconnectDelay,
   relaySocketUrl,
   runRelayCommand,
-  sidecarRelaySocketUrl,
-  sidecarRelaySocketProtocols,
 } from "../lib/jupyter-relay";
+import { connectLiveRelay, subscribeLiveRelayReady } from "../lib/live-relay";
+import { isTauri } from "../lib/is-tauri";
 import { type ScriptingHandlers, createScriptingHandlers } from "../lib/scripting/scriptingApi";
-import { subscribeSidecarRelay } from "../lib/sidecar";
 
 // The app side of the desktop map-command relays. This is the SIBLING of
 // useNotebookBridge: that one receives commands over postMessage from the
@@ -25,10 +24,11 @@ import { subscribeSidecarRelay } from "../lib/sidecar";
 //
 // Two relays speak the same frames:
 // - the Jupyter relay, on the JupyterLab server Processing -> Jupyter Notebook
-//   starts;
-// - the sidecar relay, on the processing sidecar, so Live MCP works without a
-//   Jupyter server (useLiveMcpStartup starts the sidecar at launch when the
-//   user allowed it).
+//   starts, over a loopback WebSocket;
+// - the desktop relay the Tauri shell hosts itself (lib/live-relay.ts), so Live
+//   MCP works with no Python at all once the user allows it
+//   (useLiveMcpStartup), including in the Mac App Store build. Its commands
+//   arrive as Tauri events rather than over a socket.
 //
 // Both feed the SAME createScriptingHandlers surface used by the in-app Python
 // console and the Jupyter widget, so behaviour cannot drift between transports.
@@ -50,7 +50,6 @@ function connectRelay<T>(
   socketUrl: (info: T) => string,
   handlers: ScriptingHandlers,
   label: string,
-  protocols?: (info: T) => string[],
 ): () => void {
   let socket: WebSocket | null = null;
   let retryTimer: ReturnType<typeof setTimeout> | null = null;
@@ -100,7 +99,7 @@ function connectRelay<T>(
       if (generation !== mine) return;
       let next: WebSocket;
       try {
-        next = new WebSocket(socketUrl(info), protocols?.(info));
+        next = new WebSocket(socketUrl(info));
       } catch (error) {
         console.warn(`${label}: could not open the command socket`, error);
         return;
@@ -136,9 +135,9 @@ function connectRelay<T>(
  * Subscribe to the desktop map-command relays for the app's lifetime, running
  * each relayed command against the live map.
  *
- * Connects to the Jupyter relay whenever a Jupyter server is running and to the
- * sidecar relay whenever the sidecar is running, and reconnects with backoff if
- * a socket drops. Inert on web and on desktop until one of them has started.
+ * Connects to the Jupyter relay whenever a Jupyter server is running, and
+ * reconnects with backoff if its socket drops. Subscribes to the desktop shell's
+ * Live MCP relay whenever the user has allowed it. Inert on web.
  *
  * @param mapControllerRef - Ref to the live map controller, read lazily by the
  *   command handlers.
@@ -154,16 +153,10 @@ export function useJupyterRelay(mapControllerRef: RefObject<MapEngine | null>): 
       handlers,
       "Jupyter relay",
     );
-    const stopSidecar = connectRelay(
-      subscribeSidecarRelay,
-      sidecarRelaySocketUrl,
-      handlers,
-      "Sidecar relay",
-      sidecarRelaySocketProtocols,
-    );
+    const stopDesktop = isTauri() ? connectLiveRelay(subscribeLiveRelayReady, handlers) : null;
     return () => {
       stopJupyter();
-      stopSidecar();
+      stopDesktop?.();
     };
     // Mount-only: the ref is stable and read lazily inside the handlers.
   }, [mapControllerRef]);

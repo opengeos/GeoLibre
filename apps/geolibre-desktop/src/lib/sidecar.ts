@@ -1,11 +1,8 @@
 import { invoke } from "@tauri-apps/api/core";
 import i18next from "i18next";
-import { setSidecarAuthToken, setSidecarRelayAccess } from "@geolibre/processing";
+import { setSidecarAuthToken } from "@geolibre/processing";
 import { IS_MAS_BUILD } from "./build-flags";
 import { isTauri } from "./tauri-io";
-import { useDesktopSettingsStore } from "../hooks/useDesktopSettings";
-import { createLiveMcpAccessController } from "./live-mcp-access";
-import { dismissNotification, notify } from "./notify";
 
 export interface SidecarServerInfo {
   baseUrl: string;
@@ -47,63 +44,35 @@ export async function startGeoLibreSidecar(): Promise<SidecarServerInfo> {
   // (which resolve the base URL themselves) are authenticated.
   if (generation === stopGeneration) {
     setSidecarAuthToken(info.token);
-    relayAccess.setServer(info);
-    void updateLiveMcpAccess();
+    publishServer(info);
   }
   return info;
 }
 
 let stopGeneration = 0;
-const relayAccess = createLiveMcpAccessController({
-  getEnabled: () => useDesktopSettingsStore.getState().desktopSettings.startup.allowLiveMcp,
-  send: (info, enabled) => setSidecarRelayAccess(info.baseUrl, enabled),
-  grants: {
-    get: (info) => {
-      try {
-        return localStorage.getItem(`geolibre.live-mcp-grant:${info.baseUrl}`) === "1";
-      } catch {
-        // An inaccessible ledger cannot prove a reused sidecar was never enabled.
-        return true;
-      }
-    },
-    set: (info, granted) => {
-      try {
-        const key = `geolibre.live-mcp-grant:${info.baseUrl}`;
-        if (granted) localStorage.setItem(key, "1");
-        else localStorage.removeItem(key);
-      } catch {
-        // Reads fail closed and will retry revocation on the next attachment.
-      }
-    },
-  },
-});
-let accessNotice: string | null = null;
-relayAccess.subscribe((state) => {
-  if (!state.error && accessNotice) {
-    dismissNotification(accessNotice);
-    accessNotice = null;
-  }
-  if (state.error && !accessNotice) {
-    accessNotice = notify.warning(
-      i18next.t(
-        state.enabled ? "notifications.liveMcpEnableRetry" : "notifications.liveMcpDisableRetry",
-      ),
-      { durationMs: null, pinned: true, dedupeKey: "live-mcp-access" },
-    );
-  }
-});
+let currentServer: SidecarServerInfo | null = null;
+const serverListeners = new Set<(info: SidecarServerInfo | null) => void>();
 
-/** Apply the current Live MCP preference without stopping processing jobs. */
-export function updateLiveMcpAccess(): Promise<void> {
-  return relayAccess.sync();
+function publishServer(info: SidecarServerInfo | null): void {
+  if (currentServer === info) return;
+  currentServer = info;
+  for (const listener of serverListeners) listener(info);
 }
 
-/** Subscribe only while relay access has been confirmed for the current sidecar. */
-export function subscribeSidecarRelay(
+/**
+ * Follow the sidecar this window started: its connection details while it runs,
+ * null once it is stopped. Calls `listener` immediately with the current value.
+ */
+export function subscribeSidecarServer(
   listener: (info: SidecarServerInfo | null) => void,
 ): () => void {
-  return relayAccess.subscribe((state) => listener(state.ready));
+  serverListeners.add(listener);
+  listener(currentServer);
+  return () => {
+    serverListeners.delete(listener);
+  };
 }
+
 /**
  * `catch` handler for a best-effort start whose follow-up status request
  * reports a missing runtime better than the start error does. A stale sidecar
@@ -122,7 +91,7 @@ export async function stopGeoLibreSidecar(): Promise<void> {
   stopGeneration += 1;
   await invoke("stop_geolibre_sidecar");
   setSidecarAuthToken(null);
-  relayAccess.setServer(null);
+  publishServer(null);
 }
 
 function assertSidecarAllowed(): void {

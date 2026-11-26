@@ -69,7 +69,8 @@ Rather than defend the entitlement in App Review Information, both Apple targets
 drop the feature: the module is gated
 `#[cfg(not(any(feature = "mas", target_os = "ios")))]` and replaced with stub
 commands that bind nothing, so **neither the Mac App Store build nor the iOS app
-ever opens a listening socket**. The entitlement is gone from
+ever opens a network listening socket** (the Live MCP relay below uses a Unix
+domain socket, which the sandbox allows without the entitlement). The entitlement is gone from
 `mas/Entitlements.mas.plist.template`, and `mas-store.yml` fails the build if it
 reappears in the signature. (iOS has no entitlements file — those sandbox keys
 are macOS-only — but it ships through the same review pipeline, so it gets the
@@ -87,6 +88,21 @@ binds nothing.
 If a future feature genuinely needs to accept an inbound connection, re-adding
 the entitlement is not sufficient on its own: describe the functionality in **App
 Review Information** before submitting, or the automated check rejects it again.
+
+### Live MCP uses a Unix socket, not a network listener
+
+The MCP server's `live_*` tools reach the open map through a command relay the
+desktop shell hosts (`src-tauri/src/live_relay.rs`) once **Settings → Startup →
+Allow AI agents to drive the map** is on. Other desktop builds listen on an
+ephemeral `127.0.0.1` TCP port. The sandbox refuses that bind without
+`com.apple.security.network.server` (verified: `bind` fails with `EPERM`), so the
+`mas` build listens on a Unix domain socket instead, `live-relay.sock`, inside
+the app container next to its discovery file
+(`~/Library/Containers/org.geolibre.desktop/Data/.geolibre/runtime/`). Binding a
+Unix socket in the container needs no entitlement, and a process outside the
+sandbox, such as `geolibre-mcp`, may connect to it; `live.py` looks in the
+container for the discovery file. The entitlement list is unchanged, and
+`mas-store.yml`'s check that `network.server` stays absent still holds.
 
 ### Share.GeoLibre sign-in uses a custom URI, not a listener
 
