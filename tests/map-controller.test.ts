@@ -1265,6 +1265,22 @@ describe("MapController camera and query helpers", () => {
     assert.ok(onMoon !== null && onMoon < 3000, `expected a scaled altitude, got ${onMoon}`);
   });
 
+  it("reads a 6.19 camera's projectedCamera when there is no transform", () => {
+    const { map } = makeFakeMap();
+    (map as { _camera?: unknown })._camera = {
+      projectedCamera: {
+        projection: "mercator",
+        pitchInRadians: 0,
+        cameraToCenterDistance: 1000,
+        pixelsPerMeter: 1,
+        elevation: 50,
+      },
+    };
+    const controller = controllerWith(map);
+    setActiveEllipsoidId("earth");
+    assert.equal(controller.readCameraAltitude(), 1050);
+  });
+
   it("returns no camera altitude when MapLibre throws", () => {
     const { map } = makeFakeMap();
     (map as { transform?: unknown }).transform = {
