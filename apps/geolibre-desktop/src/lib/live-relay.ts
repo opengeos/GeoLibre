@@ -76,8 +76,10 @@ export function createLiveRelayAccessController(options: {
     const desired = options.getEnabled();
     const mine = ++generation;
     // Stop handling commands at once on an opt-out, before the shell answers.
-    if (!desired || desired !== state.enabled) {
-      publish({ enabled: desired, ready: false, error: false });
+    // A retry of the same preference keeps its error, so a persistent
+    // notice does not flicker on every attempt.
+    if (desired !== state.enabled || state.ready) {
+      publish({ enabled: desired, ready: false, error: state.error && desired === state.enabled });
     }
     queue = queue.then(async () => {
       if (mine !== generation) return;

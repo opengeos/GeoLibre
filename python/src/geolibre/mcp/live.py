@@ -458,7 +458,7 @@ def _unix_socket_beside(discovery: Path, value: Any) -> str | None:
     if not same_dir:
         return None
     try:
-        if not stat.S_ISSOCK(candidate.stat().st_mode):
+        if not stat.S_ISSOCK(candidate.lstat().st_mode):
             return None
     except OSError:
         return None

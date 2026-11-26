@@ -581,6 +581,19 @@ impl RelayCore {
                 Err(response) => response,
             };
         let _ = write_response(connection, status, &body);
+        // An early refusal leaves the announced body unread; closing with
+        // unread data sends a reset that can discard the response. Signal
+        // the end of the reply and drain a bounded amount first.
+        connection.finish_write();
+        let _ = connection.limit_reads(Duration::from_secs(1));
+        let mut sink = [0u8; 16 * 1024];
+        let mut drained = 0usize;
+        while drained < MAX_COMMAND_BYTES {
+            match connection.read(&mut sink) {
+                Ok(0) | Err(_) => break,
+                Ok(read) => drained += read,
+            }
+        }
     }
 
     /// Decide from the request line and headers whether to serve a request.
@@ -927,6 +940,8 @@ trait Connection: Read + Write + Send {
     fn prepare(&mut self) -> std::io::Result<()>;
     /// Bound the next reads, so none outlives the whole-request deadline.
     fn limit_reads(&mut self, timeout: Duration) -> std::io::Result<()>;
+    /// Close the write side once the response is sent.
+    fn finish_write(&mut self);
     /// Close both directions.
     fn close(&mut self);
 }
@@ -949,6 +964,9 @@ impl Write for TcpConnection {
 }
 
 impl Connection for TcpConnection {
+    fn finish_write(&mut self) {
+        let _ = self.0.shutdown(Shutdown::Write);
+    }
     fn limit_reads(&mut self, timeout: Duration) -> std::io::Result<()> {
         self.0.set_read_timeout(Some(timeout))
     }
@@ -984,6 +1002,9 @@ impl Write for UnixConnection {
 
 #[cfg(unix)]
 impl Connection for UnixConnection {
+    fn finish_write(&mut self) {
+        let _ = self.0.shutdown(Shutdown::Write);
+    }
     fn limit_reads(&mut self, timeout: Duration) -> std::io::Result<()> {
         self.0.set_read_timeout(Some(timeout))
     }
@@ -1567,6 +1588,14 @@ mod tests {
              Content-Length: 4096\r\n\r\n"
         );
         assert_eq!(send(&fixture, &unread).0, 401);
+        // With the body sent in full, the client still reads the 401.
+        let big = "x".repeat(512 * 1024);
+        let full = format!(
+            "POST /relay/command HTTP/1.1\r\nHost: {host}\r\nAuthorization: token wrong\r\n\
+             Content-Length: {}\r\n\r\n{big}",
+            big.len()
+        );
+        assert_eq!(send(&fixture, &full).0, 401);
         let missing = format!("GET /other HTTP/1.1\r\nHost: {host}\r\n\r\n");
         assert_eq!(send(&fixture, &missing).0, 404);
         assert_eq!(post(&fixture, &json!({"params": {}}), None).0, 400);
