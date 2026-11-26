@@ -26,6 +26,9 @@ DRAWABLE_LAYER_TYPES = frozenset({"fill", "line", "circle", "symbol", "fill-extr
 #: Style layers accepted from one service; Esri's World Basemap has about 900.
 MAX_STYLE_LAYERS = 5000
 
+#: Vector sources accepted from one style; services publish one or two.
+MAX_STYLE_SOURCES = 32
+
 #: Web Mercator WKIDs ``arcgisExtentToBounds`` converts from metres.
 _WEB_MERCATOR_WKIDS = frozenset({102100, 102113, 3857})
 
@@ -46,6 +49,23 @@ def _sanitize_id_part(value: str) -> str:
     return re.sub(r"^-+|-+$", "", re.sub(r"[^a-zA-Z0-9_-]+", "-", value)) or "id"
 
 
+def _finite_number(value: Any) -> bool:
+    """Whether a JSON value is a finite number (an oversized int is not).
+
+    Args:
+        value: The value to test.
+
+    Returns:
+        True for a non-boolean int or float that converts to a finite float.
+    """
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return False
+    try:
+        return math.isfinite(value)
+    except OverflowError:
+        return False
+
+
 def _is_geo_bounds(value: Any) -> bool:
     """Whether a value is a valid ``[west, south, east, north]`` in degrees.
 
@@ -57,10 +77,7 @@ def _is_geo_bounds(value: Any) -> bool:
     """
     if not isinstance(value, (list, tuple)) or len(value) != 4:
         return False
-    if any(
-        isinstance(item, bool) or not isinstance(item, (int, float)) or not math.isfinite(item)
-        for item in value
-    ):
+    if any(not _finite_number(item) for item in value):
         return False
     west, south, east, north = value
     return -180 <= west < east <= 180 and -90 <= south < north <= 90
@@ -102,10 +119,7 @@ def _extent_bounds(extent: Any) -> list[float] | None:
         if wkid is None:
             wkid = reference.get("wkid")
     values = [extent.get(key) for key in ("xmin", "ymin", "xmax", "ymax")]
-    if any(
-        isinstance(item, bool) or not isinstance(item, (int, float)) or not math.isfinite(item)
-        for item in values
-    ):
+    if any(not _finite_number(item) for item in values):
         return None
     xmin, ymin, xmax, ymax = (float(item) for item in values)
     if isinstance(wkid, bool) or not isinstance(wkid, (int, float)):
@@ -217,6 +231,8 @@ def build_arcgis_vector_tile_style(
     raw_layers = style.get("layers")
     if not isinstance(raw_sources, dict) or not raw_sources:
         raise ValueError("ArcGIS vector tile style must define its sources")
+    if len(raw_sources) > MAX_STYLE_SOURCES:
+        raise ValueError(f"ArcGIS vector tile style has more than {MAX_STYLE_SOURCES} sources")
     if not isinstance(raw_layers, list) or not raw_layers:
         raise ValueError("ArcGIS vector tile style must list its layers")
     if len(raw_layers) > MAX_STYLE_LAYERS:

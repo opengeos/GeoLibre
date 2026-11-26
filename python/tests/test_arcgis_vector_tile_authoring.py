@@ -334,6 +334,48 @@ def test_non_json_numbers_are_refused(vts, where):
         _build()
 
 
+def test_oversized_integer_extent_has_no_bounds(vts, monkeypatch):
+    """Ignore an extent whose integer coordinate cannot be a float.
+
+    Args:
+        vts: The mutable metadata transport fixture.
+        monkeypatch: Pytest fixture for the response body.
+    """
+    info, style, _ = vts
+    del style["sources"]["Santa_Monica_parcels_VTL"]["bounds"]
+    body = json.dumps(info).replace("4035576.6410953267", "1" * 401, 1)
+    real_open = project_api._GEOJSON_OPENER.open
+    monkeypatch.setattr(
+        project_api._GEOJSON_OPENER,
+        "open",
+        lambda url, timeout: (
+            io.BytesIO(body.encode()) if "/resources/" not in url else real_open(url, timeout)
+        ),
+    )
+    assert "bounds" not in _build()["metadata"]
+
+
+def test_too_many_sources_and_repeated_hosts(vts, monkeypatch):
+    """Cap style sources and resolve each tile host once.
+
+    Args:
+        vts: The mutable metadata transport fixture.
+        monkeypatch: Pytest fixture for the public-address guard.
+    """
+    _, style, _ = vts
+    base = style["sources"]["Santa_Monica_parcels_VTL"]
+    style["sources"].update({f"extra{i}": dict(base) for i in range(3)})
+    checked = []
+    monkeypatch.setattr(project_api, "_assert_public_url", checked.append)
+    _build()
+    # The two metadata reads, then a single probe for the shared tile host.
+    assert len([url for url in checked if "/tile/" in url]) == 1
+    assert len(checked) == 3
+    style["sources"].update({f"more{i}": dict(base) for i in range(40)})
+    with pytest.raises(ValueError, match="sources"):
+        _build()
+
+
 def test_null_latest_wkid_falls_back_to_wkid(vts):
     """Read ``latestWkid ?? wkid`` like the app.
 

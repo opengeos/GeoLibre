@@ -4905,9 +4905,17 @@ def arcgis_vector_tile_layer(
     resolved = build_arcgis_vector_tile_style(info, style, service_url, layer["id"])
     # The app fetches these templates whenever the project opens, so a remote
     # style must not aim them at loopback or private hosts.
+    # Each distinct host is resolved once; the style is capped at
+    # MAX_STYLE_SOURCES sources, which bounds the lookups.
+    checked_hosts: set[tuple[str, str]] = set()
     for spec in resolved["sources"].values():
         for target in [*spec["tiles"], *([spec["url"]] if spec.get("url") else [])]:
             probe = re.sub(r"\{[^{}]*\}", "0", target)
+            parts = urlsplit(probe)
+            host_key = (parts.scheme.lower(), (parts.hostname or "").lower())
+            if host_key in checked_hosts:
+                continue
+            checked_hosts.add(host_key)
             try:
                 _assert_public_url(probe)
             except ValueError as exc:
