@@ -294,6 +294,7 @@ test("process proxy preserves execution/job controls, redirect methods and respo
     assert.equal(retained.status, 202);
     assert.equal(retained.headers.location, "/jobs/retained");
     assert.equal(retained.body, "");
+    assert.equal(retained.bodyReadFailed, true);
     const synchronous = await send("POST", "/sync-large", body, { "x-geolibre-max-bytes": "4" });
     assert.equal(synchronous.status, 200);
     assert.equal(synchronous.headers.link, '</jobs/sync>; rel="monitor"');
@@ -304,6 +305,7 @@ test("process proxy preserves execution/job controls, redirect methods and respo
     });
     assert.equal(dismissed.status, 200);
     assert.equal(dismissed.body, "");
+    assert.equal(dismissed.bodyReadFailed, true);
     assert.match(String(accepted.headers["content-security-policy"]), /sandbox/);
     assert.equal(accepted.headers["x-content-type-options"], "nosniff");
     const html = await send("GET", "/html");
@@ -318,6 +320,7 @@ test("process proxy preserves execution/job controls, redirect methods and respo
     const failure = await send("GET", "/failure", undefined, { "x-geolibre-max-bytes": "4" });
     assert.equal(failure.status, 503);
     assert.equal(failure.body, "");
+    assert.equal(failure.bodyReadFailed, true);
     for (const [method, path] of [
       ["POST", "/redirect"],
       ["POST", "/preserve"],
@@ -336,6 +339,8 @@ test("process proxy preserves execution/job controls, redirect methods and respo
       ["POST", "{}", { "content-type": "text/plain" }, 415, false],
       ["POST", "[]", {}, 400, false],
       ["POST", "broken", {}, 400, false],
+      ["POST", '{"inputs":{"name":"\\ud800"}}', {}, 400, false],
+      ["POST", '{"inputs":{"\\ud800":1}}', {}, 400, false],
       [
         "POST",
         '{"inputs":{"payload":' + "[".repeat(126) + "0" + "]".repeat(126) + "}}",

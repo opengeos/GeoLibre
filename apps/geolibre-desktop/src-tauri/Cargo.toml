@@ -100,7 +100,7 @@ tauri-plugin-deep-link = "2"
 # openssl-sys cannot cross-compile for the Android NDK, and ring avoids the
 # aws-lc-rs C/CMake build. tokio, rustls and webpki-roots are already
 # indirect deps; the PostgreSQL client and pool crates are new.
-tokio = { version = "1", features = ["sync"] }
+tokio = { version = "1", features = ["sync", "time"] }
 tokio-postgres = "0.7"
 deadpool-postgres = "0.14"
 tokio-postgres-rustls = { version = "0.14", default-features = false, features = ["ring"] }

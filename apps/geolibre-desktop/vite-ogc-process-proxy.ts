@@ -9,7 +9,7 @@ import {
 import {
   MAX_PROCESS_INPUT_BYTES,
   MAX_PROCESS_INPUT_DEPTH,
-  processInputDepthAllowed,
+  processInputProblem,
   MAX_PROCESS_METADATA_BYTES,
   MAX_PROCESS_RESULT_BYTES,
   OGC_PROCESS_PROXY_PATH,
@@ -135,10 +135,13 @@ export async function proxyOgcProcessRequest(
       }
       if (!value || typeof value !== "object" || Array.isArray(value))
         throw new ProcessProxyError(400, "OGC process execution requires a JSON object.");
-      if (!processInputDepthAllowed(value))
+      const problem = processInputProblem(value);
+      if (problem)
         throw new ProcessProxyError(
           400,
-          `OGC process inputs exceed the ${MAX_PROCESS_INPUT_DEPTH}-level JSON nesting limit.`,
+          problem === "inputDepth"
+            ? `OGC process inputs exceed the ${MAX_PROCESS_INPUT_DEPTH}-level JSON nesting limit.`
+            : "OGC process inputs contain invalid Unicode characters.",
         );
     } else if (input.length)
       throw new ProcessProxyError(400, "Only execution POST accepts a body.");

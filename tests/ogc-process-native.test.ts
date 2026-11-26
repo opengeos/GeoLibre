@@ -239,6 +239,49 @@ test("a frontend deadline does not relabel a native connection failure", async (
   });
 });
 
+test("invalid Unicode is rejected before native dispatch and valid surrogate pairs survive", async () => {
+  let calls = 0;
+  Object.defineProperty(window, "__TAURI_INTERNALS__", {
+    configurable: true,
+    value: {
+      invoke: async () => {
+        calls++;
+        return {
+          status: 200,
+          final_url: "https://example.org/execution",
+          content_type: "application/json",
+          location: null,
+          retry_after: null,
+          link: null,
+          body_base64: "e30=",
+        };
+      },
+    },
+  });
+  const { processHttp } = await import("../apps/geolibre-desktop/src/lib/ogc-process-http");
+  const signal = new AbortController().signal;
+  for (const inputs of [{ name: "\ud800" }, { "\udfff": 1 }]) {
+    await assert.rejects(
+      processHttp("https://example.org/execution", signal, {
+        method: "POST",
+        body: JSON.stringify({ inputs }),
+      }),
+      { code: "inputUnicode" },
+    );
+  }
+  assert.equal(calls, 0);
+  assert.equal(
+    (
+      await processHttp("https://example.org/execution", signal, {
+        method: "POST",
+        body: JSON.stringify({ inputs: { name: "\ud83d\ude00" } }),
+      })
+    ).status,
+    200,
+  );
+  assert.equal(calls, 1);
+});
+
 test("native synchronous write acknowledgement retains routing and body failure separately", async () => {
   Object.defineProperty(window, "__TAURI_INTERNALS__", {
     configurable: true,

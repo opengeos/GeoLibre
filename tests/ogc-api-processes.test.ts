@@ -978,6 +978,157 @@ test("a received response with an interrupted body does not report a CORS failur
   });
 });
 
+test("resumed process descriptions must match an explicitly reported process ID", async () => {
+  for (const matches of [false, true]) {
+    serve((url) => {
+      if (url.includes("/results")) return { echo: { value: "dGV4dA==" } };
+      if (url.includes("/processes/")) {
+        const doc = description();
+        doc.id = matches ? "A" : "B";
+        doc.outputs.echo.schema = {
+          type: "string",
+          contentEncoding: "base64",
+          contentMediaType: "application/octet-stream",
+        };
+        return doc;
+      }
+      return {
+        jobID: "one",
+        status: "successful",
+        processID: "A",
+        links: [{ rel: "process", href: "/api/processes/A" }],
+      };
+    });
+    const signal = new AbortController().signal;
+    const outputs = await monitorOgcProcessJob("https://example.org/api/jobs/one", signal);
+    assert.equal(outputs[0].encoding, matches ? "base64" : undefined);
+    assert.equal(
+      await (await downloadOgcProcessOutput(outputs[0], signal)).text(),
+      matches ? "text" : "dGV4dA==",
+    );
+  }
+});
+
+test("raw JSON scalars retain their original download bytes without changing document strings", async () => {
+  const process = await processDescription();
+  for (const text of [' "hello"\n', "9007199254740993", "-0", "null", "[1, 2]"]) {
+    serve(() => new Response(text, { headers: { "Content-Type": "application/json" } }));
+    const signal = new AbortController().signal;
+    const result = await executeOgcProcess(process, {}, signal);
+    assert.equal(result.kind, "results");
+    if (result.kind !== "results") throw Error("Expected results");
+    assert.deepEqual(result.outputs[0].value, JSON.parse(text));
+    assert.equal(await (await downloadOgcProcessOutput(result.outputs[0], signal)).text(), text);
+  }
+  serve(() => ({ echo: "plain document string" }));
+  const signal = new AbortController().signal;
+  const result = await executeOgcProcess(process, {}, signal);
+  if (result.kind !== "results") throw Error("Expected results");
+  assert.equal(
+    await (await downloadOgcProcessOutput(result.outputs[0], signal)).text(),
+    "plain document string",
+  );
+});
+
+test("same-origin links inherit repeated query values while respecting original overrides", () => {
+  const base = "https://example.org/api/processes/one?scope=read&scope=jobs&token=a&token=b&f=json";
+  const inherited = new URL(ogcProcessLink("/api/jobs/one", base));
+  assert.deepEqual(inherited.searchParams.getAll("scope"), ["read", "jobs"]);
+  assert.deepEqual(inherited.searchParams.getAll("token"), ["a", "b"]);
+  const overridden = new URL(ogcProcessLink("/api/jobs/one?scope=explicit", base));
+  assert.deepEqual(overridden.searchParams.getAll("scope"), ["explicit"]);
+  assert.equal(new URL(ogcProcessLink("https://other.example/jobs/one", base)).search, "");
+});
+
+test("Unicode values and property names are validated before any execution dispatch", async () => {
+  const process = await processDescription();
+  const calls = serve(() => ({ echo: "ok" }));
+  const signal = new AbortController().signal;
+  for (const inputs of [{ name: "\ud800" }, { name: "\udfff" }, { "\ud800": "value" }]) {
+    await assert.rejects(executeOgcProcess(process, inputs, signal), { code: "inputUnicode" });
+    await assert.rejects(
+      processHttp("https://example.org/execution", signal, {
+        method: "POST",
+        body: JSON.stringify({ inputs }),
+      }),
+      { code: "inputUnicode" },
+    );
+  }
+  await assert.rejects(
+    processHttp("https://example.org/execution", signal, { method: "POST", body: "{broken" }),
+    { code: "inputsJsonSyntax" },
+  );
+  assert.equal(calls.length, 0);
+  assert.equal(
+    (await executeOgcProcess(process, { name: "\ud83d\ude00" }, signal)).kind,
+    "results",
+  );
+  assert.equal(calls.length, 1);
+});
+
+test("equivalent parameterized media types retain the selected encoding and parameter case", async () => {
+  const process = await processDescription();
+  for (const uniqueBase of [false, true]) {
+    process.outputs.echo.schema = {
+      oneOf: [
+        {
+          type: "string",
+          contentMediaType: `${uniqueBase ? "application/json" : "text/plain"}; charset=utf-8; profile=CaseA`,
+        },
+        {
+          type: "string",
+          contentEncoding: "base64",
+          contentMediaType: 'text/plain; charset=iso-8859-1; profile="CaseB"',
+        },
+      ],
+    };
+    const signal = new AbortController().signal;
+    for (const profile of ["CaseB", "caseb"]) {
+      serve(() => ({
+        echo: {
+          value: "dGV4dA==",
+          mediaType: `TEXT/PLAIN; PROFILE="${profile}"; CHARSET="ISO-8859-1"`,
+        },
+      }));
+      const result = await executeOgcProcess(process, {}, signal);
+      if (result.kind !== "results") throw Error("Expected results");
+      assert.equal(result.outputs[0].encoding, profile === "CaseB" ? "base64" : undefined);
+      assert.equal(
+        await (await downloadOgcProcessOutput(result.outputs[0], signal)).text(),
+        profile === "CaseB" ? "text" : "dGV4dA==",
+      );
+    }
+  }
+});
+
+test("invalid base64 errors are localized and valid padded or whitespace encodings download", async () => {
+  const signal = new AbortController().signal;
+  await assert.rejects(
+    downloadOgcProcessOutput({ id: "bad", value: "!bad!", encoding: "base64" }, signal),
+    { code: "invalidBase64" },
+  );
+  for (const value of ["dGV4dA==", " dG\nV4dA==\t", "dGV4dA"]) {
+    assert.equal(
+      await (
+        await downloadOgcProcessOutput({ id: "ok", value, encoding: "base64" }, signal)
+      ).text(),
+      "text",
+    );
+  }
+});
+
+test("nonnullable JSON null defaults are omitted while explicit nullable defaults survive", async () => {
+  const process = await processDescription();
+  process.inputs = {
+    object: { schema: { type: "object", default: null }, minOccurs: 0 },
+    array: { schema: { type: "array", default: null }, minOccurs: 0 },
+    nullable: { schema: { type: ["object", "null"], default: null }, minOccurs: 0 },
+  };
+  const defaults = ogcProcessInputDefaults(process);
+  assert.deepEqual(defaults, { nullable: "null" });
+  assert.deepEqual(parseOgcProcessInputs(process, defaults), { nullable: null });
+});
+
 test("an unavailable process description is not repeatedly fetched while monitoring", async () => {
   let reads = 0;
   let descriptions = 0;

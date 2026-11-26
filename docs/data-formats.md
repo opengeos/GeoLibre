@@ -228,8 +228,10 @@ The actual advertised execution endpoint is
 shown before submission, including when it differs from the catalog host.
 Input documents are
 limited to 1 MiB and 127 nested JSON containers in the execution document,
-matching the native parser limit. Process descriptions and status documents are limited to 2 MiB, and result
-downloads to 128 MiB each. Decoding JSON and rasters requires additional working
+matching the native parser limit. Input strings and property names must contain
+valid Unicode characters; surrogate pairs are supported. Process descriptions
+and status documents are limited to 2 MiB, and result downloads to 128 MiB each.
+Decoding JSON and rasters requires additional working
 memory. Native result transport uses base64 rather than JSON number arrays.
 Modern hosts decode native results directly into bytes; older hosts use a
 compatibility decoder with an intermediate string. Unusable output links are
@@ -237,6 +239,10 @@ retained as downloadable metadata with a warning, without discarding other
 outputs. If a completed synchronous execution returns malformed result JSON
 without a job URL, its original response remains downloadable with a warning
 that running the process again starts another execution.
+Standalone JSON values retain their original bytes for download, including
+quoted strings and numeric representations. Resumed jobs use a process
+description's output schemas only when its identifier matches a reported
+process identifier.
 Monitoring honors bounded `Retry-After` values and stops after 30
 minutes; the job URL can be used to resume. Closing and reopening retains
 dialog state in the current session. Changing projects clears inputs, job

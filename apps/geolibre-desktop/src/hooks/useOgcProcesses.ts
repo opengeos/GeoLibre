@@ -163,11 +163,11 @@ export function useOgcProcesses(open: boolean) {
       setJobUrl(previousJob?.url ?? "");
       setValues(defaults);
       setJsonMode(false);
-      setInputsJson(JSON.stringify(parseOgcProcessInputs(full, defaults, false), null, 2));
       setAsynchronous(
         !full.jobControlOptions.includes("sync-execute") &&
           full.jobControlOptions.includes("async-execute"),
       );
+      setInputsJson(JSON.stringify(parseOgcProcessInputs(full, defaults, false), null, 2));
     });
   };
   const retrieve = () =>

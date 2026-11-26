@@ -120,8 +120,13 @@ fn client() -> Result<reqwest::Client, String> {
             // The shared builder preserves TLS, mTLS and direct-connection DNS guards.
             // A configured proxy must enforce destination policy for writes as well
             // as reads. Redirects are handled below so validation shares the deadline.
-            guarded_async_client_builder(reqwest::redirect::Policy::none())?
-                .referer(false)
+            let builder =
+                guarded_async_client_builder(reqwest::redirect::Policy::none())?.referer(false);
+            // Socket fixtures exercise loopback listeners independently of the
+            // developer's ambient proxy. Production keeps enterprise/system proxies.
+            #[cfg(test)]
+            let builder = builder.no_proxy();
+            builder
                 .build()
                 .map_err(|error| format!("Could not create OGC process client: {error}"))
         })
@@ -313,6 +318,18 @@ fn request_blocking(
 #[cfg(test)]
 mod tests {
     use super::{request_method, MAX_INPUT_BYTES};
+
+    #[test]
+    fn execution_strings_require_valid_unicode_scalars() {
+        for body in [
+            r#"{"inputs":{"name":"\ud800"}}"#,
+            r#"{"inputs":{"name":"\udfff"}}"#,
+            r#"{"inputs":{"\ud800":1}}"#,
+        ] {
+            assert!(request_method("POST", Some(body)).is_err());
+        }
+        assert!(request_method("POST", Some(r#"{"inputs":{"name":"\ud83d\ude00"}}"#)).is_ok());
+    }
 
     #[test]
     fn input_depth_matches_the_shared_client_preflight_limit() {

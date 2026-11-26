@@ -13,6 +13,7 @@ export function ogcProcessOutputPreview(output: OgcProcessOutput): string {
   if (output.href) return redactUrlCredentials(output.href);
   if (output.bytes)
     return i18next.t("processing.ogcProcesses.outputBytes", { count: output.bytes.byteLength });
+  if (output.documentBytes) return new TextDecoder().decode(output.documentBytes.subarray(0, 2000));
   if (typeof output.value === "string") return output.value.slice(0, 2000);
   const shorten = (value: unknown, depth: number): unknown => {
     if (typeof value === "string") return value.slice(0, 300);

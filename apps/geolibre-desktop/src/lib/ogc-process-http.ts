@@ -6,7 +6,7 @@ import { waitForWcsRequest } from "./wcs";
 import {
   MAX_PROCESS_INPUT_BYTES,
   MAX_PROCESS_INPUT_DEPTH,
-  processInputDepthAllowed,
+  processInputProblem,
   MAX_PROCESS_METADATA_BYTES,
   MAX_PROCESS_RESULT_BYTES,
   OGC_PROCESS_PROXY_PATH,
@@ -62,11 +62,16 @@ export async function processHttp(
   if (method === "POST") {
     if (!options.body || new TextEncoder().encode(options.body).length > MAX_PROCESS_INPUT_BYTES)
       throw new OgcProcessError("inputLimit");
-    const body: unknown = JSON.parse(options.body);
+    let body: unknown;
+    try {
+      body = JSON.parse(options.body);
+    } catch {
+      throw new OgcProcessError("inputsJsonSyntax");
+    }
     if (!body || typeof body !== "object" || Array.isArray(body))
       throw new OgcProcessError("inputObject");
-    if (!processInputDepthAllowed(body))
-      throw new OgcProcessError("inputDepth", { depth: MAX_PROCESS_INPUT_DEPTH });
+    const problem = processInputProblem(body);
+    if (problem) throw new OgcProcessError(problem, { depth: MAX_PROCESS_INPUT_DEPTH });
   } else if (options.body !== undefined) {
     throw new OgcProcessError("requestBody");
   }

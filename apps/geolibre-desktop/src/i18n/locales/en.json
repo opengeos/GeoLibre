@@ -9320,6 +9320,8 @@
         "responseLimit": "Invalid OGC process response limit.",
         "inputLimit": "OGC process inputs exceed 1 MiB.",
         "inputDepth": "OGC process inputs exceed the {{depth}}-level JSON nesting limit.",
+        "inputUnicode": "OGC process inputs contain invalid Unicode characters.",
+        "invalidBase64": "The service returned an invalid base64-encoded output.",
         "responseInterrupted": "The service response was interrupted before the download completed. Try downloading the result again.",
         "inputObject": "Process inputs must be a JSON object.",
         "inputsJsonSyntax": "Inputs must contain valid JSON.",
@@ -9347,7 +9349,7 @@
         "noProcesses": "No OGC processes were found.",
         "pageLimit": "The OGC process catalog exceeds 50 pages.",
         "unknownJobStatus": "The service returned an unknown OGC job status.",
-        "noStatusUrl": "The service accepted the job but did not return a status URL.",
+        "noStatusUrl": "The service accepted the job but did not return a status URL. It may still be running. Check the service before starting another execution.",
         "resultTooLarge": "OGC process result exceeds its download limit.",
         "jobFailed": "The OGC process job did not complete successfully.",
         "http": "OGC process HTTP {{status}}{{detail}}"

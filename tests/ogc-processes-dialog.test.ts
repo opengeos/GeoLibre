@@ -105,7 +105,10 @@ for (const variant of ["empty default", "explicit empty JSON", "object default"]
     process.inputs.name.schema =
       variant === "object default"
         ? { type: "object", default: { threshold: 5 } }
-        : { type: "string", default: "" };
+        : {
+            type: "string",
+            default: variant === "explicit empty JSON" ? "advertised default" : "",
+          };
     let submitted: Record<string, unknown> | undefined;
     serve(async (_url, init) => {
       submitted = JSON.parse(String(init?.body)).inputs;
@@ -117,7 +120,11 @@ for (const variant of ["empty default", "explicit empty JSON", "object default"]
     await waitFor(() =>
       assert.equal(
         (screen.getByLabelText("Name *") as HTMLInputElement).value,
-        variant === "object default" ? '{"value":{"threshold":5}}' : "",
+        variant === "object default"
+          ? '{"value":{"threshold":5}}'
+          : variant === "explicit empty JSON"
+            ? "advertised default"
+            : "",
       ),
     );
     if (variant === "explicit empty JSON") {
@@ -931,10 +938,28 @@ test("untouched required strings fail locally and JSON mode can send explicit em
 
 test("a completed synchronous job retains its advertised output context when resumed", async () => {
   let posts = 0;
+  const process = description();
+  process.outputs.echo.schema = {
+    type: "string",
+    contentEncoding: "base64",
+    contentMediaType: "application/geo+json",
+  };
+  const data = {
+    type: "FeatureCollection",
+    features: [
+      {
+        type: "Feature",
+        properties: { resumed: true },
+        geometry: { type: "Point", coordinates: [1, 2] },
+      },
+    ],
+  };
+  const encoded = btoa(JSON.stringify(data));
+  const initialEncoded = btoa(JSON.stringify({ type: "FeatureCollection", features: [] }));
   serve(async (url, init) => {
     if (init?.method === "POST") {
       posts++;
-      return new Response(JSON.stringify({ outputs: [{ id: "echo", value: "Initial echo" }] }), {
+      return new Response(JSON.stringify({ outputs: [{ id: "echo", value: initialEncoded }] }), {
         headers: {
           "Content-Type": "application/json",
           Location: "https://demo.pygeoapi.io/master/jobs/sync",
@@ -944,15 +969,15 @@ test("a completed synchronous job retains its advertised output context when res
     return new Response(
       JSON.stringify(
         url.includes("/results")
-          ? { outputs: [{ id: "echo", value: "Resumed echo" }] }
+          ? { outputs: [{ id: "echo", value: encoded }] }
           : { jobID: "sync", status: "successful" },
       ),
       { headers: { "Content-Type": "application/json" } },
     );
-  });
+  }, process);
   await form();
   fireEvent.click(screen.getByRole("button", { name: "Run process" }));
-  await waitFor(() => assert.ok(screen.queryByText("Initial echo")));
+  await waitFor(() => assert.ok(screen.queryByText(initialEncoded)));
   await waitFor(() =>
     assert.equal(
       screen.getByRole("button", { name: "Resume monitoring" }).hasAttribute("disabled"),
@@ -960,7 +985,10 @@ test("a completed synchronous job retains its advertised output context when res
     ),
   );
   fireEvent.click(screen.getByRole("button", { name: "Resume monitoring" }));
-  await waitFor(() => assert.ok(screen.queryByText("Resumed echo")));
+  await waitFor(() => assert.ok(screen.queryByText(encoded)));
+  fireEvent.click(screen.getByRole("button", { name: "Add to map" }));
+  await waitFor(() => assert.equal(useAppStore.getState().layers.length, 1));
+  assert.deepEqual(useAppStore.getState().layers[0].geojson, data);
   assert.equal(posts, 1);
 });
 
@@ -1019,6 +1047,51 @@ test("resumed jobs keep the selected process locked when its advertised descript
   fireEvent.click(screen.getByRole("button", { name: "Stop waiting" }));
   assert.equal(descriptions, 1);
   assert.equal(screen.getByRole("button", { name: "Run process" }).hasAttribute("disabled"), true);
+});
+
+test("a malformed default cannot retain another process's asynchronous execution mode", async () => {
+  const first = description();
+  first.jobControlOptions = ["async-execute"];
+  const second = JSON.parse(JSON.stringify(first).replaceAll("hello-world", "second"));
+  second.jobControlOptions = ["sync-execute"];
+  second.inputs.name.schema = { type: "number", default: "bad" };
+  let submitted: unknown;
+  let prefer: string | null = null;
+  globalThis.fetch = async (input, init) => {
+    const path = new URL(String(input)).pathname;
+    if (init?.method === "POST") {
+      submitted = JSON.parse(String(init.body)).inputs.name;
+      prefer = new Headers(init.headers).get("Prefer");
+      return new Response(JSON.stringify({ echo: "Fixed" }), {
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+    return new Response(
+      JSON.stringify(
+        path.endsWith("/hello-world")
+          ? first
+          : path.endsWith("/second")
+            ? second
+            : { processes: [first, second] },
+      ),
+      { headers: { "Content-Type": "application/json" } },
+    );
+  };
+  await form();
+  assert.equal((screen.getByLabelText("Execution mode") as HTMLSelectElement).value, "async");
+  fireEvent.change(screen.getByLabelText("Process"), { target: { value: "second" } });
+  await waitFor(() => assert.ok(screen.queryByRole("alert")));
+  assert.equal((screen.getByLabelText("Execution mode") as HTMLSelectElement).value, "sync");
+  fireEvent.change(screen.getByLabelText("Name *"), { target: { value: "5" } });
+  await waitFor(() =>
+    assert.equal(
+      screen.getByRole("button", { name: "Run process" }).hasAttribute("disabled"),
+      false,
+    ),
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Run process" }));
+  await waitFor(() => assert.equal(submitted, 5));
+  assert.equal(prefer, null);
 });
 
 test("job status follows the URL being displayed without losing its retained identity", async () => {
@@ -1325,8 +1398,11 @@ test("asynchronous jobs expose progress, import GeoJSON and dismiss only their o
           "Retry-After": "0",
         },
       });
-    assert.ok(new URL(url).pathname.startsWith("/master/jobs/one"));
-    if (init?.method === "DELETE") return new Response(null, { status: 204 });
+    if (init?.method === "DELETE") {
+      assert.equal(new URL(url).pathname, "/master/jobs/one");
+      return new Response(null, { status: 204 });
+    }
+    assert.ok(["/master/jobs/one", "/master/jobs/one/results"].includes(new URL(url).pathname));
     const document = new URL(url).pathname.endsWith("/results")
       ? {
           geometry: {

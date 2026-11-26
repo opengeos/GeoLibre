@@ -5,8 +5,10 @@ import {
   MAX_PROCESS_INPUT_BYTES,
   MAX_PROCESS_RESULT_BYTES,
   MAX_PROCESS_INPUT_DEPTH,
-  processInputDepthAllowed,
+  processInputProblem,
 } from "./ogc-process-limits";
+import { parseProcessMediaType } from "./ogc-process-media-type";
+import { decodeProcessBase64 } from "./ogc-process-base64";
 
 type JsonObject = Record<string, unknown>;
 interface ProcessLink {
@@ -48,6 +50,8 @@ export interface OgcProcessOutput {
   mediaType?: string;
   encoding?: string;
   bytes?: Uint8Array<ArrayBuffer>;
+  /** Original representation of a standalone JSON value, for lossless download. */
+  documentBytes?: Uint8Array<ArrayBuffer>;
   warning?: "invalidReference" | "invalidDocument";
 }
 export type OgcProcessExecution =
@@ -80,11 +84,12 @@ function links(value: unknown): ProcessLink[] {
 export function ogcProcessLink(href: string, base: string): string {
   const url = processHttpUrl(href, base),
     parent = processHttpUrl(base);
+  const overrides = new Set(url.searchParams.keys());
   if (url.origin === parent.origin)
     for (const [key, value] of parent.searchParams)
       if (
         !["f", "limit", "offset", "page", "startindex"].includes(key.toLowerCase()) &&
-        !url.searchParams.has(key)
+        !overrides.has(key)
       )
         url.searchParams.append(key, value);
   return url.href;
@@ -320,6 +325,7 @@ export async function resolveOgcProcessJobContext(
     const response = await processHttp(jsonUrl(url), signal);
     successful(response);
     const description = processDocument(decode(response), response.url);
+    if (current.processId && current.processId !== description.id) return current;
     return {
       ...current,
       processUrl: description.url,
@@ -353,12 +359,26 @@ function outputFormat(
       outputFormat({ schema }, depth + 1, selectedMediaType),
     );
     if (selectedMediaType) {
-      const exact = formats.find((format) => format.mediaType === selectedMediaType);
-      const matches = formats.filter(
-        (format) =>
-          format.mediaType?.split(";", 1)[0].trim().toLowerCase() ===
-          selectedMediaType.split(";", 1)[0].trim().toLowerCase(),
-      );
+      const selected = parseProcessMediaType(selectedMediaType);
+      const exact =
+        formats.find((format) => format.mediaType === selectedMediaType) ??
+        (selected &&
+          formats.find(
+            (format) =>
+              format.mediaType && parseProcessMediaType(format.mediaType)?.key === selected.key,
+          ));
+      const matches = formats.filter((format) => {
+        const candidate = format.mediaType && parseProcessMediaType(format.mediaType);
+        return (
+          selected &&
+          candidate &&
+          candidate.base === selected.base &&
+          [...selected.parameters].every(
+            ([name, value]) =>
+              !candidate.parameters.has(name) || candidate.parameters.get(name) === value,
+          )
+        );
+      });
       if (exact) return exact;
       if (matches.length === 1) return matches[0];
     }
@@ -419,7 +439,14 @@ function outputs(
     ];
   const document = decode(response);
   if (!document || typeof document !== "object" || Array.isArray(document))
-    return [{ id: "result", value: document, mediaType: "application/json" }];
+    return [
+      {
+        id: "result",
+        value: document,
+        documentBytes: response.body,
+        mediaType: response.contentType ?? "application/json",
+      },
+    ];
   const doc = document as JsonObject;
   const geoJson =
     typeof doc.type === "string" &&
@@ -501,8 +528,8 @@ export async function executeOgcProcess(
 ): Promise<OgcProcessExecution> {
   object(inputs);
   const document = { inputs, response: "document" };
-  if (!processInputDepthAllowed(document))
-    throw new OgcProcessError("inputDepth", { depth: MAX_PROCESS_INPUT_DEPTH });
+  const problem = processInputProblem(document);
+  if (problem) throw new OgcProcessError(problem, { depth: MAX_PROCESS_INPUT_DEPTH });
   const body = JSON.stringify(document);
   if (new TextEncoder().encode(body).length > MAX_PROCESS_INPUT_BYTES)
     throw new OgcProcessError("inputLimit");
@@ -638,12 +665,26 @@ export async function downloadOgcProcessOutput(
     successful(response);
     return new Blob([response.body], { type: response.contentType ?? output.mediaType });
   }
+  if (output.documentBytes) return new Blob([output.documentBytes], { type: output.mediaType });
   if (output.bytes) return new Blob([output.bytes], { type: output.mediaType });
   if (output.encoding === "base64" && typeof output.value === "string") {
-    const value = atob(output.value);
-    if (value.length > MAX_PROCESS_RESULT_BYTES) throw new OgcProcessError("resultTooLarge");
-    const bytes = new Uint8Array(value.length);
-    for (let index = 0; index < value.length; index++) bytes[index] = value.charCodeAt(index);
+    const maximumEncoded = Math.ceil(MAX_PROCESS_RESULT_BYTES / 3) * 4;
+    if (output.value.length > maximumEncoded) {
+      let significant = 0;
+      for (let index = 0; index < output.value.length; index++) {
+        const code = output.value.charCodeAt(index);
+        const whitespace = code === 9 || code === 10 || code === 12 || code === 13 || code === 32;
+        if (!whitespace && ++significant > maximumEncoded)
+          throw new OgcProcessError("resultTooLarge");
+      }
+    }
+    let bytes: Uint8Array<ArrayBuffer>;
+    try {
+      bytes = decodeProcessBase64(output.value);
+    } catch {
+      throw new OgcProcessError("invalidBase64");
+    }
+    if (bytes.length > MAX_PROCESS_RESULT_BYTES) throw new OgcProcessError("resultTooLarge");
     return new Blob([bytes], { type: output.mediaType });
   }
   return new Blob(

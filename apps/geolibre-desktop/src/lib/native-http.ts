@@ -15,6 +15,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { isCredentialUrlParam, redactUrlCredentials } from "@geolibre/core";
 import { appendDiagnostic, formatUnknown, type DiagnosticInput } from "./diagnostics";
 import { classifyFetchFailure } from "./fetch-error";
+import { decodeProcessBase64 } from "./ogc-process-base64";
 
 // Diagnostics URL/detail text is redacted for every native command so a fetch of
 // a token-bearing WFS, tile, or archive URL never records the secret. The key
@@ -258,20 +259,6 @@ export interface NativeProcessHttpResponse extends NativeHttpResponse {
   bodyReadFailed?: boolean;
 }
 
-/** Decode native bytes without a JavaScript character loop on modern hosts. */
-function decodeProcessBody(value: string): Uint8Array<ArrayBuffer> {
-  const fromBase64 = (
-    Uint8Array as Uint8ArrayConstructor & {
-      fromBase64?: (value: string) => Uint8Array<ArrayBuffer>;
-    }
-  ).fromBase64;
-  if (fromBase64) return fromBase64(value);
-  const decoded = atob(value);
-  const bytes = new Uint8Array(decoded.length);
-  for (let index = 0; index < decoded.length; index++) bytes[index] = decoded.charCodeAt(index);
-  return bytes;
-}
-
 /** Execute a bounded OGC process request through the guarded native command. */
 export async function requestOgcProcess(
   url: string,
@@ -305,7 +292,7 @@ export async function requestOgcProcess(
     location: raw.location,
     retryAfter: raw.retry_after,
     link: raw.link ?? null,
-    body: decodeProcessBody(raw.body_base64),
+    body: decodeProcessBase64(raw.body_base64),
     ...(raw.body_read_failed ? { bodyReadFailed: true } : {}),
   };
 }
