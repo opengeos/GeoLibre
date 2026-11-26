@@ -1056,6 +1056,7 @@ export class LocalNetwork {
     const run = searchEngine?.start(this, sources, options, budget);
     if (!run) return this.searchJs(sources, { ...options, budget });
     try {
+      // The WASM run takes an f64 and saturates Infinity to "no limit".
       if (!run.step(Infinity)) throw new Error("The network search did not finish");
       return run.result();
     } finally {

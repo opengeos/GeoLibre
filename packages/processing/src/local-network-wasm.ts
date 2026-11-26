@@ -164,15 +164,16 @@ function rethrow(error: unknown): never {
  * @returns An engine for {@link setNetworkSearchEngine}.
  */
 export function createWasmNetworkEngine(wasm: RoutingWasmModule): NetworkSearchEngine {
-  // One WASM graph per network, rebuilt when the network's revision moves.
-  // A graph the WASM side rejects is remembered as null for that revision,
-  // so its searches go straight to JS instead of copying it in again.
-  const graphs = new WeakMap<LocalNetwork, { revision: number; graph: WasmRoutingGraph | null }>();
+  // One WASM graph at a time: a tool run searches one network, so the copy
+  // of the previous network (or of an older revision) is freed as soon as
+  // another is needed rather than left to the garbage collector. A graph the
+  // WASM side rejects is remembered as null for that revision, so its
+  // searches go straight to JS instead of copying it in again.
+  let cached: { net: LocalNetwork; revision: number; graph: WasmRoutingGraph | null } | null = null;
   const graphFor = (net: LocalNetwork): WasmRoutingGraph | null => {
-    const cached = graphs.get(net);
-    if (cached && cached.revision === net.revision) return cached.graph;
-    graphs.delete(net);
+    if (cached && cached.net === net && cached.revision === net.revision) return cached.graph;
     cached?.graph?.free();
+    cached = null;
     let graph: WasmRoutingGraph | null = null;
     try {
       const a = graphArrays(net);
@@ -194,7 +195,7 @@ export function createWasmNetworkEngine(wasm: RoutingWasmModule): NetworkSearchE
       graph?.free();
       graph = null;
     }
-    graphs.set(net, { revision: net.revision, graph });
+    cached = { net, revision: net.revision, graph };
     return graph;
   };
 

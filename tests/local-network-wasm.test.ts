@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, it } from "node:test";
 import { getActiveMeanRadiusMeters } from "@geolibre/core";
@@ -31,12 +31,13 @@ import type { Feature } from "geojson";
 
 // In the browser wasm-bindgen fetches the bundled asset; under node:test it
 // gets the wasm bytes directly.
-const wasmBytes = new Uint8Array(
-  readFileSync(
-    fileURLToPath(new URL("../node_modules/geolibre-wasm/geolibre_wasm_bg.wasm", import.meta.url)),
-  ),
+const wasmPath = fileURLToPath(
+  new URL("../node_modules/geolibre-wasm/geolibre_wasm_bg.wasm", import.meta.url),
 );
-const wasm = await loadWasmNetworkEngine(wasmBytes);
+// A package without this file cannot have RoutingGraph either; skip, not fail.
+const wasm = existsSync(wasmPath)
+  ? await loadWasmNetworkEngine(new Uint8Array(readFileSync(wasmPath)))
+  : null;
 const skip = wasm ? false : "the installed geolibre-wasm has no RoutingGraph";
 
 /** Asserts two typed arrays hold the same values (NaN-free, Infinity-aware). */
