@@ -144,7 +144,7 @@ def _extent_bounds(extent: Any) -> list[float] | None:
             lat(ymax),
         ]
         return bounds if _is_geo_bounds(bounds) else None
-    if isinstance(wkid, float) and not math.isfinite(wkid):
+    if wkid is not None and not _finite_number(wkid):
         return None
     if wkid is not None and (not float(wkid).is_integer() or not _is_geographic_wkid(int(wkid))):
         return None

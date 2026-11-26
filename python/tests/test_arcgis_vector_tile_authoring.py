@@ -376,6 +376,18 @@ def test_too_many_sources_and_repeated_hosts(vts, monkeypatch):
         _build()
 
 
+def test_oversized_wkid_has_no_bounds(vts):
+    """Treat a WKID too large for a float as unknown.
+
+    Args:
+        vts: The mutable metadata transport fixture.
+    """
+    info, style, _ = vts
+    del style["sources"]["Santa_Monica_parcels_VTL"]["bounds"]
+    info["fullExtent"]["spatialReference"] = {"wkid": 10**400}
+    assert "bounds" not in _build()["metadata"]
+
+
 def test_null_latest_wkid_falls_back_to_wkid(vts):
     """Read ``latestWkid ?? wkid`` like the app.
 
