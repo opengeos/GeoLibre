@@ -48,7 +48,7 @@ export const PROJECT_CREDENTIAL_FIELDS = {
  * custom HTML panel the user authored by hand (`ComponentHtmlGuiEntryState`),
  * so it can carry anything, including a URL with a token in it. It is dropped
  * like any unknown blob. Mirrored by `PUBLISHABLE_PLUGIN_SETTINGS` in
- * `python/src/geolibre/project.py`; the two must agree.
+ * `python/src/geolibre/project/credentials.py`; the two must agree.
  */
 export const PUBLISHABLE_PLUGIN_SETTINGS: Readonly<Record<string, readonly string[] | null>> =
   projectConstants.PUBLISHABLE_PLUGIN_SETTINGS;
@@ -311,7 +311,7 @@ function redactConfigurationValue(
     ) {
       // `Bearer ${TOKEN}` names a variable instead of carrying a secret, so it
       // survives; any other header value is dropped. Mirrors `_redact_config`
-      // in python/src/geolibre/project.py.
+      // in python/src/geolibre/project/credentials.py.
       const kept: Record<string, string> = {};
       const removed: Record<string, unknown> = {};
       for (const [name, headerValue] of Object.entries(nested)) {
@@ -350,7 +350,7 @@ function countLeafValues(value: unknown): number {
  * keyed by plugin id. `null` keeps the whole blob. Populated at runtime by the
  * host from the curated plugin registry, never from the project file itself,
  * so a project cannot vouch for its own state. The Python mirror in
- * `python/src/geolibre/project.py` only knows the static built-in list, so a
+ * `python/src/geolibre/project/credentials.py` only knows the static built-in list, so a
  * project redacted there still drops these plugins' state.
  */
 const registryPublishableSettings = new Map<string, readonly string[] | null>();

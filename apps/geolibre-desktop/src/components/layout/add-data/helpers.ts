@@ -200,7 +200,7 @@ export function normalizeWmsVersion(version: unknown): string {
 
 /**
  * Normalizes the CRS a WMS layer requests its tiles in, mirroring
- * `_normalize_wms_crs` in `python/src/geolibre/project.py`: EPSG:3857 (the
+ * `_normalize_wms_crs` in `python/src/geolibre/project/services.py`: EPSG:3857 (the
  * default), a geographic CRS of {@link GEOGRAPHIC_WMS_CRS} or any other
  * `EPSG:<code>`. The desktop tile protocol redraws the non-Web Mercator ones
  * into Web Mercator; the web build sends them as they are.

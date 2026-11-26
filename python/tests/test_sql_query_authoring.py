@@ -122,7 +122,7 @@ def test_invalid_sql_does_not_read_result(sql, monkeypatch):
         """
         pytest.fail("invalid SQL must not load result data")
 
-    monkeypatch.setattr(project, "load_featurecollection", unexpected_read)
+    monkeypatch.setattr(project.layers, "load_featurecollection", unexpected_read)
     with pytest.raises(ValueError, match="non-empty DuckDB SQL"):
         project.sql_query_layer("Result", "unread.geojson", sql)
 

@@ -6,7 +6,7 @@
 
 /**
  * Geographic CRSs the desktop can request and redraw into Web Mercator. Keep in
- * step with `WMS_CRS` in `python/src/geolibre/project.py`, which is this set
+ * step with `WMS_CRS` in `python/src/geolibre/project/services.py`, which is this set
  * plus EPSG:3857: a CRS Python accepts but this set lacks renders blank. A
  * test in `tests/wms-geographic.test.ts` fails when the two drift.
  */
