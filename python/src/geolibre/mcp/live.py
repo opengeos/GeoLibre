@@ -378,7 +378,11 @@ def discovery_files() -> list[Path]:
     files = [sidecar_discovery_file()]
     if sys.platform == "darwin" and not os.environ.get(SIDECAR_DISCOVERY_ENV, "").strip():
         container = Path.home() / "Library" / "Containers" / MAS_BUNDLE_ID
-        if container.is_dir():
+        try:
+            installed = container.is_dir()
+        except OSError:
+            installed = False
+        if installed:
             files.append(container / "Data" / ".geolibre" / "runtime" / "live-relay.json")
     return files
 
