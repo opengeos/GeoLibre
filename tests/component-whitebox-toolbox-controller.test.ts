@@ -326,6 +326,76 @@ it("drops a finished job's outputs after a different project loads", async () =>
   });
   assert.equal(hook.result.current.job?.id, "late");
   assert.equal(useAppStore.getState().layers.length, 0, "nothing lands in the new project");
+  act(() => hook.result.current.updateValue("input", ""));
+  await act(() => hook.result.current.runSelectedTool());
+  assert.match(hook.result.current.error ?? "", /Missing required parameter/);
+  await act(() => hook.result.current.loadWhitebox());
+  assert.equal(hook.result.current.job?.id, "late");
+  assert.equal(
+    useAppStore.getState().layers.length,
+    0,
+    "failed Run and catalog refresh cannot reimport the old job",
+  );
+});
+
+it("keeps a Global DEM download assigned to the project that dispatched it", async () => {
+  const pending: { release?: (value: Uint8Array) => void } = {};
+  const rasters: string[] = [];
+  const stub = services({
+    downloadGlobalDem: () =>
+      new Promise((resolve) => {
+        pending.release = resolve;
+      }),
+  });
+  const hook = controller(stub, {
+    mapControllerRef: mapRef([-84, 35.5, -83.5, 36]).ref,
+    onAddRaster: (_bytes, name) => {
+      rasters.push(name);
+    },
+  });
+  await loaded(hook);
+  act(() => hook.result.current.setSelectedToolId(DOWNLOAD_GLOBAL_DEM_TOOL_ID));
+  await waitFor(() =>
+    assert.equal(hook.result.current.selectedToolId, DOWNLOAD_GLOBAL_DEM_TOOL_ID),
+  );
+  act(() => hook.result.current.handleUseMapExtent());
+  let run = Promise.resolve();
+  act(() => {
+    run = hook.result.current.runSelectedTool();
+  });
+  await waitFor(() => assert.ok(pending.release));
+  act(() => useAppStore.getState().newProject());
+  await act(async () => {
+    pending.release?.(new Uint8Array([0x49, 0x49, 0x2a, 0x00, 1]));
+    await run;
+  });
+  assert.deepEqual(rasters, []);
+  assert.equal(useAppStore.getState().layers.length, 0);
+});
+
+it("clears Run's busy state and allows retry when input preparation rejects", async () => {
+  let fail = true;
+  const stub = services({
+    fetchLayerBytes: async () => {
+      if (fail) throw new Error("Input bytes unavailable");
+      return new Uint8Array([1, 2, 3]);
+    },
+  });
+  useAppStore.getState().addLayer(geojsonLayer({ id: "dem", name: "DEM", geojson: undefined }));
+  const hook = controller(stub);
+  await loaded(hook);
+  act(() => hook.result.current.setSelectedToolId(SLOPE.id));
+  await waitFor(() => assert.equal(hook.result.current.selectedToolId, SLOPE.id));
+  act(() => hook.result.current.updateValue("dem", "layer:dem"));
+  await act(() => hook.result.current.runSelectedTool());
+  assert.equal(hook.result.current.error, "Input bytes unavailable");
+  assert.equal(hook.result.current.running, false);
+  assert.equal(stub.calls.wasmRuns.length, 0);
+  fail = false;
+  await act(() => hook.result.current.runSelectedTool());
+  assert.equal(hook.result.current.error, null);
+  assert.equal(hook.result.current.running, false);
+  assert.equal(stub.calls.wasmRuns.length, 1);
 });
 
 it("polls a sidecar job until it finishes and imports its output path", async () => {
