@@ -170,11 +170,9 @@ export function buildStoryMapHtml(options: StoryMapExportOptions): string {
     storymap,
     basemapStyleUrl,
     projection = "globe",
+    layers,
     navToggleLabel = "Toggle chapter list",
   } = options;
-  // The page inlines each layer's raw features, so fields the author marked
-  // "excluded" must be stripped here like every other export path does.
-  const layers = options.layers.map(withoutExcludedFields);
 
   // The template reads chapters[0] for the initial camera, so an empty story
   // cannot produce a working page. Callers gate this behind a chapter count,
@@ -200,7 +198,10 @@ export function buildStoryMapHtml(options: StoryMapExportOptions): string {
   const popups: Record<string, ExportFeaturePopup[]> = {};
   // Resolve popups the way the app would on the story's opening view.
   const popupContext = { zoom: storymap.chapters[0].location.zoom, locale: documentLocale() };
-  for (const layer of storyExportCandidates(storymap, layers)) {
+  for (const candidate of storyExportCandidates(storymap, layers)) {
+    // The page inlines each layer's raw features, so fields the author marked
+    // "excluded" are stripped here like every other export path does.
+    const layer = withoutExcludedFields(candidate);
     // Inline GeoJSON layers and raster tile layers (the latter covers basemaps
     // added through the Basemaps plugin, which are raster layers rather than a
     // style URL, #936). Layers iterate in store order; the store array is

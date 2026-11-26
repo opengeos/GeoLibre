@@ -400,7 +400,7 @@ export function calculateField(
  * @param newKey The field's new name, or `null` when the field is deleted.
  * @returns The updated map, or the input itself when it has no entry for `oldKey`.
  */
-function renameKeyInFieldVisibility(
+function moveFieldVisibilityKey(
   fieldVisibility: GeoLibreLayer["fieldVisibility"],
   oldKey: string,
   newKey: string | null,
@@ -432,7 +432,7 @@ export function renameColumn(
   // is what the attribute table's disabled menu item points at.
   if (isMaintainedEditorTrackingField(oldKey, layer.editorTracking)) return null;
   const settings = getColumnSettings(layer);
-  const fieldVisibility = renameKeyInFieldVisibility(layer.fieldVisibility, oldKey, newKey);
+  const fieldVisibility = moveFieldVisibilityKey(layer.fieldVisibility, oldKey, newKey);
   return {
     geojson: renameFieldInGeojson(layer.geojson, oldKey, newKey),
     style: renameFieldInStyle(layer.style, oldKey, newKey),
@@ -454,7 +454,7 @@ export function deleteColumn(layer: GeoLibreLayer, key: string): Partial<GeoLibr
   // config names, so deleting it here only discards the history it held.
   if (isMaintainedEditorTrackingField(key, layer.editorTracking)) return null;
   const settings = getColumnSettings(layer);
-  const fieldVisibility = renameKeyInFieldVisibility(layer.fieldVisibility, key, null);
+  const fieldVisibility = moveFieldVisibilityKey(layer.fieldVisibility, key, null);
   return {
     geojson: deleteFieldInGeojson(layer.geojson, key),
     style: clearFieldInStyle(layer.style, key),
