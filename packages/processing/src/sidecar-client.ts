@@ -291,18 +291,6 @@ export async function checkSidecarHealth(
   }
 }
 
-/** Apply the desktop's relay opt-in through the configured sidecar transport. */
-export async function setSidecarRelayAccess(baseUrl: string, enabled: boolean): Promise<void> {
-  const response = await sidecarFetch(`${baseUrl}/relay/access`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ enabled }),
-    signal: AbortSignal.timeout(5000),
-    redirect: "error",
-  });
-  if (!response.ok) throw new Error("Could not apply Live MCP access preference.");
-}
-
 export async function fetchWhiteboxStatus(baseUrl = DEFAULT_SIDECAR_URL): Promise<WhiteboxStatus> {
   let res: Response;
   try {
