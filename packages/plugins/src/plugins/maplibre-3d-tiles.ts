@@ -2206,7 +2206,7 @@ function getGoogleAltitudeOffsetTile3DLayerClass(): DeckTile3DLayerClass {
   googleAltitudeOffsetTile3DLayerClass = class extends BaseLayer {
     static componentName = "GoogleAltitudeOffsetTile3DLayer";
 
-    renderLayers(): unknown {
+    override renderLayers(): unknown {
       const altitudeOffset = numberValue(this.props.altitudeOffset, 0);
       return offsetGooglePhotorealisticTileLayers(super.renderLayers(), altitudeOffset);
     }

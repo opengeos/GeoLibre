@@ -43,7 +43,7 @@ import {
 /**
  * Attribute-driven labels: a symbol layer that renders the configured field
  * (or expression) for every feature. Distinct from the geoman text-marker
- * layer ({@link applyTextMarkerLayer}), which only renders annotation features.
+ * layer (`applyTextMarkerLayer`), which only renders annotation features.
  */
 export function applyAttributeLabelLayer(ctx: VectorRenderContext): void {
   const { map, layer, renderer } = ctx;

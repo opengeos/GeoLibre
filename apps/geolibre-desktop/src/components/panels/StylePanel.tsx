@@ -59,7 +59,7 @@ import { ZoomRangeControls } from "./style-panel/ZoomRangeControls";
 
 interface StylePanelProps {
   mapControllerRef: RefObject<MapEngine | null>;
-  /** Bumped when the map (re)initializes; see {@link useQuickFilterProfiles}. */
+  /** Bumped when the map (re)initializes; see `useQuickFilterProfiles`. */
   mapReadyGeneration?: number;
   onResizeStart: (event: ReactPointerEvent<HTMLDivElement>) => void;
   /** Incremented when another part of the UI explicitly requests this panel. */

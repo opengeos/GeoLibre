@@ -407,7 +407,7 @@ function normalizeConfig(state: unknown): TimeSliderConfig | null {
  * timeline, for a plugin that hands it a dated stack.
  *
  * Unlike a project restore this takes a live config, so a source may carry a
- * resolver function; pair it with {@link registerTimeSliderSourceRehydrator} if
+ * resolver function; pair it with `registerTimeSliderSourceRehydrator` if
  * it should survive a saved project.
  *
  * @param app - The GeoLibre app API.

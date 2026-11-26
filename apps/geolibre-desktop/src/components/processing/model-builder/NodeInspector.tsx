@@ -14,7 +14,7 @@ import {
 import { parseMaxIterations } from "../../../lib/model-graph-edit";
 import { modelFieldOptions } from "../../../lib/model-field-options";
 import { ParameterField } from "../ParameterField";
-import { translateIssue, descriptorName, portLabel } from "./model-builder-labels";
+import { translateIssue, nodeInspectorTitle, portLabel } from "./model-builder-labels";
 
 const NULL_CHECK_OPERATORS = new Set(["is_null", "not_null", "is_empty", "not_empty"]);
 
@@ -58,13 +58,7 @@ export function NodeInspector({
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between gap-2">
-        <p className="truncate text-xs font-semibold">
-          {node.kind === "tool"
-            ? descriptorName(t, descriptor, node.toolId ?? "")
-            : node.kind === "input"
-              ? t("processing.modelBuilder.inputNode")
-              : t("processing.modelBuilder.outputNode")}
-        </p>
+        <p className="truncate text-xs font-semibold">{nodeInspectorTitle(t, node, descriptor)}</p>
         <Button
           size="sm"
           variant="ghost"

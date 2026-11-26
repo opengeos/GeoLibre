@@ -302,7 +302,7 @@ export class MapControllerLayers extends MapControllerStyle {
    * its primary render layers plus the companion symbology `syncLayers` draws
    * beside them (inverted fill, line decorations, geometry-generator output).
    * The companions are internal (`geolibre:internal`) and so deliberately
-   * absent from {@link getCandidateStyleLayers}, which feeds identify and the
+   * absent from `getCandidateStyleLayers`, which feeds identify and the
    * layer control; without them a chapter that fades a layer out leaves its
    * centroids or buffers on screen (discussion #2326).
    */

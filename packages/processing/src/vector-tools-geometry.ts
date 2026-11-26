@@ -24,6 +24,7 @@ import {
   stableStringify,
   collectPoints,
   LINEAR_UNITS,
+  type LinearUnit,
 } from "./vector-tools-common";
 
 export const reprojectTool: ProcessingAlgorithm = {
@@ -474,9 +475,6 @@ export const extractVerticesTool: ProcessingAlgorithm = {
   },
 };
 
-/** Units accepted by Points along geometry; @turf/distance speaks all three. */
-type AlongUnits = "kilometers" | "meters" | "miles";
-
 /**
  * Hard ceiling on generated points so a tiny interval on a long geometry
  * cannot freeze the tab (the same guard {@link GRID_HARD_CAP} gives the grid).
@@ -496,7 +494,7 @@ const POINTS_ALONG_HARD_CAP = 1_000_000;
 function* walkAlong(
   positions: Position[],
   interval: number,
-  units: AlongUnits,
+  units: LinearUnit,
   segmentLengths: number[],
 ): Generator<{ position: Position; step: number }> {
   let travelled = 0;
@@ -546,7 +544,7 @@ function* walkAlong(
 }
 
 /** Haversine lengths of an open coordinate ring's segments. */
-function ringSegmentLengths(positions: Position[], units: AlongUnits): number[] {
+function ringSegmentLengths(positions: Position[], units: LinearUnit): number[] {
   const lengths: number[] = [];
   for (let i = 1; i < positions.length; i += 1) {
     lengths.push(distance(positions[i - 1], positions[i], { units }));
@@ -603,7 +601,7 @@ export const pointsAlongGeometryTool: ProcessingAlgorithm = {
       ctx.log(`Error: unknown units '${units}'`);
       return;
     }
-    const alongUnits = units as AlongUnits;
+    const alongUnits = units as LinearUnit;
     // Turf is Earth-locked: pre-scale the user's ground interval into Turf's
     // frame for the walk, and post-scale every length Turf measures back into
     // the active body's frame before it reaches the distance column.

@@ -181,7 +181,7 @@ function loadEarthEngineControlClass(): Promise<EarthEngineControlClass> {
   if (earthEngineControlClass) return earthEngineControlClass;
   earthEngineControlClass = import("maplibre-gl-earth-engine").then(({ PluginControl }) => {
     class GeoLibreEarthEngineControl extends PluginControl {
-      async authenticate(projectId?: string, oauthClientId?: string): Promise<void> {
+      override async authenticate(projectId?: string, oauthClientId?: string): Promise<void> {
         const isTauriAuth = shouldUseTauriEarthEngineOAuth();
         if (isTauriAuth) {
           const activeOAuthClientId = oauthClientIdValue(
@@ -223,12 +223,12 @@ function loadEarthEngineControlClass(): Promise<EarthEngineControlClass> {
         }
       }
 
-      async loadAsset(assetId: string, vis: VisualizeOptions): Promise<void> {
+      override async loadAsset(assetId: string, vis: VisualizeOptions): Promise<void> {
         clearEarthEngineFunctionInfo();
         await super.loadAsset(assetId, vis);
       }
 
-      async runScript(script: string, vis: VisualizeOptions): Promise<void> {
+      override async runScript(script: string, vis: VisualizeOptions): Promise<void> {
         clearEarthEngineFunctionInfo();
         await super.runScript(script, vis);
       }

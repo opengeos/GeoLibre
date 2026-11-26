@@ -63,10 +63,10 @@ describe("parsePostgisTileUrl", () => {
     const url = expand(postgisTilesUrl(source), 3, 4, 5);
     const realUrl = globalThis.URL;
     globalThis.URL = class extends realUrl {
-      get hostname() {
+      override get hostname() {
         return "";
       }
-      get pathname() {
+      override get pathname() {
         return "//tile/3/4/5";
       }
     } as typeof URL;

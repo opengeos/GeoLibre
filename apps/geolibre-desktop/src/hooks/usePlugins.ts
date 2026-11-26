@@ -1326,7 +1326,7 @@ const appApiHost: AppApiHost = {
 };
 
 /**
- * Builds the plugin API ({@link GeoLibreAppAPI}) against the app's real host
+ * Builds the plugin API (`GeoLibreAppAPI`) against the app's real host
  * services. The implementation lives in `lib/app-api.ts`.
  *
  * @param mapControllerRef - The primary map engine, if any.

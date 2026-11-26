@@ -166,7 +166,7 @@ export function syncGeoJsonLayer(
 }
 
 /**
- * Render local vector layers above {@link LARGE_VECTOR_FEATURE_THRESHOLD}
+ * Render local vector layers above `LARGE_VECTOR_FEATURE_THRESHOLD`
  * features through client-side vector tiles instead of one in-memory geojson
  * source. Reuses the same source id and render-layer ids as
  * {@link syncGeoJsonLayer}; only the source becomes `type:"vector"` (its tiles

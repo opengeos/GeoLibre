@@ -82,7 +82,7 @@ export class MapControllerHighlight extends MapControllerLayers {
    * Query rendered features at a geographic point, for the scripting API's
    * "identify" command. Mirrors the in-app Identify tool: it queries the same
    * candidate style layers MapLibre renders for each layer
-   * ({@link getCandidateStyleLayers}) and falls back to property matching when a
+   * (`getCandidateStyleLayers`) and falls back to property matching when a
    * feature carries no stable id, so a Python caller gets the same hit a click
    * would.
    *

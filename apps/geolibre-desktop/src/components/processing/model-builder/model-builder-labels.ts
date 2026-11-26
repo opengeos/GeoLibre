@@ -1,6 +1,6 @@
 // Display names for Model Builder tools, ports, control-flow nodes and validation issues.
 
-import type { ModelGraphNodeKind } from "@geolibre/core";
+import type { ModelGraphNode, ModelGraphNodeKind } from "@geolibre/core";
 import {
   INPUT_NODE_PORT,
   OUTPUT_NODE_PORT,
@@ -110,4 +110,24 @@ export function portLabel(t: TFunction, label: string): string {
     ? CONTROL_FLOW_PORT_KEYS[label]
     : undefined;
   return key ? t(key) : label;
+}
+
+/**
+ * The inspector heading for a selected node: the tool's name, "Input",
+ * "Output", or a control-flow node's own title.
+ *
+ * @param t The translation function.
+ * @param node The selected node.
+ * @param descriptor The tool descriptor, for tool nodes.
+ * @returns The translated heading.
+ */
+export function nodeInspectorTitle(
+  t: TFunction,
+  node: ModelGraphNode,
+  descriptor: ModelToolDescriptor | undefined,
+): string {
+  if (node.kind === "tool") return descriptorName(t, descriptor, node.toolId ?? "");
+  if (node.kind === "input") return t("processing.modelBuilder.inputNode");
+  const controlFlowTitleKey = CONTROL_FLOW_TITLE_KEYS[node.kind];
+  return controlFlowTitleKey ? t(controlFlowTitleKey) : t("processing.modelBuilder.outputNode");
 }

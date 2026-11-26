@@ -478,17 +478,17 @@ class PreviewRangeResponse extends BaseResponse {
     super();
   }
 
-  get status(): number {
+  override get status(): number {
     return 206;
   }
 
-  getHeader(name: string): string | undefined {
+  override getHeader(name: string): string | undefined {
     if (name.toLowerCase() !== "content-range") return undefined;
     const end = this.start + Math.max(0, this.bytes.byteLength - 1);
     return `bytes ${this.start}-${end}/${this.total ?? "*"}`;
   }
 
-  async getData(): Promise<ArrayBuffer> {
+  override async getData(): Promise<ArrayBuffer> {
     return this.bytes;
   }
 }
@@ -507,7 +507,7 @@ class PreviewRangeClient extends BaseClient {
     super(url);
   }
 
-  async request(options: RequestInit = {}): Promise<BaseResponse> {
+  override async request(options: RequestInit = {}): Promise<BaseResponse> {
     const headers = new Headers(options.headers);
     const match = headers.get("range")?.match(/^bytes=(\d+)-(\d+)$/);
     if (!match) throw new Error(t("byteRangesOnly"));

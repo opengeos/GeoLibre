@@ -1240,6 +1240,11 @@ export function ModelBuilderPanel({
     }
     const controller = new AbortController();
     abortRef.current = controller;
+    // Every log write of this run goes through here, so a run abandoned by a
+    // cancel or a model switch (resetRunState) cannot repopulate the new log.
+    const guardedLog = (message: string) => {
+      if (!controller.signal.aborted) appendLog(message);
+    };
     setRunning(true);
     setPythonScript(null);
     setNodeStatus({});
@@ -1268,7 +1273,7 @@ export function ModelBuilderPanel({
                   // Otherwise this is an unhandled rejection and the run still
                   // reports success for an output that never reached the map.
                   failedOutputs.push(name);
-                  appendLog(
+                  guardedLog(
                     `${t("processing.modelBuilder.outputAddFailed", {
                       name,
                     })}: ${err instanceof Error ? err.message : String(err)}`,
@@ -1290,9 +1295,7 @@ export function ModelBuilderPanel({
             );
           }
         },
-        log: (message) => {
-          if (!controller.signal.aborted) appendLog(message);
-        },
+        log: guardedLog,
         signal: controller.signal,
         onNodeStatus: (nodeId, status) => {
           if (controller.signal.aborted) return;
@@ -1306,7 +1309,7 @@ export function ModelBuilderPanel({
             signal,
             layers,
             duckdb,
-            log: appendLog,
+            log: guardedLog,
             t,
           }),
       });
