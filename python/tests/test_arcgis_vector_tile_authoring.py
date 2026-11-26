@@ -521,6 +521,10 @@ def _damage(info, style, damage):
         info["tiles"] = ["tile/{z}/{x}.pbf"]
     elif damage == "absolute_styles":
         info["defaultStyles"] = "https://evil.example/styles"
+    elif damage == "parent_styles":
+        info["defaultStyles"] = "../../Other/VectorTileServer/resources/styles"
+    elif damage == "query_styles":
+        info["defaultStyles"] = "resources/styles?f=pjson"
     elif damage == "error":
         info.clear()
         info["error"] = {"code": 499, "message": "Token Required"}
@@ -552,6 +556,8 @@ def _damage(info, style, damage):
         "no_tiles",
         "template",
         "absolute_styles",
+        "parent_styles",
+        "query_styles",
         "error",
         "no_layers",
         "too_many_layers",

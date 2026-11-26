@@ -192,7 +192,12 @@ def style_endpoint(info: Any) -> str:
     if not isinstance(endpoint, str) or not endpoint.strip():
         endpoint = "resources/styles"
     endpoint = endpoint.strip()
-    if re.match(r"^[a-z][a-z0-9+.-]*:", endpoint, re.I) or endpoint.startswith("/"):
+    if (
+        re.match(r"^[a-z][a-z0-9+.-]*:", endpoint, re.I)
+        or endpoint.startswith("/")
+        or any(char in endpoint for char in "?#\\")
+        or ".." in endpoint.split("/")
+    ):
         raise ValueError("ArcGIS vector tile defaultStyles must be a relative resource path")
     return endpoint if endpoint.endswith("/") else endpoint + "/"
 
