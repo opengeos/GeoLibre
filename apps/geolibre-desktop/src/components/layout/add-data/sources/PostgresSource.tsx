@@ -22,6 +22,10 @@ import {
   databaseTableLabel,
   uniqueDatabaseTables,
 } from "../../../../lib/database-tables";
+import {
+  EDIT_SYNC_BASELINE_KEY,
+  postgisSyncBaseline,
+} from "../../../../lib/edit-sync/postgis-edit-sync";
 import { IS_MAS_BUILD } from "../../../../lib/build-flags";
 import { ignoreSidecarStartError, startGeoLibreSidecar } from "../../../../lib/sidecar";
 import { isDesktopRuntime } from "../../../../lib/is-mobile";
@@ -433,6 +437,8 @@ function PostgresMartinSource({ initialPostgres }: PostgresSourceProps) {
           // Persisted with the project so the deletion-scoping baseline
           // survives a reload (keys are not credentials).
           postgisBaselineKeys: databaseFeatureKeys(result.geojson),
+          // Base fingerprints for offline, conflict-aware sync-back (#3530).
+          [EDIT_SYNC_BASELINE_KEY]: postgisSyncBaseline(result.geojson, result.primary_key),
         },
         { geojson: result.geojson },
       ),
