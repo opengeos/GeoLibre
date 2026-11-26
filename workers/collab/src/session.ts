@@ -23,6 +23,7 @@ import {
   authorizeSnapshot,
   RELAY_SNAPSHOT_ORIGIN,
   resolveJoin,
+  shouldLogDocUpdate,
   shouldResyncRejectedSnapshot,
   clearParticipantOverrides,
   EMPTY_SESSION_TTL_MS,
@@ -146,6 +147,9 @@ export class CollabSession extends DurableObject<Env> {
   // wake (see `relayDocument`). `rev` mirrors the stored counter while it is.
   private relayDoc: RelayDoc | null = null;
   private rev = 0;
+  // When each origin's last change was logged; see shouldLogDocUpdate.
+  private lastLogged = new Map<string, number>();
+  private commentWrite = false;
 
   private maxDocBytes(): number {
     const configured = Number(this.env.COLLAB_MAX_DOC_BYTES);
@@ -232,9 +236,11 @@ export class CollabSession extends DurableObject<Env> {
         )
         .toArray()[0].n > 0;
     const legacy = hasDoc ? null : parseStoredSnapshot(await this.readSnapshot());
-    this.rev = (await this.ctx.storage.get<number>("rev")) ?? 0;
-    // Another frame may have opened it while this one awaited.
+    const storedRev = (await this.ctx.storage.get<number>("rev")) ?? 0;
+    // Another frame may have opened it (and advanced rev) while this one
+    // awaited; only the frame that creates the document sets rev.
     if (this.relayDoc) return this.relayDoc;
+    this.rev = storedRev;
     this.relayDoc = new RelayDoc({
       storage: this.docStorage(),
       maxDocBytes: this.maxDocBytes(),
@@ -257,13 +263,16 @@ export class CollabSession extends DurableObject<Env> {
     this.rev += 1;
     const rev = this.rev;
     void this.ctx.storage.put("rev", rev);
-    void this.appendLog({ type: "snapshot", ts: Date.now(), rev, origin });
+    if (shouldLogDocUpdate(this.lastLogged, origin, Date.now())) {
+      void this.appendLog({ type: "snapshot", ts: Date.now(), rev, origin });
+    }
     // Built on first use: a session may have no op-level (or no snapshot) peer.
     let frames: string[] | undefined;
     let snapshotPayload: string | null | undefined;
     for (const { socket, attachment } of this.attachedSockets()) {
       if (attachment.clientId === origin) continue;
       try {
+        if (!attachment.crdt && this.commentWrite) continue;
         if (attachment.crdt) {
           frames ??= docUpdateMessages(update, origin, rev, () => crypto.randomUUID()).map((m) =>
             JSON.stringify(m),
@@ -1314,7 +1323,14 @@ export class CollabSession extends DurableObject<Env> {
         });
         return;
       }
-      relayDoc.setField("comments", updatedComments);
+      // Snapshot-protocol peers get the comment-mutation below, not a whole
+      // project for it (which could overwrite their unsent edits).
+      this.commentWrite = true;
+      try {
+        relayDoc.setField("comments", updatedComments);
+      } finally {
+        this.commentWrite = false;
+      }
     } catch {
       // The mutation never reached storage, so a late joiner or a reconnect
       // (both of which read from storage) would not see it. Tell the sender and

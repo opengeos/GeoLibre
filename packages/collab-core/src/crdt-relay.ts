@@ -30,9 +30,12 @@ import type { ServerDocUpdateMessage } from "./protocol";
  */
 export const MAX_DOC_BYTES = 32 * 1024 * 1024;
 
-/** Compact the update log into a new base once it holds this many bytes... */
+/**
+ * Compact the update log into a new base once it holds this many bytes (or
+ * half the base, if larger)...
+ */
 export const DOC_COMPACT_LOG_BYTES = 4 * 1024 * 1024;
-/** ...or this many entries. */
+/** ...or this many entries, once the log is at least a quarter of the base. */
 export const DOC_COMPACT_LOG_ENTRIES = 256;
 
 /**
@@ -362,9 +365,12 @@ export class RelayDoc {
   }
 
   private maybeCompact(): void {
-    if (this.logBytes >= DOC_COMPACT_LOG_BYTES || this.logEntries >= DOC_COMPACT_LOG_ENTRIES) {
-      this.compact();
-    }
+    // Each compaction rewrites the whole base, so scale the trigger with it:
+    // a big document is not rewritten after a few hundred tiny edits.
+    const bytesDue = this.logBytes >= Math.max(DOC_COMPACT_LOG_BYTES, this.baseBytes / 2);
+    const entriesDue =
+      this.logEntries >= DOC_COMPACT_LOG_ENTRIES && this.logBytes * 4 >= this.baseBytes;
+    if (bytesDue || entriesDue) this.compact();
   }
 }
 

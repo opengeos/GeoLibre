@@ -11,6 +11,7 @@ import {
   authorizeSnapshot,
   RELAY_SNAPSHOT_ORIGIN,
   resolveJoin,
+  shouldLogDocUpdate,
   shouldResyncRejectedSnapshot,
   clearParticipantOverrides,
   diffLockedLayers,
@@ -82,6 +83,10 @@ interface LiveSession {
   doc?: RelayDoc;
   /** Revision counter, mirrored from storage while the document is open. */
   rev: number;
+  /** When each origin's last document change was logged. */
+  lastLogged: Map<string, number>;
+  /** Set while the relay writes the comment list (see fanOutDocUpdate). */
+  commentWrite?: boolean;
 }
 
 export interface RelayOptions {
@@ -237,7 +242,7 @@ export function createRelay(options: RelayOptions = {}): {
   function live(id: string): LiveSession {
     let session = sessions.get(id);
     if (!session) {
-      session = { peers: new Set(), presence: new Map(), rev: 0 };
+      session = { peers: new Set(), presence: new Map(), rev: 0, lastLogged: new Map() };
       sessions.set(id, session);
     }
     if (session.cleanup) {
@@ -286,13 +291,18 @@ export function createRelay(options: RelayOptions = {}): {
     session.rev += 1;
     const rev = session.rev;
     store.saveRev(id, rev);
-    appendLog(id, { type: "snapshot", ts: Date.now(), rev, origin });
+    if (shouldLogDocUpdate(session.lastLogged, origin, Date.now())) {
+      appendLog(id, { type: "snapshot", ts: Date.now(), rev, origin });
+    }
     // Built on first use: a session may have no op-level (or no snapshot) peer.
     let frames: string[] | undefined;
     let snapshotPayload: string | null | undefined;
     for (const peer of session.peers) {
       const participant = peer.participant;
       if (!participant || participant.clientId === origin) continue;
+      // Snapshot-protocol peers get the comment-mutation instead of a whole
+      // project for a comment (which could overwrite their unsent edits).
+      if (!participant.crdt && session.commentWrite) continue;
       if (participant.crdt) {
         frames ??= docUpdateMessages(update, origin, rev, () => randomUUID()).map((m) =>
           JSON.stringify(m),
@@ -935,7 +945,12 @@ export function createRelay(options: RelayOptions = {}): {
         });
         return;
       }
-      doc.setField("comments", project.comments);
+      session.commentWrite = true;
+      try {
+        doc.setField("comments", project.comments);
+      } finally {
+        session.commentWrite = false;
+      }
       broadcast(session, { type: "comment-mutation", action: sanitized }, peer);
     }
   }
