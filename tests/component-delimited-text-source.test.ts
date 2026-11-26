@@ -74,10 +74,12 @@ describe("DelimitedTextSource", () => {
     await waitFor(() => assert.ok(/404/.test(text())));
     fireEvent.click(screen.getByRole("button", { name: "Add layer" }));
     // Add downloads again; wait for that request before checking nothing was added.
-    await waitFor(() => assert.equal(requested.length, 2));
-    // The button reads "Add layer" again once the submit has settled.
-    await waitFor(() => screen.getByRole("button", { name: "Add layer" }));
-    assert.ok(/404/.test(text()));
+    // Add clears the error, downloads again and fails with the same 404, so
+    // wait for its own request and for the error to be shown again.
+    await waitFor(() => {
+      assert.equal(requested.length, 2);
+      assert.ok(/404/.test(text()));
+    });
     assert.equal(added.length, 0);
   });
 });
