@@ -141,6 +141,33 @@ test("ignores malformed catalog links and reports empty when none survive", asyn
   assert.equal(collection.id, "gdps-temperature");
 });
 
+test("does not inherit catalog paging parameters on coverage links", async () => {
+  const item = metadata();
+  item.links = [
+    {
+      rel: "http://www.opengis.net/def/rel/ogc/1.0/coverage",
+      type: "application/prs.coverage+json",
+      href: "./temperature/coverage?f=json",
+    },
+  ];
+  serve((url) =>
+    new URL(url).searchParams.has("page")
+      ? { collections: [{ ...item, id: "second" }] }
+      : {
+          collections: [item],
+          links: [{ rel: "next", href: "?page=2&offset=10&limit=10&startindex=10" }],
+        },
+  );
+  const items = await discoverOgcCoverages(
+    "https://example.org/collections?token=secret",
+    new AbortController().signal,
+  );
+  const url = new URL(ogcCoverageUrl(items[1], [-80, 43, -79, 44]));
+  assert.equal(url.searchParams.get("token"), "secret");
+  for (const key of ["page", "offset", "limit", "startindex"])
+    assert.equal(url.searchParams.has(key), false);
+});
+
 test("does not copy query credentials to an external coverage host", async () => {
   const item = metadata();
   item.links = [

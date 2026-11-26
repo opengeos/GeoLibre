@@ -30,6 +30,10 @@ const OWN_PARAMS = new Set([
   "scale-size",
   "scale-factor",
   "scale-axes",
+  "limit",
+  "offset",
+  "page",
+  "startindex",
 ]);
 interface Link {
   href: string;
