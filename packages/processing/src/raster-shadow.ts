@@ -58,19 +58,21 @@ export const MAX_SHADOW_CELLS = 4_000_000;
 export const MAX_SHADOW_WORK = 100_000_000;
 
 /**
- * Most cell visits one run may make, counting every cell a wall sweep paints
- * (overlaps included) and every cell a roof trace crosses. Both depend on the
+ * Most cell visits one run may make, counting every cell a footprint burn or
+ * a wall sweep paints (overlaps included), every wall swept, and every cell a
+ * roof trace crosses. Both depend on the
  * skyline, so they cannot be bounded up front the way {@link MAX_SHADOW_WORK}
  * bounds the cell passes; they are counted as they happen instead, so even a
  * single sun position cannot run away. The Midtown Manhattan example makes
  * about 620 million over a solstice day at 15-minute steps (roughly 6 s), so
- * the cap leaves it about 3x headroom.
+ * the cap leaves it about 2x headroom while bounding a runaway run to
+ * roughly 12 s of main-thread work.
  */
-export const MAX_ROOF_WALK_SAMPLES = 2_000_000_000;
+export const MAX_SHADOW_VISITS = 1_200_000_000;
 
-/** Thrown when a run exceeds {@link MAX_ROOF_WALK_SAMPLES}. */
-const ROOF_WALK_BUDGET_MESSAGE =
-  "Tracing sunlight across the roofs is taking too long for the browser; use a longer time step, a larger cell size, or fewer buildings.";
+/** Thrown when a run exceeds {@link MAX_SHADOW_VISITS}. */
+const SHADOW_BUDGET_MESSAGE =
+  "Tracing sunlight across the buildings is taking too long for the browser; use a longer time step, a larger cell size, or fewer buildings.";
 
 /** Lowest sun elevation that casts a shadow; below it the sun counts as down. */
 export const MIN_SUN_ELEVATION_DEGREES = 0.5;
@@ -156,7 +158,10 @@ function polygonsOf(geometry: Geometry | null): Position[][][] {
  * instead of silently reading its leading digits.
  */
 export function parseLength(text: string): number | null {
-  const match = /^\s*(\d+(?:\.\d*)?|\.\d+)\s*(m|metres?|meters?|ft|feet|foot|')?\s*$/i.exec(text);
+  // Trimmed and length-capped first, so the pattern has a single whitespace
+  // run and cannot backtrack expensively on a pathological attribute.
+  const trimmed = text.length > 64 ? "" : text.trim();
+  const match = /^(\d+(?:\.\d*)?|\.\d+)\s*(m|metres?|meters?|ft|feet|foot|')?$/i.exec(trimmed);
   if (!match) return null;
   const value = Number(match[1]);
   const unit = (match[2] ?? "m").toLowerCase();
@@ -307,14 +312,18 @@ export function buildHeightGrid(features: Feature[], params: BuildingShadowParam
   ];
   const heights = new Float32Array(width * height);
   const buildings: Building[] = [];
+  // Overlapping footprints repaint cells; count every paint.
+  let burned = 0;
   let maxHeight = 0;
   for (const poly of polys) {
     const rings = poly.rings.map((ring) => ring.map(toCell));
     buildings.push({ rings, height: poly.height });
     if (poly.height > maxHeight) maxHeight = poly.height;
     fillPolygon(rings, width, height, (i) => {
+      burned += 1;
       if (poly.height > heights[i]) heights[i] = poly.height;
     });
+    if (burned > MAX_SHADOW_VISITS) throw new Error(SHADOW_BUDGET_MESSAGE);
   }
   const resLon = cellSize / mPerDegLon;
   const resLat = cellSize / mPerDegLat;
@@ -348,7 +357,7 @@ export function castShadows(
   azimuth: number,
   elevation: number,
   out: Uint8Array,
-  sampleBudget = MAX_ROOF_WALK_SAMPLES,
+  sampleBudget = MAX_SHADOW_VISITS,
 ): number {
   out.fill(0);
   const { width, height, heights, cellSize } = grid;
@@ -373,6 +382,13 @@ export function castShadows(
       for (let k = 0; k + 1 < ring.length; k += 1) {
         const [ax, ay] = ring[k];
         const [bx, by] = ring[k + 1];
+        work += 1;
+        // Skip a sweep that lies wholly off the grid.
+        const minX = Math.min(ax, bx, ax + ox, bx + ox);
+        const maxX = Math.max(ax, bx, ax + ox, bx + ox);
+        const minY = Math.min(ay, by, ay + oy, by + oy);
+        const maxY = Math.max(ay, by, ay + oy, by + oy);
+        if (maxX < 0 || maxY < 0 || minX > width || minY > height) continue;
         fillPolygon(
           [
             [
@@ -387,7 +403,7 @@ export function castShadows(
           height,
           markGround,
         );
-        if (work > sampleBudget) throw new Error(ROOF_WALK_BUDGET_MESSAGE);
+        if (work > sampleBudget) throw new Error(SHADOW_BUDGET_MESSAGE);
       }
     }
   }
@@ -425,7 +441,7 @@ export function castShadows(
         if (tEntry > maxDistance) break;
         if (c < 0 || r < 0 || c >= width || r >= height) break;
         work += 1;
-        if (work > sampleBudget) throw new Error(ROOF_WALK_BUDGET_MESSAGE);
+        if (work > sampleBudget) throw new Error(SHADOW_BUDGET_MESSAGE);
         if (heights[r * width + c] > h0 + tEntry * rise) {
           out[i] = 1;
           break;
@@ -531,7 +547,7 @@ export function buildingShadows(
       positions += 1;
       firstUp ??= minute;
       lastUp = minute;
-      walked += castShadows(grid, sun.azimuth, sun.elevation, mask, MAX_ROOF_WALK_SAMPLES - walked);
+      walked += castShadows(grid, sun.azimuth, sun.elevation, mask, MAX_SHADOW_VISITS - walked);
       const weight =
         mode === "sun-hours"
           ? minutes / 60

@@ -478,3 +478,11 @@ describe("height attribute hygiene", () => {
     assert.equal(buildingHeight({ height: 99_999 }, {}), 1000);
   });
 });
+
+describe("pathological inputs", () => {
+  it("parses a long whitespace run quickly and rejects it", () => {
+    const t0 = performance.now();
+    assert.equal(buildingHeight({ height: `1${" ".repeat(100_000)}x` }, { default_height: 7 }), 7);
+    assert.ok(performance.now() - t0 < 100);
+  });
+});
