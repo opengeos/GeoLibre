@@ -374,15 +374,6 @@ export function wmtsCapabilities(
   return { url, layer: id, tileMatrixSetID };
 }
 
-/**
- * What the globe's kind dispatch ({@link isCesiumSupportedLayerType}) does with
- * each layer kind. The globe has no plugin controls, so almost every kind it
- * draws is `"native"` (some only for certain data: a raster archive, a draped
- * style, a tileset URL). `deckgl-viz` is `"plugin"`: only the records the
- * Deck.gl Layer builder wrote are drawn, rewritten from its config. The
- * `"unsupported"` kinds stay in the 2D panes, unless their record carries a
- * FeatureCollection, CZML or KML, which the globe draws whatever the kind.
- */
 export function videoUrls(layer: GeoLibreLayer): string[] {
   const urls = Array.isArray(layer.source.urls)
     ? layer.source.urls.filter(
@@ -422,6 +413,15 @@ function isDuckDBPluginLayer(layer: GeoLibreLayer): boolean {
   return layer.type === "duckdb-query" && layer.metadata?.sourceKind === "duckdb-query";
 }
 
+/**
+ * What the globe's kind dispatch ({@link isCesiumSupportedLayerType}) does with
+ * each layer kind. The globe has no plugin controls, so almost every kind it
+ * draws is `"native"` (some only for certain data: a raster archive, a draped
+ * style, a tileset URL). `deckgl-viz` is `"plugin"`: only the records the
+ * Deck.gl Layer builder wrote are drawn, rewritten from its config. The
+ * `"unsupported"` kinds stay in the 2D panes, unless their record carries a
+ * FeatureCollection, CZML or KML, which the globe draws whatever the kind.
+ */
 export const CESIUM_SUPPORTED_LAYER_KINDS = Object.freeze({
   geojson: "native",
   "raster-tiles": "native",
