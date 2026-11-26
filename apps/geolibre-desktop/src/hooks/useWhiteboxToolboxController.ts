@@ -950,7 +950,10 @@ export function useWhiteboxToolboxController({
       if (importedJobIdRef.current === nextJob.id) return;
       importedJobIdRef.current = nextJob.id;
       const startLoadCount = jobGenerationByJobRef.current.get(nextJob.id);
-      if (startLoadCount === undefined) return;
+      if (startLoadCount === undefined) {
+        runParametersByJobRef.current.delete(nextJob.id);
+        return;
+      }
       if (useAppStore.getState().projectLoadCount !== startLoadCount) {
         runParametersByJobRef.current.delete(nextJob.id);
         return;
