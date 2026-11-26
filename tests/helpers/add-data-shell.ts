@@ -2,8 +2,9 @@
  * Render an Add Data source component inside a minimal Add Data shell, the
  * context `AddDataDialog` normally provides, and record what it does.
  *
- * Import `./dom` before this module so the source's CSS imports and Vite
- * globals resolve.
+ * This module imports `./dom` itself before loading the shell context, so the
+ * source's CSS imports and Vite globals resolve; load the source under test
+ * with a dynamic `import()` as usual.
  */
 import type { GeoLibreLayer } from "@geolibre/core";
 import { createElement, createRef, type ReactElement, useState } from "react";

@@ -71,12 +71,12 @@ describe("DelimitedTextSource", () => {
     assert.equal(retrieve.hasAttribute("disabled"), true);
     fireEvent.change(urlInput(), { target: { value: CSV_URL } });
     fireEvent.click(retrieve);
-    await waitFor(() => assert.ok(/404/.test(text())));
+    await waitFor(() => assert.ok(text().includes("Request failed with status 404")));
     fireEvent.click(screen.getByRole("button", { name: "Add layer" }));
     // Add clears the error and downloads again; wait for that request and its 404.
     await waitFor(() => {
       assert.equal(requested.length, 2);
-      assert.ok(/404/.test(text()));
+      assert.ok(text().includes("Request failed with status 404"));
     });
     assert.equal(added.length, 0);
   });

@@ -79,7 +79,7 @@ describe("WmsSource", () => {
     assert.equal(closed(), 1);
   });
 
-  it("reports a service that lists no layers, and an unreachable one", async () => {
+  it("reports a service that lists no layers, and a failing one", async () => {
     serve(
       `<?xml version="1.0"?><WMS_Capabilities version="1.3.0"><Capability><Layer><Title>Empty</Title></Layer></Capability></WMS_Capabilities>`,
     );
@@ -88,7 +88,7 @@ describe("WmsSource", () => {
     await waitFor(() => assert.ok(text().includes("No layers were found for this service.")));
     serve("gateway down", 502);
     fireEvent.click(screen.getByRole("button", { name: "Retrieve layers" }));
-    await waitFor(() => assert.ok(/status 502/.test(text())));
+    await waitFor(() => assert.ok(text().includes("Request failed with status 502")));
   });
 
   it("refuses to add without layer names", async () => {
