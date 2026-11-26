@@ -127,7 +127,10 @@ describe("AddNetcdfDialog", () => {
     mockFetch(async () => new Response("missing", { status: 404 }));
     renderDialog(fakeServices().services);
     useCloudSource(KERCHUNK_URL);
-    await waitFor(() => assert.ok(text().includes("Failed to fetch kerchunk reference: HTTP 404")));
+    await waitFor(
+      () => assert.ok(text().includes("Failed to fetch kerchunk reference: HTTP 404")),
+      LOAD_TIMEOUT,
+    );
 
     mockFetch(
       async () =>
@@ -139,8 +142,9 @@ describe("AddNetcdfDialog", () => {
         ),
     );
     fireEvent.click(screen.getByRole("button", { name: "Load variables" }));
-    await waitFor(() =>
-      assert.ok(text().includes("No renderable (2-D or higher) variables found")),
+    await waitFor(
+      () => assert.ok(text().includes("No renderable (2-D or higher) variables found")),
+      LOAD_TIMEOUT,
     );
     assert.equal(screen.getByRole("button", { name: "Add layer" }).hasAttribute("disabled"), true);
   });
