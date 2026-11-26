@@ -161,9 +161,16 @@ describe("map diagnostic events", () => {
 describe("plugin registry prefetch", () => {
   it("fetches the registry when plugins can be installed and aborts on unmount", async () => {
     const signals: AbortSignal[] = [];
+    // Pending until aborted, then rejecting the way a real fetch does, so the
+    // registry's own timeout is cleared.
     mockFetch(async (_input, init) => {
-      signals.push(init!.signal!);
-      return new Promise<Response>(() => {});
+      const signal = init!.signal!;
+      signals.push(signal);
+      return new Promise<Response>((_resolve, reject) =>
+        signal.addEventListener("abort", () => reject(new DOMException("Aborted", "AbortError")), {
+          once: true,
+        }),
+      );
     });
     const { unmount } = renderHook(() => usePluginRegistryPrefetch());
     assert.equal(signals.length, 1);
