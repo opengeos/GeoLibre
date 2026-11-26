@@ -487,3 +487,16 @@ describe("pathological inputs", () => {
     assert.ok(performance.now() - t0 < 100);
   });
 });
+
+describe("UTC offset echo", () => {
+  it("states the offset and flags one far from the longitude's zone", () => {
+    const { messages } = buildingShadows([box(0, 0, 10, 10, 10)], {
+      date: "2026-03-20",
+      time: "12:00",
+      utc_offset: -5,
+      cell_size: 1,
+      margin: 10,
+    });
+    assert.ok(messages.some((line) => line.startsWith("Local time is UTC-5 (note:")));
+  });
+});

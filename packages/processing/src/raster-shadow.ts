@@ -72,7 +72,7 @@ export const MAX_SHADOW_VISITS = 1_200_000_000;
 
 /** Thrown when a run exceeds {@link MAX_SHADOW_VISITS}. */
 const SHADOW_BUDGET_MESSAGE =
-  "Tracing sunlight across the buildings is taking too long for the browser; use a longer time step, a larger cell size, or fewer buildings.";
+  "Tracing sunlight across the buildings is taking too long for the browser; use a larger cell size, a smaller ground margin, or fewer buildings (the day modes also accept a longer time step).";
 
 /** Lowest sun elevation that casts a shadow; below it the sun counts as down. */
 export const MIN_SUN_ELEVATION_DEGREES = 0.5;
@@ -490,6 +490,12 @@ export function buildingShadows(
   const messages = [
     `Burned ${grid.buildings.length} footprint(s) into a ${width} x ${height} grid of ${grid.cellSize} m cells (tallest ${grid.maxHeight.toFixed(1)} m).`,
   ];
+  // Echo the offset, and flag one far from the footprints' solar time zone,
+  // since a wrong offset gives plausible-looking but hours-off results.
+  const solarZone = Math.round(lon0 / 15);
+  messages.push(
+    `Local time is UTC${offset >= 0 ? "+" : ""}${offset}${Math.abs(offset - solarZone) > 2 ? ` (note: the footprints' longitude suggests about UTC${solarZone >= 0 ? "+" : ""}${solarZone}; check the offset)` : ""}.`,
+  );
   let groundCells = 0;
   for (let i = 0; i < cells; i += 1) if (heights[i] === 0) groundCells += 1;
 
