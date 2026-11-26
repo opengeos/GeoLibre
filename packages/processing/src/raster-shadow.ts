@@ -24,9 +24,10 @@ import { clearSkyDni, localTimeToUtc, sunPosition } from "./solar-position";
  * up. Insolation integrates the clear-sky direct beam on a horizontal surface
  * (`DNI · sin(elevation)`); diffuse sky light is not modelled.
  *
- * The output grid is EPSG:4326, built from the requested metre cell size at
- * the footprints' centre latitude, which keeps it a few centimetres true over
- * a city district.
+ * The output grid is EPSG:4326, built from the requested metre cell size with
+ * the WGS84 metres-per-degree at the footprints' centre latitude
+ * ({@link metersPerDegree}); over a city district the scale drifts by well
+ * under 0.01%.
  */
 
 /** NoData of the shadow outputs (none of the modes leave a cell undefined). */
@@ -59,7 +60,20 @@ const ROOF_WALK_BUDGET_MESSAGE =
 /** Lowest sun elevation that casts a shadow; below it the sun counts as down. */
 export const MIN_SUN_ELEVATION_DEGREES = 0.5;
 
-const METERS_PER_DEGREE_LAT = 111_320;
+/**
+ * Metres per degree of latitude and of longitude at a latitude, from the
+ * standard WGS84 series (good to about a centimetre per degree).
+ *
+ * @param latDeg - Latitude in degrees.
+ * @returns Metres per degree along each axis.
+ */
+export function metersPerDegree(latDeg: number): { lat: number; lon: number } {
+  const r = latDeg * (Math.PI / 180);
+  return {
+    lat: 111_132.92 - 559.82 * Math.cos(2 * r) + 1.175 * Math.cos(4 * r),
+    lon: 111_412.84 * Math.cos(r) - 93.5 * Math.cos(3 * r),
+  };
+}
 
 export type ShadowMode = "shadow" | "sun-hours" | "insolation";
 
@@ -230,16 +244,13 @@ export function buildHeightGrid(features: Feature[], params: BuildingShadowParam
   if (!polys.length) throw new Error("The buildings layer has no polygon footprints.");
   const lat0 = (south + north) / 2;
   const lon0 = (west + east) / 2;
-  const mPerDegLon = METERS_PER_DEGREE_LAT * Math.cos(lat0 * (Math.PI / 180));
-  const dLat = margin / METERS_PER_DEGREE_LAT;
+  const { lat: mPerDegLat, lon: mPerDegLon } = metersPerDegree(lat0);
+  const dLat = margin / mPerDegLat;
   const dLon = margin / mPerDegLon;
   const gWest = west - dLon;
   const gNorth = north + dLat;
   const width = Math.max(1, Math.ceil(((east - west) * mPerDegLon + 2 * margin) / cellSize));
-  const height = Math.max(
-    1,
-    Math.ceil(((north - south) * METERS_PER_DEGREE_LAT + 2 * margin) / cellSize),
-  );
+  const height = Math.max(1, Math.ceil(((north - south) * mPerDegLat + 2 * margin) / cellSize));
   if (width * height > MAX_SHADOW_CELLS) {
     throw new Error(
       `The grid would be ${width} x ${height} cells (limit ${MAX_SHADOW_CELLS.toLocaleString("en-US")}); use a larger cell size, a smaller margin, or fewer buildings.`,
@@ -247,7 +258,7 @@ export function buildHeightGrid(features: Feature[], params: BuildingShadowParam
   }
   const toCell = ([lon, lat]: Position): Position => [
     ((lon - gWest) * mPerDegLon) / cellSize,
-    ((gNorth - lat) * METERS_PER_DEGREE_LAT) / cellSize,
+    ((gNorth - lat) * mPerDegLat) / cellSize,
   ];
   const heights = new Float32Array(width * height);
   const buildings: Building[] = [];
@@ -261,7 +272,7 @@ export function buildHeightGrid(features: Feature[], params: BuildingShadowParam
     });
   }
   const resLon = cellSize / mPerDegLon;
-  const resLat = cellSize / METERS_PER_DEGREE_LAT;
+  const resLat = cellSize / mPerDegLat;
   return {
     width,
     height,
