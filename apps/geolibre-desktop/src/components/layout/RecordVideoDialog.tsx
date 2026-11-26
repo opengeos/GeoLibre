@@ -31,10 +31,20 @@ import {
 } from "../../lib/map-recorder";
 import { RegionSelectOverlay } from "./RegionSelectOverlay";
 
+/** The capture and save operations the panel drives; tests substitute their own. */
+export interface MapVideoRecorder {
+  /** Whether this browser can record the map canvas at all. */
+  supported: boolean;
+  record: typeof recordMapCanvas;
+  save: typeof saveBinaryFileWithFallback;
+}
+
 interface RecordVideoDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   mapControllerRef: React.RefObject<MapEngine | null>;
+  /** Replaces the canvas recorder and file save; tests only. */
+  recorder?: MapVideoRecorder;
 }
 
 // "ready" holds a finished recording in memory so saving is a deliberate second
@@ -63,7 +73,11 @@ const VIDEO_EXTENSION_RE = /\.(mp4|webm)$/i;
 
 // Codec support is a static browser capability, so probe it once at module load
 // rather than re-running the MediaRecorder.isTypeSupported() checks per render.
-const RECORDING_SUPPORTED = isMapRecordingSupported();
+const DEFAULT_RECORDER: MapVideoRecorder = {
+  supported: isMapRecordingSupported(),
+  record: recordMapCanvas,
+  save: saveBinaryFileWithFallback,
+};
 
 /** Clamp a number into a range, returning the fallback when not finite. */
 function clamp(value: number, min: number, max: number, fallback: number): number {
@@ -95,7 +109,9 @@ export function RecordVideoDialog({
   open,
   onOpenChange,
   mapControllerRef,
+  recorder = DEFAULT_RECORDER,
 }: RecordVideoDialogProps) {
+  const recordingSupported = recorder.supported;
   const { t } = useTranslation();
   const [mode, setMode] = useState<Mode>("whole");
   const [region, setRegion] = useState<RecordRegion | null>(null);
@@ -233,7 +249,7 @@ export function RecordVideoDialog({
       ? Array.from(map.getContainer().querySelectorAll<HTMLElement>(MAP_PANEL_SELECTOR))
       : null;
     try {
-      const rec = await recordMapCanvas({
+      const rec = await recorder.record({
         map,
         region: mode === "region" ? region : null,
         caption: hasCaptionText(captionOptions) ? captionOptions : null,
@@ -316,7 +332,7 @@ export function RecordVideoDialog({
       const ext = pendingRec.extension;
       const base = fileName.trim().replace(VIDEO_EXTENSION_RE, "") || DEFAULT_FILE_NAME;
       const fileType = t("recordVideo.videoFileType");
-      const name = await saveBinaryFileWithFallback(pendingRec.blob, {
+      const name = await recorder.save(pendingRec.blob, {
         defaultName: `${base}.${ext}`,
         filters: [{ name: fileType, extensions: [ext] }],
         browserTypes: [
@@ -405,7 +421,7 @@ export function RecordVideoDialog({
         <div className="flex flex-col gap-3 p-3">
           <p className="text-xs text-muted-foreground">{t("recordVideo.hint")}</p>
 
-          {!RECORDING_SUPPORTED && (
+          {!recordingSupported && (
             <p className="rounded-md border border-amber-500/40 bg-amber-500/10 p-2 text-xs text-muted-foreground">
               {t("recordVideo.unsupported")}
             </p>
@@ -589,7 +605,7 @@ export function RecordVideoDialog({
             <Button
               type="button"
               disabled={
-                !RECORDING_SUPPORTED ||
+                !recordingSupported ||
                 status === "saving" ||
                 selecting ||
                 (mode === "region" && !region)
