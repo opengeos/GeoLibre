@@ -49,25 +49,30 @@ export async function fetchCollabIdentityToken(
 ): Promise<string | null> {
   // One deadline for the whole lookup, token refresh included: the join waits
   // on it, and a desktop refresh alone may take up to 30 s.
+  // The same deadline aborts the request, so no work outlives the caller.
+  const controller = new AbortController();
   let timer: ReturnType<typeof setTimeout> | undefined;
   const deadline = new Promise<null>((resolve) => {
-    timer = setTimeout(() => resolve(null), deps.timeoutMs ?? REQUEST_TIMEOUT_MS);
+    timer = setTimeout(() => {
+      controller.abort();
+      resolve(null);
+    }, deps.timeoutMs ?? REQUEST_TIMEOUT_MS);
   });
   try {
-    return await Promise.race([lookup(deps), deadline]);
+    return await Promise.race([lookup(deps, controller.signal), deadline]);
   } finally {
     clearTimeout(timer);
   }
 }
 
-async function lookup(deps: CollabIdentityDeps): Promise<string | null> {
+async function lookup(deps: CollabIdentityDeps, signal: AbortSignal): Promise<string | null> {
   try {
     const injected = deps.issuer !== undefined || deps.getAccessToken !== undefined;
     if (!injected && !supportsShareOAuth()) return null;
     const issuer = deps.issuer !== undefined ? deps.issuer : resolveShareIssuer();
     if (!issuer) return null;
     const accessToken = await (deps.getAccessToken ?? (() => getShareAccessToken()))();
-    if (!accessToken) return null;
+    if (!accessToken || signal.aborted) return null;
     if (
       cached &&
       cached.issuer === issuer &&
@@ -79,7 +84,7 @@ async function lookup(deps: CollabIdentityDeps): Promise<string | null> {
     const request = shareAuthorizedFetch(accessToken, issuer, deps.fetchImpl ?? getShareFetch());
     const response = await request(new URL("api/collab/identity-token", `${issuer}/`), {
       method: "POST",
-      signal: AbortSignal.timeout(deps.timeoutMs ?? REQUEST_TIMEOUT_MS),
+      signal,
     });
     if (!response.ok) return null;
     const body = (await response.json().catch(() => null)) as {

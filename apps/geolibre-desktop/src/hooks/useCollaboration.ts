@@ -99,8 +99,10 @@ export function useCollaboration(
   // Set after an anonymous join by a possibly signed-in user: retries once
   // with a fresh identity token if the relay answers identity-required.
   const identityRetryRef = useRef<(() => Promise<boolean>) | null>(null);
-  // A push skipped while the join was still out; sent once it is.
-  const snapshotHeldRef = useRef(false);
+  // Set once this connection's welcome has been handled: a whole-project push
+  // before it could overwrite the session with a project that has not yet
+  // taken in the relay's state.
+  const welcomedRef = useRef(false);
   const pendingConnectRef = useRef<{
     resolve: () => void;
     reject: (error: Error) => void;
@@ -160,10 +162,9 @@ export function useCollaboration(
   }, []);
 
   const sendSnapshot = async (): Promise<void> => {
-    if (!joinSentRef.current) {
-      snapshotHeldRef.current = true;
-      return;
-    }
+    // The welcome either loads the session's project or, for a host of an
+    // empty session, sends this one; an edit before it is covered by that.
+    if (!welcomedRef.current) return;
     if (!canEdit() || syncPausedRef.current) return;
     const request = ++snapshotRequestRef.current;
     let project: GeoLibreProject;
@@ -257,6 +258,7 @@ export function useCollaboration(
     switch (message.type) {
       case "welcome": {
         selfIdRef.current = message.clientId;
+        welcomedRef.current = true;
         store.setCollaboration({
           isActive: true,
           connecting: false,
@@ -442,10 +444,6 @@ export function useCollaboration(
         ...(identity ? { identityToken: identity } : {}),
       });
       joinSentRef.current = true;
-      if (snapshotHeldRef.current) {
-        snapshotHeldRef.current = false;
-        void sendSnapshot();
-      }
     };
     if (identityToken) {
       sendJoin(identityToken);
@@ -458,22 +456,21 @@ export function useCollaboration(
         .then(({ fetchCollabIdentityToken }) => fetchCollabIdentityToken())
         .catch(() => null)
         .then((token) => {
-          if (!token) {
-            // Joined anonymously: if the session requires sign-in, try once
-            // more with a fresh token and a longer deadline (the first lookup
-            // may have timed out, or a skewed clock kept an expired token).
-            identityRetryRef.current = async () => {
-              const { clearCollabIdentityCache, fetchCollabIdentityToken } =
-                await import("../lib/collab-identity");
-              clearCollabIdentityCache();
-              const fresh = await fetchCollabIdentityToken({ timeoutMs: 10_000 }).catch(() => null);
-              if (!fresh || connRef.current !== conn || joinGenerationRef.current !== generation) {
-                return false;
-              }
-              sendJoin(fresh);
-              return true;
-            };
-          }
+          if (connRef.current !== conn || joinGenerationRef.current !== generation) return;
+          // If the session requires sign-in and refuses this join (the
+          // lookup timed out, or a skewed clock kept an expired cached
+          // token), try once more with a fresh token and a longer deadline.
+          identityRetryRef.current = async () => {
+            const { clearCollabIdentityCache, fetchCollabIdentityToken } =
+              await import("../lib/collab-identity");
+            clearCollabIdentityCache();
+            const fresh = await fetchCollabIdentityToken({ timeoutMs: 10_000 }).catch(() => null);
+            if (!fresh || connRef.current !== conn || joinGenerationRef.current !== generation) {
+              return false;
+            }
+            sendJoin(fresh);
+            return true;
+          };
           sendJoin(token);
         });
     }
@@ -482,7 +479,7 @@ export function useCollaboration(
       joinGenerationRef.current += 1;
       joinSentRef.current = false;
       identityRetryRef.current = null;
-      snapshotHeldRef.current = false;
+      welcomedRef.current = false;
       if (debounce) clearTimeout(debounce);
       unsubscribe();
     };

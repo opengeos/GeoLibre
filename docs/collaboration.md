@@ -289,10 +289,12 @@ server without the secret, joins anonymously as before.
 
 The token carries the account's id and username, so a signed-in user's
 identity goes to whichever relay the deployment configures
-(`VITE_GEOLIBRE_COLLAB_URL` / `GEOLIBRE_COLLAB_URL`). That relay can only
-verify (not mint) tokens, and the server only issues them when it shares a
-secret with a relay, so this pairing is an operator decision; a deployment
-should not point the app at a relay it does not trust with its users' names.
+(`VITE_GEOLIBRE_COLLAB_URL` / `GEOLIBRE_COLLAB_URL`). The secret is symmetric:
+whoever holds it can also mint tokens for any account (`signIdentityToken`),
+so every holder, the server and each relay, must be trusted to issue
+identities, not just to see users' names. The server only issues tokens when
+an operator configures that shared secret, which makes the pairing an
+explicit operator decision.
 Tokens carry no audience: any relay holding the same secret accepts one until
 it expires (five minutes by default), so share a secret only among relays of
 one deployment.

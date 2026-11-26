@@ -1199,7 +1199,9 @@ def create_app(
     app.include_router(build_scim_router())
     app.include_router(
         build_collab_identity_router(
-            os.getenv(COLLAB_IDENTITY_SECRET_ENV, "").strip() or None, collab_identity_ttl()
+            # Verbatim: the relay HMACs with the exact same bytes.
+            os.getenv(COLLAB_IDENTITY_SECRET_ENV) or None,
+            collab_identity_ttl(),
         )
     )
     if oauth_config is not None:
