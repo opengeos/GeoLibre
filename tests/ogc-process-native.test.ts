@@ -87,24 +87,34 @@ test("native process execution preserves its method, inputs, headers and asynchr
   assert.equal(new TextDecoder().decode(response.body), "{}");
 });
 
-test("compact native result transport retains all byte values", async () => {
-  const bytes = Uint8Array.from({ length: 256 }, (_, index) => index);
-  Object.defineProperty(window, "__TAURI_INTERNALS__", {
-    configurable: true,
-    value: {
-      invoke: async () => ({
-        status: 200,
-        final_url: "https://example.org/result",
-        content_type: "image/tiff",
-        location: null,
-        retry_after: null,
-        body_base64: btoa(String.fromCharCode(...bytes)),
-      }),
-    },
+for (const compatibility of [false, true]) {
+  test(`compact native result transport retains all byte values (${compatibility ? "compatibility decoder" : "host decoder"})`, async () => {
+    const bytes = Uint8Array.from({ length: 256 }, (_, index) => index);
+    Object.defineProperty(window, "__TAURI_INTERNALS__", {
+      configurable: true,
+      value: {
+        invoke: async () => ({
+          status: 200,
+          final_url: "https://example.org/result",
+          content_type: "image/tiff",
+          location: null,
+          retry_after: null,
+          body_base64: btoa(String.fromCharCode(...bytes)),
+        }),
+      },
+    });
+    const descriptor = Object.getOwnPropertyDescriptor(Uint8Array, "fromBase64");
+    try {
+      if (compatibility)
+        Object.defineProperty(Uint8Array, "fromBase64", { configurable: true, value: undefined });
+      const result = await requestOgcProcess("https://example.org/result", { method: "GET" });
+      assert.deepEqual(result.body, bytes);
+    } finally {
+      if (descriptor) Object.defineProperty(Uint8Array, "fromBase64", descriptor);
+      else Reflect.deleteProperty(Uint8Array, "fromBase64");
+    }
   });
-  const result = await requestOgcProcess("https://example.org/result", { method: "GET" });
-  assert.deepEqual(result.body, bytes);
-});
+}
 
 test("a failing diagnostic observer cannot discard an accepted native job", async () => {
   const { subscribeDiagnostics, setCaptureNetworkInfo, getDiagnosticsSnapshot, clearDiagnostics } =

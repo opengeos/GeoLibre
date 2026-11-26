@@ -222,6 +222,11 @@ export function OgcProcessesDialog({
                         className="space-y-2 rounded-md border p-3"
                       >
                         <p className="text-sm font-medium">{output.id}</p>
+                        {output.warning && (
+                          <p className="text-sm text-muted-foreground" role="status">
+                            {t(`processing.ogcProcesses.outputWarnings.${output.warning}`)}
+                          </p>
+                        )}
                         <pre className="max-h-40 overflow-auto whitespace-pre-wrap break-words text-xs">
                           {output.bytes
                             ? t("processing.ogcProcesses.outputBytes", {

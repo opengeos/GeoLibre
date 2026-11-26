@@ -43,6 +43,7 @@ export interface OgcProcessOutput {
   mediaType?: string;
   encoding?: string;
   bytes?: Uint8Array<ArrayBuffer>;
+  warning?: "invalidReference" | "invalidDocument";
 }
 export type OgcProcessExecution =
   | { kind: "job"; job: OgcProcessJob }
@@ -418,14 +419,18 @@ function outputs(
     const format = outputFormat(definitions?.[id]);
     if (raw && typeof raw === "object" && !Array.isArray(raw)) {
       const value = raw as JsonObject;
-      if (typeof value.href === "string")
+      if (typeof value.href === "string") {
+        const href = optionalLink(value.href, response.url);
+        if (!href)
+          return { id, value: raw, mediaType: "application/json", warning: "invalidReference" };
         return {
           id,
-          href: ogcProcessLink(value.href, response.url),
+          href,
           ...(format.mediaType ? { mediaType: format.mediaType } : {}),
           ...(typeof value.type === "string" ? { mediaType: value.type } : {}),
           ...(typeof value.mediaType === "string" ? { mediaType: value.mediaType } : {}),
         };
+      }
       if (Object.hasOwn(value, "value")) {
         const explicitMediaType = typeof value.mediaType === "string" ? value.mediaType : undefined;
         const selectedFormat = explicitMediaType
@@ -542,8 +547,19 @@ export async function executeOgcProcess(
       outputs: outputs(response, Object.keys(process.outputs), process.outputs),
       ...(retainedUrl ? { job: retainedJob(retainedUrl, "successful") } : {}),
     };
-  } catch (error) {
-    if (!retainedUrl) throw error;
+  } catch {
+    if (!retainedUrl)
+      return {
+        kind: "results",
+        outputs: [
+          {
+            id: "result",
+            bytes: response.body,
+            mediaType: response.contentType ?? "application/octet-stream",
+            warning: "invalidDocument",
+          },
+        ],
+      };
     return { kind: "job", job: retainedJob(retainedUrl, "accepted") };
   }
 }

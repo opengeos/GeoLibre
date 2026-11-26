@@ -407,17 +407,17 @@ export async function fetchWithGuard(
   throw new Error("Too many proxy redirects");
 }
 
-/**
- * Read an upstream body while enforcing {@link PROXY_MAX_BODY_BYTES}. Checks
- * Content-Length early when present and aborts mid-stream if the running
- * total exceeds the cap.
- */
 export class ProxyBodyLimitError extends Error {
   constructor() {
     super("Upstream response exceeds size limit");
   }
 }
 
+/**
+ * Read an upstream body while enforcing {@link PROXY_MAX_BODY_BYTES}. Checks
+ * Content-Length early when present and aborts mid-stream if the running
+ * total exceeds the cap.
+ */
 export async function readBodyWithLimit(
   response: Response,
   maxBytes: number = PROXY_MAX_BODY_BYTES,
@@ -445,7 +445,7 @@ export async function readBodyWithLimit(
     }
     chunks.push(value);
   }
-  return Buffer.concat(chunks.map((c) => Buffer.from(c)));
+  return Buffer.concat(chunks, total);
 }
 
 /**

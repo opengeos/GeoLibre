@@ -661,6 +661,42 @@ test("import provenance stays attached to the execution after endpoint and job U
   );
 });
 
+test("completed outputs remain visible when one advertised reference is unusable", async () => {
+  let posts = 0;
+  serve(async () => {
+    posts++;
+    return new Response(
+      JSON.stringify({
+        bad: { href: "mailto:operator@example.org", type: "image/tiff" },
+        echo: "Usable result",
+      }),
+      { headers: { "Content-Type": "application/json" } },
+    );
+  });
+  await form();
+  fireEvent.click(screen.getByRole("button", { name: "Run process" }));
+  await waitFor(() => assert.ok(screen.queryByText("Usable result")));
+  assert.ok(screen.queryByText(/returned an unusable output link/));
+  assert.equal(screen.queryByRole("alert"), null);
+  assert.equal(screen.getAllByRole("button", { name: "Download" }).length, 2);
+  assert.equal(posts, 1);
+});
+
+test("a malformed completed response offers its original download with an execution warning", async () => {
+  let posts = 0;
+  serve(async () => {
+    posts++;
+    return new Response("{broken", { headers: { "Content-Type": "application/json" } });
+  });
+  await form();
+  fireEvent.click(screen.getByRole("button", { name: "Run process" }));
+  await waitFor(() => assert.ok(screen.queryByRole("button", { name: "Download" })));
+  assert.ok(screen.queryByText(/Retrying the process starts a new execution/));
+  assert.equal(screen.queryByRole("alert"), null);
+  assert.equal(screen.queryByRole("button", { name: "Add to map" }), null);
+  assert.equal(posts, 1);
+});
+
 test("editing imported inline GeoJSON leaves the retained output snapshot unchanged", async () => {
   const { importOgcProcessOutput } =
     await import("../apps/geolibre-desktop/src/lib/ogc-process-results");

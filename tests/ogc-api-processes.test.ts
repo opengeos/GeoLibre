@@ -67,10 +67,20 @@ test("client errors follow the active language and retain original service detai
 
 test("binary output previews use the active language", async () => {
   const previous = i18next.language;
+  await i18next.changeLanguage("en");
+  assert.equal(ogcProcessOutputPreview({ id: "bytes", bytes: new Uint8Array(1) }), "1 byte");
+  assert.equal(ogcProcessOutputPreview({ id: "bytes", bytes: new Uint8Array(2) }), "2 bytes");
   i18next.addResourceBundle(
     "fr",
     "translation",
-    { processing: { ogcProcesses: { outputBytes: "{{count}} octets" } } },
+    {
+      processing: {
+        ogcProcesses: {
+          outputBytes_one: "{{count}} octet",
+          outputBytes_other: "{{count}} octets",
+        },
+      },
+    },
     true,
     true,
   );
@@ -80,6 +90,45 @@ test("binary output previews use the active language", async () => {
   } finally {
     await i18next.changeLanguage(previous);
   }
+});
+
+test("unusable output links preserve other completed outputs and remain downloadable as metadata", async () => {
+  const process = await processDescription();
+  for (const href of [
+    "mailto:operator@example.org",
+    "http://[",
+    "https://user:secret@example.org/data",
+  ]) {
+    const raw = { href, type: "image/tiff" };
+    const calls = serve(() => ({ bad: raw, echo: "Completed" }));
+    const signal = new AbortController().signal;
+    const result = await executeOgcProcess(process, {}, signal);
+    assert.equal(result.kind, "results");
+    if (result.kind !== "results") throw Error("Expected completed results");
+    assert.equal(result.outputs[1].value, "Completed");
+    assert.equal(result.outputs[0].warning, "invalidReference");
+    assert.equal(canImportOgcProcessOutput(result.outputs[0]), false);
+    assert.deepEqual(
+      JSON.parse(await (await downloadOgcProcessOutput(result.outputs[0], signal)).text()),
+      raw,
+    );
+    assert.equal(calls.filter((call) => call.init?.method === "POST").length, 1);
+  }
+});
+
+test("a malformed completed result without job routing retains its original downloadable bytes", async () => {
+  const process = await processDescription();
+  const calls = serve(
+    () => new Response("{broken", { headers: { "Content-Type": "application/json" } }),
+  );
+  const signal = new AbortController().signal;
+  const result = await executeOgcProcess(process, {}, signal);
+  assert.equal(result.kind, "results");
+  if (result.kind !== "results") throw Error("Expected completed results");
+  assert.equal(result.outputs[0].warning, "invalidDocument");
+  assert.equal(canImportOgcProcessOutput(result.outputs[0]), false);
+  assert.equal(await (await downloadOgcProcessOutput(result.outputs[0], signal)).text(), "{broken");
+  assert.equal(calls.filter((call) => call.init?.method === "POST").length, 1);
 });
 
 test("polling keeps an advertised results route unless a later status explicitly replaces it", async () => {

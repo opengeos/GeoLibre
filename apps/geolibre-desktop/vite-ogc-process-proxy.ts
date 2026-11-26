@@ -169,7 +169,6 @@ export async function proxyOgcProcessRequest(
       res.flushHeaders();
     }
     let data: Buffer;
-    let bodyReadFailed = false;
     try {
       data = await readBodyWithLimit(
         upstream.response,
@@ -183,20 +182,15 @@ export async function proxyOgcProcessRequest(
         res.destroy();
         return;
       }
-      if (upstream.response.ok)
-        throw new ProcessProxyError(
-          502,
-          error instanceof ProxyBodyLimitError
-            ? "OGC process response exceeds its download limit."
-            : "OGC process response could not be read completely.",
-        );
-      if (signal.aborted) throw error;
-      data = Buffer.alloc(0);
-      bodyReadFailed = true;
+      throw new ProcessProxyError(
+        502,
+        error instanceof ProxyBodyLimitError
+          ? "OGC process response exceeds its download limit."
+          : "OGC process response could not be read completely.",
+      );
     }
     if (!res.headersSent) {
       forwardHeaders();
-      if (bodyReadFailed) res.setHeader("x-geolibre-process-body-incomplete", "1");
       res.setHeader("content-length", String(data.length));
     }
     res.end(data);

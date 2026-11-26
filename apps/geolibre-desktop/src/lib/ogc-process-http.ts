@@ -117,7 +117,7 @@ export async function processHttp(
       redirect: method === "GET" ? "follow" : "error",
     });
     let body: Uint8Array<ArrayBuffer>;
-    let bodyReadFailed = dev && response.headers.get("x-geolibre-process-body-incomplete") === "1";
+    let bodyReadFailed = false;
     try {
       body = await readLimitedBody(
         response,

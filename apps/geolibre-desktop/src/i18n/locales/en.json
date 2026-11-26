@@ -9277,7 +9277,12 @@
       "resume": "Resume monitoring",
       "dismiss": "Dismiss job",
       "results": "Results",
-      "outputBytes": "{{count}} bytes",
+      "outputBytes_one": "{{count}} byte",
+      "outputBytes_other": "{{count}} bytes",
+      "outputWarnings": {
+        "invalidReference": "The service completed this execution but returned an unusable output link. Download this entry as metadata; other outputs remain available.",
+        "invalidDocument": "The service completed this execution but returned an unreadable result document. Download the original response. Retrying the process starts a new execution."
+      },
       "layerName": "OGC: {{id}}",
       "download": "Download",
       "addToMap": "Add to map",
