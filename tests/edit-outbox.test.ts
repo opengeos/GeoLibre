@@ -553,6 +553,16 @@ describe("conflict decisions", () => {
       new Map([[conflicted.ops[0].id, "mine" as const]]),
     );
     server.rows.set("1", point(1, 88)); // changed again after the review
+    // A newer stored conflict must not stand in for what the user was shown.
+    const viaNewerSnapshot = applyConflictResolutions(
+      { ...conflicted, conflicts: [{ ...conflicted.conflicts[0], theirsFingerprint: "newer" }] },
+      new Map([[conflicted.ops[0].id, "mine" as const]]),
+      new Map([[conflicted.ops[0].id, conflicted.conflicts[0].theirsFingerprint]]),
+    );
+    assert.equal(
+      viaNewerSnapshot.ops[0].reviewedFingerprint,
+      conflicted.conflicts[0].theirsFingerprint,
+    );
     const outcome = await syncOutboxEntry(resolved, server);
     assert.equal(outcome.kind, "conflict");
     assert.equal((server.rows.get("1")!.geometry as { coordinates: number[] }).coordinates[0], 88);

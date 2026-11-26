@@ -217,6 +217,27 @@ def test_connect_refusal_by_the_server_stays_a_client_error(monkeypatch) -> None
 
 
 @requires_psycopg
+def test_write_still_refuses_an_empty_direct_save() -> None:
+    request = PostgisWriteRequest(
+        connection="postgresql://localhost/ignored",
+        table=TABLE,
+        geojson=_collection([]),
+        baseline_keys=[1, 2],
+    )
+    with pytest.raises(HTTPException) as exc:
+        postgis_write(request)
+    assert exc.value.status_code == 400
+
+
+def test_server_not_ready_is_retryable() -> None:
+    from geolibre_server.app.postgis import _is_transport_failure
+
+    assert _is_transport_failure("FATAL:  the database system is starting up")
+    assert _is_transport_failure("FATAL:  sorry, too many clients already")
+    assert not _is_transport_failure('FATAL:  password authentication failed for user "a"')
+
+
+@requires_psycopg
 def test_write_allows_a_delete_only_change_set(monkeypatch) -> None:
     import geolibre_server.app.postgis as postgis_module
 
@@ -233,6 +254,7 @@ def test_write_allows_a_delete_only_change_set(monkeypatch) -> None:
         table=TABLE,
         geojson=_collection([]),
         baseline_keys=[1, 2],
+        expected_row_hashes={"1": "a", "2": "b"},
     )
     with pytest.raises(HTTPException) as exc:
         postgis_write(request)

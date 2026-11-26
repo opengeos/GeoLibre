@@ -338,9 +338,10 @@ describe("PostGIS sync adapter", () => {
       geometry: { type: "Point", coordinates: [9, 9] },
       properties: { name: "drawn" },
     } as Feature;
+    // Either order: the drawn feature comes first here.
     const ops = buildPostgisChangeSet(layer, {
       type: "FeatureCollection",
-      features: [row(5, 5, "five"), drawn],
+      features: [{ ...drawn, properties: { name: "drawn" } }, row(5, 5, "five")],
     })!;
     assert.deepEqual(
       ops.map((op) => [op.kind, op.key]),

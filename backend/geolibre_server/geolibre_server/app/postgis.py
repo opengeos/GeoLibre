@@ -214,6 +214,12 @@ _TRANSPORT_FAILURES = (
     "network is unreachable",
     "server closed the connection unexpectedly",
     "could not connect to server",
+    # A server that answered but cannot take a session right now; retrying
+    # later is the right response (SQLSTATE 57P03 and 53300).
+    "the database system is starting up",
+    "the database system is shutting down",
+    "too many clients",
+    "remaining connection slots are reserved",
 )
 
 
@@ -264,8 +270,8 @@ def _connect(connection: str) -> Any:
         # Report a server that never answered (no route, refused, timed out)
         # as 503 so clients can tell "unreachable, retry later" from a rejected
         # login or an unknown database (400). libpq gives connect failures no
-        # SQLSTATE, so match the transport failures libpq itself reports; a
-        # server's own refusal (whose wording it may localize) never matches.
+        # SQLSTATE, so match the transport failures libpq itself reports, plus
+        # a server's (English) "not now" answers. A login refusal never matches.
         unreachable = isinstance(exc, psycopg.OperationalError) and _is_transport_failure(str(exc))
         raise HTTPException(
             status_code=503 if unreachable else 400,
@@ -610,12 +616,16 @@ def postgis_write(request: PostgisWriteRequest) -> dict[str, Any]:
     sql = psycopg.sql
 
     submitted = request.geojson.get("features") if request.geojson else None
-    # A delete-only change set (the offline edit outbox sends just the changed
-    # features) is a valid save: with a non-empty baseline the diff deletes
-    # exactly those rows. Without one, an empty payload stays an error.
+    # A delete-only change set from the offline edit outbox (it sends just the
+    # changed features, with row hashes for every row it deletes) is a valid
+    # save: the diff deletes exactly those rows. Any other empty payload stays
+    # an error, so the direct save still refuses to empty a table.
     features = (
         []
-        if request.baseline_keys and isinstance(submitted, list) and not submitted
+        if request.baseline_keys
+        and request.expected_row_hashes
+        and isinstance(submitted, list)
+        and not submitted
         else require_features(request.geojson)
     )
 

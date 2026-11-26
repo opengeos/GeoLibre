@@ -200,20 +200,27 @@ export async function enqueueChangeSet(
  * @param id The entry id.
  * @param decisions Conflict decisions (op id to choice) to record first, on
  *   the stored entry under the lock, so they apply to what is stored now.
+ * @param reviewed The fingerprint of the server version shown for each
+ *   decided conflict, so a keep mine is bound to what the user actually saw.
  * @returns The attempt's outcome.
  */
 export function syncOutboxEntryNow(
   id: string,
   decisions?: ReadonlyMap<string, ConflictResolution>,
+  reviewed?: ReadonlyMap<string, string | null | undefined>,
 ): Promise<SyncOutcome | null> {
   const running = inFlight.get(id);
+  // Decisions must not ride on an attempt that started without them.
+  if (running && decisions?.size) {
+    return running.then(() => syncOutboxEntryNow(id, decisions, reviewed));
+  }
   if (running) return running;
   const attempt = withEntryLock(id, async (): Promise<SyncOutcome | null> => {
     // Under the lock, act on the stored entry: another tab may have synced or
     // discarded it since this tab last read the outbox.
     const stored = await reloadOutboxEntry(id);
     if (!stored) return null;
-    const entry = decisions?.size ? applyConflictResolutions(stored, decisions) : stored;
+    const entry = decisions?.size ? applyConflictResolutions(stored, decisions, reviewed) : stored;
     const handler = handlers.get(entry.backend);
     if (!handler) return null;
     await putOutboxEntry({ ...entry, status: "syncing" });

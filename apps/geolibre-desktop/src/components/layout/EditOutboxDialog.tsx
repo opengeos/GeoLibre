@@ -56,7 +56,9 @@ export function EditOutboxDialog({
     try {
       // Decisions are recorded on the stored entry under its lock, not on this
       // dialog's copy, which another tab may have changed meanwhile.
-      const outcome = await syncOutboxEntryNow(entry.id, decisions);
+      // Bind each keep mine to the server version this dialog showed.
+      const reviewed = new Map(entry.conflicts.map((c) => [c.opId, c.theirsFingerprint]));
+      const outcome = await syncOutboxEntryNow(entry.id, decisions, reviewed);
       const result = describeSyncOutcome(outcome, entry.targetLabel, t);
       notify[result.status](result.message);
     } finally {

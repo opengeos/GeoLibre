@@ -195,12 +195,18 @@ export function buildPostgisChangeSet(
   // A feature whose key column an editor dropped entirely (not set to null)
   // still names its row through its feature id, when that id is a loaded key.
   const byColumn = postgisKeyOf(primaryKey);
+  // Keys some feature names through its key column; a feature id never claims
+  // one of those, whatever the feature order, so a drawn feature whose editor
+  // id happens to equal a row's key cannot take that row over.
+  const columnKeys = new Set(
+    geojson.features.map(byColumn).filter((key): key is string => key !== null),
+  );
   const keyOf = (feature: Feature): string | null => {
     const key = byColumn(feature);
     if (key !== null) return key;
     if (feature.properties && primaryKey in feature.properties) return null;
     const id = featureIdKey(feature);
-    return id !== null && baseline.has(id) ? id : null;
+    return id !== null && baseline.has(id) && !columnKeys.has(id) ? id : null;
   };
   return buildChangeSet({
     baseline,

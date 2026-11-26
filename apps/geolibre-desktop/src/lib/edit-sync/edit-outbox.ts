@@ -654,13 +654,18 @@ function failHard(
  *
  * @param entry The entry under review.
  * @param decisions Op id to decision; ops not listed keep their state.
+ * @param reviewed Op id to the fingerprint of the server version the user
+ *   was shown (null when deleted). Defaults to the entry's own conflicts; a
+ *   caller whose view may be older than the entry passes what it showed.
  * @returns The updated entry (not persisted).
  */
 export function applyConflictResolutions(
   entry: OutboxEntry,
   decisions: ReadonlyMap<string, ConflictResolution>,
+  reviewedOverride?: ReadonlyMap<string, string | null | undefined>,
 ): OutboxEntry {
-  const reviewed = new Map(entry.conflicts.map((c) => [c.opId, c.theirsFingerprint]));
+  const reviewed =
+    reviewedOverride ?? new Map(entry.conflicts.map((c) => [c.opId, c.theirsFingerprint]));
   return {
     ...entry,
     ops: entry.ops.map((op) => {
