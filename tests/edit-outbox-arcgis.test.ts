@@ -223,6 +223,17 @@ describe("ArcGIS outbox target", () => {
     );
   });
 
+  it("gives a copied feature its own id and no object ID", () => {
+    const original = row(1, 1, "ok");
+    const out = withLocalFeatureIds(
+      { type: "FeatureCollection", features: [original, { ...original }] },
+      "OBJECTID",
+    );
+    assert.equal(out.features[0], original);
+    assert.match(String(out.features[1].id), /^arcgis-new-/);
+    assert.equal(out.features[1].properties!.OBJECTID, undefined);
+  });
+
   it("gives only new features a stable local id", () => {
     const fc: FeatureCollection = {
       type: "FeatureCollection",

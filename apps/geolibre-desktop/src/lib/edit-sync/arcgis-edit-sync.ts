@@ -83,7 +83,8 @@ export function arcgisOutboxTarget(layer: GeoLibreLayer): ArcGISOutboxTarget | n
   const field = info?.objectIdField;
   const layerUrl = layerUrlOf(layer);
   const baseline = baselineOf(layer);
-  if (!field || !layerUrl || !baseline) return null;
+  // Without the field list every attribute would be ignored as non-editable.
+  if (!field || !layerUrl || !baseline || !info.fields?.length) return null;
   let maxObjectId = -1;
   for (const feature of baseline.features) {
     const id = feature.properties?.[field];
@@ -215,10 +216,21 @@ export function withLocalFeatureIds(
   field: string,
 ): FeatureCollection {
   let changed = false;
+  const seenIds = new Set<string | number>();
+  const seenOids = new Set<unknown>();
   const features = collection.features.map((feature) => {
-    if (feature.id !== undefined || feature.properties?.[field] != null) return feature;
+    const oid = feature.properties?.[field];
+    // A copy keeps its source's id (and maybe object ID): only the first
+    // occurrence keeps them, so an assigned object ID lands on the copy alone.
+    const duplicate =
+      (feature.id !== undefined && seenIds.has(feature.id)) || (oid != null && seenOids.has(oid));
+    if (feature.id !== undefined) seenIds.add(feature.id);
+    if (oid != null) seenOids.add(oid);
+    if (!duplicate && (feature.id !== undefined || oid != null)) return feature;
     changed = true;
-    return { ...feature, id: `arcgis-new-${crypto.randomUUID()}` };
+    const properties = { ...(feature.properties ?? {}) };
+    if (duplicate) delete properties[field];
+    return { ...feature, properties, id: `arcgis-new-${crypto.randomUUID()}` };
   });
   return changed ? { ...collection, features } : collection;
 }
@@ -517,7 +529,14 @@ export async function reconcileArcGISLayerAfterSync(
   let freshByKey: Map<string | null, Feature> | null = new Map();
   if (refreshKeys.size) {
     try {
-      const fresh = await deps.session.query({ objectIds: [...refreshKeys].join(",") });
+      // Chunked like fetchRemote, so a long session never needs one huge URL.
+      const keys = [...refreshKeys];
+      const fresh: Feature[] = [];
+      for (let i = 0; i < keys.length; i += QUERY_CHUNK) {
+        fresh.push(
+          ...(await deps.session.query({ objectIds: keys.slice(i, i + QUERY_CHUNK).join(",") })),
+        );
+      }
       freshByKey = new Map(fresh.map((f) => [keyOf(f), f]));
     } catch {
       freshByKey = null;

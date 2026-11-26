@@ -211,16 +211,26 @@ export function createGeoLensSyncAdapter(
             target.featureLimit + RECOVERY_EXTRA_FEATURES,
             fetchImpl,
           );
-          const candidates = new Map<string, string>();
+          const candidates = new Map<string, Feature>();
           for (const feature of all.features) {
             const gid = featureGid(feature);
-            if (gid !== null && gid > target.maxGid) {
-              candidates.set(String(gid), geolensFingerprint(feature));
-            }
+            if (gid !== null && gid > target.maxGid) candidates.set(String(gid), feature);
           }
           for (const op of maybeApplied) {
-            for (const [key, fingerprint] of candidates) {
-              if (fingerprint !== op.mineFingerprint) continue;
+            // Compare only what the insert set: the server may fill other columns.
+            const sent = new Set(
+              Object.entries(op.feature?.properties ?? {})
+                .filter(([, value]) => value !== null && value !== undefined)
+                .map(([name]) => name),
+            );
+            for (const [key, feature] of candidates) {
+              const narrowed = {
+                ...feature,
+                properties: Object.fromEntries(
+                  Object.entries(feature.properties ?? {}).filter(([name]) => sent.has(name)),
+                ),
+              };
+              if (geolensFingerprint(narrowed) !== op.mineFingerprint) continue;
               insertMatches.set(op.id, key);
               candidates.delete(key);
               break;
