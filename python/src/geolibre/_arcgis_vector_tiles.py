@@ -283,6 +283,10 @@ def build_arcgis_vector_tile_style(
             if "token=" in unquote(tile).lower():
                 raise ValueError("ArcGIS vector tile sources must not carry a token")
             parts = urlsplit(tile)
+            # A placeholder in the host would let the viewer reach a host
+            # other than the one checked when the project was authored.
+            if "{" in parts.netloc or "}" in parts.netloc:
+                raise ValueError("ArcGIS vector tile source hosts must not contain placeholders")
             if parts.username is not None or parts.password is not None:
                 raise ValueError("ArcGIS vector tile sources must not embed credentials")
         if not all(all(f"{{{part}}}" in tile for part in "zxy") for tile in tiles):

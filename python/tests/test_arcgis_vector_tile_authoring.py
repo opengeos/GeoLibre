@@ -542,6 +542,8 @@ def _damage(info, style, damage):
         layer["source"] = ["Santa_Monica_parcels_VTL"]
     elif damage == "userinfo_tiles":
         source["tiles"] = ["https://user:pw@example.org/t/{z}/{y}/{x}.pbf"]
+    elif damage == "host_placeholder":
+        source["tiles"] = ["http://12{x}.0.0.1/{z}/{y}/{x}.pbf"]
     elif damage == "encoded_token_tiles":
         source["tiles"] = ["https://example.org/t/{z}/{y}/{x}.pbf?%74oken=abc"]
 
@@ -567,6 +569,7 @@ def _damage(info, style, damage):
         "list_source",
         "userinfo_tiles",
         "encoded_token_tiles",
+        "host_placeholder",
     ],
 )
 def test_styles_the_app_cannot_draw_never_reach_the_map(vts, monkeypatch, damage):
