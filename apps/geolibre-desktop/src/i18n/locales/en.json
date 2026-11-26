@@ -6853,6 +6853,7 @@
       "layerNotFetchable": "Layer \"{{layer}}\" is not fetchable for {{label}}.",
       "layerMissingPath": "Layer \"{{layer}}\" has no filesystem path for {{label}}.",
       "importOutputFailed": "Could not import Whitebox output.",
+      "backgroundImportFailed": "Could not import the output of {{tool}}: {{message}}",
       "showingSnapshotOnly": "Showing GitHub catalog only.",
       "sidecarStopped": "GeoLibre sidecar is stopped.",
       "liveCatalogEmpty": "Live catalog is empty. Showing GitHub catalog only.",

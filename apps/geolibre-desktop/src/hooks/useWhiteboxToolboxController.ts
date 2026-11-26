@@ -239,6 +239,12 @@ export function useWhiteboxToolboxController({
   // browser, where there is no sidecar; off under Tauri, where the sidecar is
   // available and can read native file paths that the WASM runner cannot fetch.
   const [runLocal, setRunLocal] = useState(!desktopServer);
+  // The current mode for async work that must not act on a stale click-time
+  // value (a server stop that resolves after a switch to WASM).
+  const runLocalRef = useRef(runLocal);
+  useEffect(() => {
+    runLocalRef.current = runLocal;
+  }, [runLocal]);
   const [error, setError] = useState<string | null>(null);
   const [startingServer, setStartingServer] = useState(false);
   const [stoppingServer, setStoppingServer] = useState(false);
@@ -721,6 +727,18 @@ export function useWhiteboxToolboxController({
   // away a long computation. Switching back to its tool shows a fresh form,
   // not the detached job; its result arrives as layers and a History entry.
   const backgroundJobsRef = useRef<Map<string, () => void>>(new Map());
+  // Job ids whose outputs a background settle imported, so a job that is
+  // shown again afterwards is not imported a second time. Only sidecar job
+  // ids (unique per sidecar) land here.
+  const backgroundImportedJobIdsRef = useRef<Set<string>>(new Set());
+  // The display label of a tool, read when a background job settles.
+  const toolLabelRef = useRef<(toolId: string) => string>(humanize);
+  useEffect(() => {
+    toolLabelRef.current = (toolId) => {
+      const tool = tools.find((item) => item.id === toolId);
+      return tool ? toolLabel(t, tool) : humanize(toolId);
+    };
+  }, [t, tools]);
   // Set once `importJobOutputs` is defined below; read when a job settles.
   const importJobOutputsRef = useRef<((job: WhiteboxJob) => Promise<void>) | null>(null);
 
@@ -728,18 +746,32 @@ export function useWhiteboxToolboxController({
     (detached: WhiteboxJob) => {
       if (!isJobRunning(detached) || backgroundJobsRef.current.has(detached.id)) return;
       const id = detached.id;
+      // Held by the job itself, so the per-job maps' size cap cannot evict
+      // what a long-running detached job still needs when it settles.
+      const tracker = historyTrackersRef.current.get(id);
+      const generation = jobGenerationByJobRef.current.get(id);
       let stopped = false;
       let timer: number | undefined;
       let failures = 0;
       const settle = (final: WhiteboxJob) => {
         backgroundJobsRef.current.delete(id);
-        historyTrackersRef.current
-          .get(id)
-          ?.finish(final.status === "succeeded" ? "success" : "error", final.error ?? undefined);
-        if (final.status !== "succeeded") return;
+        tracker?.finish(
+          final.status === "succeeded" ? "success" : "error",
+          final.error ?? undefined,
+        );
+        if (final.status !== "succeeded" || backgroundImportedJobIdsRef.current.has(id)) return;
+        backgroundImportedJobIdsRef.current.add(id);
+        if (generation !== undefined) jobGenerationByJobRef.current.set(id, generation);
+        if (tracker) historyTrackersRef.current.set(id, tracker);
         void importJobOutputsRef.current?.(final).catch((err) => {
+          // Named after the detached job's tool, since the form now shows
+          // another one.
           setError(
-            err instanceof Error ? err.message : t("processing.whitebox.importOutputFailed"),
+            t("processing.whitebox.backgroundImportFailed", {
+              tool: toolLabelRef.current(final.tool_id),
+              message:
+                err instanceof Error ? err.message : t("processing.whitebox.importOutputFailed"),
+            }),
           );
         });
       };
@@ -1144,9 +1176,17 @@ export function useWhiteboxToolboxController({
         runParametersByJobRef.current.delete(nextJob.id);
         for (const [name, value] of entries) {
           const path = isFeatureCollection(value) ? "" : (outputPath(value) ?? "");
-          const data = isFeatureCollection(value)
-            ? value
-            : await services.fetchWhiteboxJsonOutput(path);
+          let data: unknown;
+          try {
+            data = isFeatureCollection(value)
+              ? value
+              : await services.fetchWhiteboxJsonOutput(path);
+          } catch (err) {
+            // A fetch that fails after another project opened is not that
+            // project's error.
+            if (superseded()) return;
+            throw err;
+          }
           if (superseded()) return;
           if (!isFeatureCollection(data)) continue;
           const layerName = uniqueLayerName(
@@ -1223,6 +1263,8 @@ export function useWhiteboxToolboxController({
     async (nextJob: WhiteboxJob) => {
       if (importedJobIdRef.current === nextJob.id) return;
       importedJobIdRef.current = nextJob.id;
+      // Already imported when it settled in the background.
+      if (backgroundImportedJobIdsRef.current.has(nextJob.id)) return;
       await importJobOutputs(nextJob);
     },
     [importJobOutputs],
@@ -1411,15 +1453,19 @@ export function useWhiteboxToolboxController({
     setError(null);
     try {
       await services.stopGeoLibreSidecar();
-      setRuntimeAvailable(false);
-      setRuntimeMessage(
-        `${t("processing.whitebox.sidecarStopped")} ${t("processing.whitebox.showingSnapshotOnly")}`,
-      );
       detachJob();
       setJob(null);
-      // The live catalog came from the server just stopped; replace it with
-      // the snapshot the message names. Local (WASM) mode keeps its catalog.
-      if (!runLocal) await loadStoppedSidecarCatalog();
+      // Read the mode now, not at click time: the user may have switched to
+      // WASM while the stop was pending, and that mode's catalog and status
+      // must stay as they are. In sidecar mode the live catalog came from the
+      // server just stopped, so replace it with the snapshot the message names.
+      if (!runLocalRef.current) {
+        setRuntimeAvailable(false);
+        setRuntimeMessage(
+          `${t("processing.whitebox.sidecarStopped")} ${t("processing.whitebox.showingSnapshotOnly")}`,
+        );
+        await loadStoppedSidecarCatalog();
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : t("processing.whitebox.errorStopSidecar"));
     } finally {

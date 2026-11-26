@@ -214,7 +214,9 @@ export async function addLidarLayerFromBytes(
     if (signal?.aborted) {
       // The control listed the cloud as a layer of whatever project is open
       // now; take it back out (the store sync unloads it from the control).
+      // A cloud the store never listed is unloaded from the control directly.
       if (store.layers.some((layer) => layer.id === info.id)) store.removeLayer(info.id);
+      else if (hasLidarPointCloud(info.id)) lidarLayerAdapter?.removeLayer(info.id);
       signal.throwIfAborted();
     }
     if (!store.layers.some((layer) => layer.id === info.id)) {

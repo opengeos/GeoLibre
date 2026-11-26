@@ -772,3 +772,55 @@ for (const kind of ["raster", "lidar"] as const) {
     assert.equal(run.hook.result.current.error, null);
   });
 }
+
+it("leaves the WASM catalog alone when a server stop resolves after a switch to WASM", async () => {
+  const stop = deferred<void>();
+  const stub = services({ stopGeoLibreSidecar: () => stop.promise });
+  const hook = controller(stub);
+  await loaded(hook);
+  act(() => hook.result.current.handleRunLocalChange(false));
+  await waitFor(() => assert.equal(hook.result.current.runtimeAvailable, true));
+  let stopping: Promise<void> = Promise.resolve();
+  act(() => {
+    stopping = hook.result.current.stopServer();
+  });
+  act(() => hook.result.current.handleRunLocalChange(true));
+  await waitFor(() =>
+    assert.ok(hook.result.current.tools.some((tool) => tool.id === GEOLIBRE_TOOL.id)),
+  );
+  await act(async () => {
+    stop.resolve();
+    await stopping;
+  });
+  const model = hook.result.current;
+  assert.equal(model.runtimeMessage, "Running locally with WebAssembly. No sidecar required.");
+  assert.ok(model.tools.some((tool) => tool.id === GEOLIBRE_TOOL.id));
+  assert.equal(model.loadingTools, false);
+});
+
+it("names the detached job's tool when its background import fails", async () => {
+  const stub = services({
+    fetchWhiteboxJsonOutput: async () => {
+      throw new Error("Output unreadable");
+    },
+  });
+  const hook = controller(stub);
+  await loaded(hook);
+  act(() => hook.result.current.handleRunLocalChange(false));
+  await waitFor(() => assert.equal(hook.result.current.runtimeAvailable, true));
+  act(() => hook.result.current.setSelectedToolId(SLOPE.id));
+  await waitFor(() => assert.equal(hook.result.current.selectedToolId, SLOPE.id));
+  act(() => hook.result.current.updateValue("dem", "/data/dem.tif"));
+  stub.value.fetchWhiteboxJob = async (id) =>
+    job({ id, tool_id: SLOPE.id, outputs: { output: { path: "/out/slope.geojson" } } });
+  await act(() => hook.result.current.runSelectedTool());
+  act(() => hook.result.current.setSelectedToolId(CENTROID.id));
+  await waitFor(
+    () =>
+      assert.equal(
+        hook.result.current.error,
+        "Could not import the output of Slope: Output unreadable",
+      ),
+    { timeout: 3000 },
+  );
+});
