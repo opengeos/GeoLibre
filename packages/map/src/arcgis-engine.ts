@@ -230,8 +230,9 @@ function isAbortError(error: { name?: string; message?: string } | null | undefi
 // ArcgisEngineTerrain <- ArcgisEngineCamera (view, navigation, fits) <-
 // ArcgisEngineIdentify (identify and highlight) <- ArcgisEngineLayers (layer
 // sync) <- ArcgisEngineBasemap (basemap and story opacity) <- ArcgisEngine
-// (construction, built-in controls, events, capture and teardown). A member
-// another layer reads is `protected`; everything else stays `private`.
+// (construction, built-in controls, events, capture and teardown). A formerly
+// private member another layer reads is `protected`; the rest keep their
+// visibility.
 /**
  * The ArcGIS Maps SDK for JavaScript behind the shared {@link MapEngine}
  * surface. Construction (loading the SDK from the CDN, building the `Map` and
