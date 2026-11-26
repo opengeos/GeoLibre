@@ -40,7 +40,7 @@ describe("identify-all labels", () => {
     assert.equal(labels.title(3), t("map.identifyAll.title", { count: 3 }));
     assert.equal(labels.pixelBand(2), t("map.identifyAll.pixelBand", { index: 2 }));
     assert.equal(labels.featureFallback(7), t("map.identifyAll.featureFallback", { index: 7 }));
-    assert.notEqual(labels.resultCount(1), "map.identifyAll.resultCount");
+    assert.equal(labels.resultCount(1), t("map.identifyAll.resultCount", { count: 1 }));
   });
 
   it("keeps the same object across renders until the translator changes", () => {
