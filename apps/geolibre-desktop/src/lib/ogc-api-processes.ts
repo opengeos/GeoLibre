@@ -1,7 +1,12 @@
 import { OgcProcessError } from "./ogc-process-errors";
 import { processHttp, processHttpUrl, type ProcessHttpResponse } from "./ogc-process-http";
-import { ogcProcessMonitorLinks } from "./ogc-process-link-header";
-import { MAX_PROCESS_INPUT_BYTES, MAX_PROCESS_RESULT_BYTES } from "./ogc-process-limits";
+import { ogcProcessMonitorLinks, ogcProcessHeaderLinks } from "./ogc-process-link-header";
+import {
+  MAX_PROCESS_INPUT_BYTES,
+  MAX_PROCESS_RESULT_BYTES,
+  MAX_PROCESS_INPUT_DEPTH,
+  processInputDepthAllowed,
+} from "./ogc-process-limits";
 
 type JsonObject = Record<string, unknown>;
 interface ProcessLink {
@@ -376,7 +381,34 @@ function outputs(
   outputIds?: readonly string[],
   definitions?: OgcProcess["outputs"],
 ): OgcProcessOutput[] {
-  if (!response.body.length) return [];
+  if (!response.body.length)
+    return ogcProcessHeaderLinks(response.link)
+      .filter(
+        (link) =>
+          !link.relations.some((relation) =>
+            [
+              "monitor",
+              "self",
+              "status",
+              "process",
+              "results",
+              REL + "process",
+              REL + "results",
+            ].includes(relation.toLowerCase()),
+          ),
+      )
+      .map((link, index) => {
+        const id = link.title ?? `result-${index + 1}`;
+        const href = optionalLink(link.href, response.url);
+        return href
+          ? { id, href, ...(link.mediaType ? { mediaType: link.mediaType } : {}) }
+          : {
+              id,
+              value: { href: link.href },
+              mediaType: "application/json",
+              warning: "invalidReference" as const,
+            };
+      });
   if (!/json/i.test(response.contentType ?? ""))
     return [
       {
@@ -468,7 +500,10 @@ export async function executeOgcProcess(
   asynchronous = false,
 ): Promise<OgcProcessExecution> {
   object(inputs);
-  const body = JSON.stringify({ inputs, response: "document" });
+  const document = { inputs, response: "document" };
+  if (!processInputDepthAllowed(document))
+    throw new OgcProcessError("inputDepth", { depth: MAX_PROCESS_INPUT_DEPTH });
+  const body = JSON.stringify(document);
   if (new TextEncoder().encode(body).length > MAX_PROCESS_INPUT_BYTES)
     throw new OgcProcessError("inputLimit");
   const endpoint = ogcProcessExecutionUrl(process);

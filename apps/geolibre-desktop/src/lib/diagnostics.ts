@@ -224,7 +224,7 @@ function createSnapshot(nextRecords: DiagnosticRecord[]): DiagnosticsSnapshot {
 
 function emitChange(): void {
   snapshot = createSnapshot(records);
-  for (const listener of listeners) {
+  for (const listener of [...listeners]) {
     try {
       listener();
     } catch {

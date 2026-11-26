@@ -1021,6 +1021,113 @@ test("resumed jobs keep the selected process locked when its advertised descript
   assert.equal(screen.getByRole("button", { name: "Run process" }).hasAttribute("disabled"), true);
 });
 
+test("job status follows the URL being displayed without losing its retained identity", async () => {
+  serve(
+    async () =>
+      new Response(JSON.stringify({ jobID: "one", status: "running" }), {
+        status: 201,
+        headers: { Location: "/master/jobs/one", "Content-Type": "application/json" },
+      }),
+  );
+  await form();
+  fireEvent.click(screen.getByRole("button", { name: "Run process" }));
+  await waitFor(() => assert.ok(screen.queryByText("Running")));
+  fireEvent.click(screen.getByRole("button", { name: "Stop waiting" }));
+  const original = (screen.getByLabelText("Job status URL") as HTMLInputElement).value;
+  fireEvent.change(screen.getByLabelText("Job status URL"), {
+    target: { value: "https://example.org/jobs/other" },
+  });
+  assert.equal(screen.queryByText("Running"), null);
+  fireEvent.change(screen.getByLabelText("Job status URL"), { target: { value: original } });
+  assert.ok(screen.queryByText("Running"));
+  assert.equal(screen.getByRole("button", { name: "Run process" }).hasAttribute("disabled"), true);
+});
+
+test("a pending process description restores a dismissal acknowledged after selection began", async () => {
+  const first = description();
+  const second = JSON.parse(JSON.stringify(first).replaceAll("hello-world", "second"));
+  globalThis.fetch = async (input, init) => {
+    const path = new URL(String(input)).pathname;
+    if (init?.method === "POST")
+      return new Response(JSON.stringify({ jobID: "one", status: "running" }), {
+        status: 201,
+        headers: { Location: "/master/jobs/one", "Content-Type": "application/json" },
+      });
+    return new Response(
+      JSON.stringify(
+        path.endsWith("/hello-world")
+          ? first
+          : path.endsWith("/second")
+            ? second
+            : { processes: [first, second] },
+      ),
+      { headers: { "Content-Type": "application/json" } },
+    );
+  };
+  await form();
+  fireEvent.click(screen.getByRole("button", { name: "Run process" }));
+  await waitFor(() => assert.ok(screen.queryByText("Running")));
+  fireEvent.click(screen.getByRole("button", { name: "Stop waiting" }));
+  const prior = Object.getOwnPropertyDescriptor(window, "__TAURI_INTERNALS__");
+  const pending: {
+    dismiss?: (value: unknown) => void;
+    description?: (value: unknown) => void;
+    url?: string;
+  } = {};
+  const native = (url: string, body: unknown, status = 200) => ({
+    status,
+    final_url: url,
+    content_type: "application/json",
+    location: null,
+    retry_after: null,
+    link: null,
+    body_base64: body === undefined ? "" : btoa(JSON.stringify(body)),
+  });
+  Object.defineProperty(window, "__TAURI_INTERNALS__", {
+    configurable: true,
+    value: {
+      invoke: async (_command: string, args: { url: string; method: string }) => {
+        if (args.method === "DELETE")
+          return new Promise((resolve) => {
+            pending.dismiss = resolve;
+          });
+        if (new URL(args.url).pathname.endsWith("/second")) return native(args.url, second);
+        pending.url = args.url;
+        return new Promise((resolve) => {
+          pending.description = resolve;
+        });
+      },
+    },
+  });
+  try {
+    fireEvent.click(screen.getByRole("button", { name: "Dismiss job" }));
+    await waitFor(() => assert.ok(pending.dismiss));
+    fireEvent.click(screen.getByRole("button", { name: "Stop waiting" }));
+    fireEvent.change(screen.getByLabelText("Process"), { target: { value: "second" } });
+    await waitFor(() =>
+      assert.equal((screen.getByLabelText("Job status URL") as HTMLInputElement).value, ""),
+    );
+    await waitFor(() => assert.ok(screen.queryByLabelText("Name *")));
+    fireEvent.change(screen.getByLabelText("Process"), { target: { value: "hello-world" } });
+    await waitFor(() => assert.ok(pending.description));
+    await act(async () => {
+      pending.dismiss?.(native("https://demo.pygeoapi.io/master/jobs/one", undefined, 204));
+    });
+    await act(async () => {
+      pending.description?.(native(pending.url!, first));
+    });
+    await waitFor(() => assert.ok(screen.queryByText("Dismissed")));
+    assert.equal(screen.queryByText("Running"), null);
+    assert.equal(
+      screen.getByRole("button", { name: "Run process" }).hasAttribute("disabled"),
+      false,
+    );
+  } finally {
+    if (prior) Object.defineProperty(window, "__TAURI_INTERNALS__", prior);
+    else Reflect.deleteProperty(window, "__TAURI_INTERNALS__");
+  }
+});
+
 test("paused jobs lock their own processes and remain resumable after switching", async () => {
   const first = description();
   const second = JSON.parse(JSON.stringify(first).replaceAll("hello-world", "second"));

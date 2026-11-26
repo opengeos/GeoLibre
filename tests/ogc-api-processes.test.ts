@@ -868,6 +868,116 @@ test("monitoring resolves context when processID first appears in a later status
   }
 });
 
+test("a replacement advertised process description recovers after the first reference fails", async () => {
+  let reads = 0;
+  const descriptions: string[] = [];
+  serve((url) => {
+    const path = new URL(url).pathname;
+    if (path.endsWith("/results")) return { echo: { value: btoa("decoded") } };
+    if (path.includes("/processes/")) {
+      descriptions.push(path);
+      if (path.endsWith("/missing")) return new Response(null, { status: 404 });
+      const doc = description();
+      doc.outputs = {
+        echo: {
+          schema: {
+            type: "string",
+            contentEncoding: "base64",
+            contentMediaType: "application/octet-stream",
+          },
+        },
+      };
+      return doc;
+    }
+    const first = reads++ === 0;
+    return {
+      status: first ? "running" : "successful",
+      links: [
+        { rel: "process", href: first ? "/api/processes/missing" : "/api/processes/replacement" },
+      ],
+    };
+  });
+  const signal = new AbortController().signal;
+  const result = await monitorOgcProcessJob("https://example.org/api/jobs/replacement", signal);
+  assert.deepEqual(descriptions, ["/api/processes/missing", "/api/processes/replacement"]);
+  assert.equal(result[0].encoding, "base64");
+  assert.equal(await (await downloadOgcProcessOutput(result[0], signal)).text(), "decoded");
+});
+
+test("header-only raw result references remain downloadable without selecting navigation links", async () => {
+  serve((url) => {
+    if (url.includes("/results"))
+      return new Response(null, {
+        status: 204,
+        headers: {
+          Link: '<https://files.example/a,b.tif>; rel="output"; type="image/tiff"; title="DEM", </api/map.geojson>; type="application/geo+json"; title="Map", </api/jobs/one>; rel="monitor", </api/jobs/one/results>; rel="self", <mailto:bad@example.org>; rel="output"; title="Bad"',
+        },
+      });
+    if (url.includes(".tif") || url.includes(".geojson")) return new Response("downloaded");
+    return { jobID: "one", status: "successful" };
+  });
+  const signal = new AbortController().signal;
+  const job = await readOgcProcessJob("https://example.org/api/jobs/one", signal);
+  const result = await readOgcProcessResults(job, signal);
+  assert.deepEqual(
+    result.map((output) => output.id),
+    ["DEM", "Map", "Bad"],
+  );
+  assert.equal(result[0].mediaType, "image/tiff");
+  assert.equal(result[1].mediaType, "application/geo+json");
+  assert.equal(await (await downloadOgcProcessOutput(result[0], signal)).text(), "downloaded");
+  assert.equal(result[2].warning, "invalidReference");
+  serve(() => new Response(null, { status: 204 }));
+  assert.deepEqual(await readOgcProcessResults(job, signal), []);
+});
+
+test("duplicate rel parameters cannot redirect monitoring away from the first relation", () => {
+  assert.deepEqual(
+    ogcProcessMonitorLinks(
+      '</jobs/other>; rel=alternate; rel=monitor, </jobs/current>; rel="alternate monitor"',
+    ),
+    ["/jobs/current"],
+  );
+});
+
+test("execution input nesting matches the native parser limit before any dispatch", async () => {
+  const process = await processDescription();
+  let value: unknown = 0;
+  for (let i = 0; i < 125; i++) value = [value];
+  const signal = new AbortController().signal;
+  let calls = serve(() => ({ echo: "ok" }));
+  assert.equal((await executeOgcProcess(process, { payload: value }, signal)).kind, "results");
+  assert.equal(calls.length, 1);
+  calls = serve(() => ({ echo: "must not dispatch" }));
+  await assert.rejects(executeOgcProcess(process, { payload: [value] }, signal), {
+    code: "inputDepth",
+  });
+  await assert.rejects(
+    processHttp("https://example.org/execution", signal, {
+      method: "POST",
+      body: JSON.stringify({ inputs: { payload: [value] } }),
+    }),
+    { code: "inputDepth" },
+  );
+  assert.equal(calls.length, 0);
+});
+
+test("a received response with an interrupted body does not report a CORS failure", async () => {
+  serve(
+    () =>
+      new Response(
+        new ReadableStream({
+          start(controller) {
+            controller.error(new TypeError("terminated"));
+          },
+        }),
+      ),
+  );
+  await assert.rejects(processHttp("https://example.org/result", new AbortController().signal), {
+    code: "responseInterrupted",
+  });
+});
+
 test("an unavailable process description is not repeatedly fetched while monitoring", async () => {
   let reads = 0;
   let descriptions = 0;

@@ -56,6 +56,8 @@ export async function monitorOgcProcessJob(
         throw current.message ? new Error(current.message) : new OgcProcessError("jobFailed");
       await pollDelay(current.retryAfterMs, abort);
       const next = await readOgcProcessJob(current.url, abort);
+      const unresolvedContext =
+        !current.outputDefinitions && !!reference && attemptedContexts.has(reference);
       current = {
         ...next,
         ...(current.resultsUrlAdvertised && !next.resultsUrlAdvertised
@@ -63,8 +65,15 @@ export async function monitorOgcProcessJob(
           : {}),
         outputIds: current.outputIds,
         outputDefinitions: current.outputDefinitions,
-        processUrl: current.processUrl ?? next.processUrl,
-        processId: current.processId ?? next.processId,
+        processUrl:
+          unresolvedContext && next.processId && next.processId !== current.processId
+            ? next.processUrl
+            : unresolvedContext
+              ? (next.processUrl ?? current.processUrl)
+              : (current.processUrl ?? next.processUrl),
+        processId: unresolvedContext
+          ? (next.processId ?? current.processId)
+          : (current.processId ?? next.processId),
       };
     }
   } catch (error) {

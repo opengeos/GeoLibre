@@ -274,7 +274,7 @@ export function OgcProcessesDialog({
                 <p className="text-xs text-muted-foreground">
                   {t("processing.ogcProcesses.jobNotice")}
                 </p>
-                {client.job && (
+                {client.job && sameOgcProcessJob(client.job.url, client.jobUrl) && (
                   <div className="space-y-1" role="status">
                     <p>{t(`processing.ogcProcesses.status.${client.job.status}`)}</p>
                     {client.job.progress !== undefined && (

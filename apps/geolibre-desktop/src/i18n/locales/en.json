@@ -9319,6 +9319,8 @@
         "invalidUrl": "OGC process links must be HTTP(S) URLs without user information.",
         "responseLimit": "Invalid OGC process response limit.",
         "inputLimit": "OGC process inputs exceed 1 MiB.",
+        "inputDepth": "OGC process inputs exceed the {{depth}}-level JSON nesting limit.",
+        "responseInterrupted": "The service response was interrupted before the download completed. Try downloading the result again.",
         "inputObject": "Process inputs must be a JSON object.",
         "inputsJsonSyntax": "Inputs must contain valid JSON.",
         "inputRepresentation": "Keep JSON mode for reference or qualified inputs that the schema fields cannot represent.",

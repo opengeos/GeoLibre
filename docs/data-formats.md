@@ -227,7 +227,8 @@ after switching processes, including when their response arrives after Stop.
 The actual advertised execution endpoint is
 shown before submission, including when it differs from the catalog host.
 Input documents are
-limited to 1 MiB, process descriptions and status documents to 2 MiB, and result
+limited to 1 MiB and 127 nested JSON containers in the execution document,
+matching the native parser limit. Process descriptions and status documents are limited to 2 MiB, and result
 downloads to 128 MiB each. Decoding JSON and rasters requires additional working
 memory. Native result transport uses base64 rather than JSON number arrays.
 Modern hosts decode native results directly into bytes; older hosts use a
@@ -243,6 +244,11 @@ status, and results and aborts pending observation and cancellable requests.
 Already-dispatched native writes remain bounded by the host timeout; their late
 results cannot enter a replacement project. Job history and input
 credentials are not saved in projects.
+
+Resumed jobs can return raw reference results as HTTP 204 with `Link` headers;
+those output references remain available for download, including their media
+types when advertised. Native requests use the host deadline after dispatch,
+while cancelling observation still stops GET requests promptly.
 
 Clearing an optional text input omits it from the request. Use raw JSON input
 editing when an explicit empty string is needed.

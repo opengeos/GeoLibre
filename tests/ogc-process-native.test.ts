@@ -130,6 +130,17 @@ test("a failing diagnostic observer cannot discard an accepted native job", asyn
   const unsubscribeHealthy = subscribeDiagnostics(() => {
     notifications++;
   });
+  let renewals = 0;
+  let unsubscribeRenewing = () => {};
+  const renewing = () => {
+    renewals++;
+    // Bound the fixture so a live-Set regression fails instead of hanging.
+    if (renewals < 3) {
+      unsubscribeRenewing();
+      unsubscribeRenewing = subscribeDiagnostics(renewing);
+    }
+  };
+  unsubscribeRenewing = subscribeDiagnostics(renewing);
   Object.defineProperty(window, "__TAURI_INTERNALS__", {
     configurable: true,
     value: {
@@ -156,10 +167,12 @@ test("a failing diagnostic observer cannot discard an accepted native job", asyn
     assert.equal(response.location, "/jobs/accepted");
     assert.equal(invocations, 1);
     assert.equal(notifications, 1);
+    assert.equal(renewals, 1);
     assert.equal(getDiagnosticsSnapshot().networkCount, 1);
   } finally {
     unsubscribeFailure();
     unsubscribeHealthy();
+    unsubscribeRenewing();
     setCaptureNetworkInfo(previous);
     clearDiagnostics();
   }
@@ -184,8 +197,8 @@ test("native error metadata survives the local deadline while explicit cancellat
           location: null,
           retry_after: null,
           link: null,
-          body_base64: "",
-          body_read_failed: true,
+          body_base64: status === 200 ? "e30=" : "",
+          body_read_failed: status !== 200,
         };
       },
     },
@@ -196,9 +209,9 @@ test("native error metadata survives the local deadline while explicit cancellat
   assert.equal(rejected.bodyReadFailed, true);
   deadline = new AbortController();
   status = 200;
-  await assert.rejects(processHttp("https://example.org/jobs/one", caller.signal), {
-    code: "requestTimeout",
-  });
+  const completed = await processHttp("https://example.org/jobs/one", caller.signal);
+  assert.equal(completed.status, 200);
+  assert.equal(new TextDecoder().decode(completed.body), "{}");
   deadline = new AbortController();
   caller = new AbortController();
   status = 401;

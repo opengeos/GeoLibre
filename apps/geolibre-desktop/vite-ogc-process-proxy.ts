@@ -8,6 +8,8 @@ import {
 } from "./vite-proxy-guard";
 import {
   MAX_PROCESS_INPUT_BYTES,
+  MAX_PROCESS_INPUT_DEPTH,
+  processInputDepthAllowed,
   MAX_PROCESS_METADATA_BYTES,
   MAX_PROCESS_RESULT_BYTES,
   OGC_PROCESS_PROXY_PATH,
@@ -133,6 +135,11 @@ export async function proxyOgcProcessRequest(
       }
       if (!value || typeof value !== "object" || Array.isArray(value))
         throw new ProcessProxyError(400, "OGC process execution requires a JSON object.");
+      if (!processInputDepthAllowed(value))
+        throw new ProcessProxyError(
+          400,
+          `OGC process inputs exceed the ${MAX_PROCESS_INPUT_DEPTH}-level JSON nesting limit.`,
+        );
     } else if (input.length)
       throw new ProcessProxyError(400, "Only execution POST accepts a body.");
     const requestedLimit = req.headers["x-geolibre-max-bytes"];
@@ -177,9 +184,9 @@ export async function proxyOgcProcessRequest(
     } catch (error) {
       await upstream.response.body?.cancel().catch(() => {});
       if (earlyMetadata) {
-        // A broken response stream lets the caller retain already delivered
-        // status/routing while distinguishing failure from valid empty results.
-        res.destroy();
+        // Drain queued headers before closing the socket. Leave the chunked
+        // body incomplete so the caller can distinguish failure from empty success.
+        res.socket?.destroySoon();
         return;
       }
       throw new ProcessProxyError(

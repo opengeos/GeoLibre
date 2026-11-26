@@ -315,6 +315,18 @@ mod tests {
     use super::{request_method, MAX_INPUT_BYTES};
 
     #[test]
+    fn input_depth_matches_the_shared_client_preflight_limit() {
+        for (arrays, allowed) in [(125, true), (126, false)] {
+            let body = format!(
+                "{{\"inputs\":{{\"payload\":{}0{}}}}}",
+                "[".repeat(arrays),
+                "]".repeat(arrays)
+            );
+            assert_eq!(request_method("POST", Some(&body)).is_ok(), allowed);
+        }
+    }
+
+    #[test]
     fn expired_send_is_never_polled() {
         tauri::async_runtime::block_on(async {
             let dispatched = std::cell::Cell::new(false);

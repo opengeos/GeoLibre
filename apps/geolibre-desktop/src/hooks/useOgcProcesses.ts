@@ -42,7 +42,20 @@ export function useOgcProcesses(open: boolean) {
   const [inputsJson, setInputsJson] = useState("{}");
   const [asynchronous, setAsynchronous] = useState(false);
   const [job, setJob] = useState<OgcProcessJob | null>(null);
-  const [jobsByProcess, setJobsByProcess] = useState(() => new Map<string, OgcProcessJob>());
+  const retainedJobs = useRef(new Map<string, OgcProcessJob>());
+  const [jobsByProcess, publishJobsByProcess] = useState(retainedJobs.current);
+  const setJobsByProcess = useCallback(
+    (
+      update:
+        | Map<string, OgcProcessJob>
+        | ((previous: Map<string, OgcProcessJob>) => Map<string, OgcProcessJob>),
+    ) => {
+      const next = typeof update === "function" ? update(retainedJobs.current) : update;
+      retainedJobs.current = next;
+      publishJobsByProcess(next);
+    },
+    [],
+  );
   const [jobUrl, setJobUrl] = useState("");
   const [outputs, setOutputs] = useState<OgcProcessOutput[]>([]);
   const [outputSourceUrl, setOutputSourceUrl] = useState("");
@@ -101,7 +114,7 @@ export function useOgcProcesses(open: boolean) {
       active.current?.abort();
       active.current = null;
     };
-  }, [stop]);
+  }, [stop, setJobsByProcess]);
   useEffect(() => {
     if (!open) stop();
   }, [open, stop]);
@@ -145,7 +158,7 @@ export function useOgcProcesses(open: boolean) {
     const defaults = ogcProcessInputDefaults(full);
     context.commit(() => {
       setProcess(full);
-      const previousJob = jobsByProcess.get(full.url);
+      const previousJob = retainedJobs.current.get(full.url);
       setJob(previousJob ?? null);
       setJobUrl(previousJob?.url ?? "");
       setValues(defaults);
@@ -218,13 +231,17 @@ export function useOgcProcesses(open: boolean) {
       setOutputSourceUrl("");
     });
     let sourceUrl = typeof initial === "string" ? initial : initial.url;
+    let owningProcessUrl = processUrl;
     const result = await monitorOgcProcessJob(initial, context.signal, (next) => {
       const selectedUrl = selectedProcess.current?.url;
-      const key =
-        processUrl ??
-        (selectedUrl && next.processUrl && sameOgcProcessJob(selectedUrl, next.processUrl)
-          ? selectedUrl
-          : next.processUrl);
+      if (
+        !owningProcessUrl &&
+        selectedUrl &&
+        next.processUrl &&
+        sameOgcProcessJob(selectedUrl, next.processUrl)
+      )
+        owningProcessUrl = selectedUrl;
+      const key = owningProcessUrl ?? next.processUrl;
       updateJob(context, next, key, sourceUrl);
       sourceUrl = next.url;
     });
@@ -333,7 +350,7 @@ export function useOgcProcesses(open: boolean) {
     });
   const resume = () =>
     run("monitoring", (context) => {
-      const tracked = [...jobsByProcess].find(([, value]) =>
+      const tracked = [...retainedJobs.current].find(([, value]) =>
         sameOgcProcessJob(value.url, jobUrl.trim()),
       );
       return monitor(

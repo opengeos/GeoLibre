@@ -89,6 +89,76 @@ for (const status of [202, 401])
     }
   });
 
+test("a body-limit failure preserves acknowledgement headers queued in a real socket", async (t) => {
+  let writes = 0;
+  const upstream = createServer((req, res) => {
+    writes++;
+    req.resume();
+    res.writeHead(202, { Location: "/jobs/queued", "Content-Length": "9" });
+    res.end("123456789");
+  });
+  upstream.listen(0, "127.0.0.1");
+  await once(upstream, "listening");
+  const delegate = new Agent();
+  delegate.dispatch = delegate.dispatch.bind(delegate);
+  const origin = `http://127.0.0.1:${(upstream.address() as AddressInfo).port}`;
+  t.mock.method(
+    Agent.prototype,
+    "dispatch",
+    (...[options, handler]: Parameters<InstanceType<typeof Agent>["dispatch"]>) =>
+      delegate.dispatch(
+        String(options.origin) === "https://process.example" ? { ...options, origin } : options,
+        handler,
+      ),
+  );
+  const done: { resolve?: () => void; release?: () => void } = {};
+  const handled = new Promise<void>((resolve) => {
+    done.resolve = resolve;
+  });
+  const proxy = createServer((req, res) => {
+    const flush = res.flushHeaders.bind(res);
+    res.flushHeaders = () => {
+      const socket = res.socket!;
+      socket.cork();
+      done.release = () => socket.uncork();
+      flush();
+      assert.ok(socket.writableLength > 0, "headers must still be queued before body rejection");
+    };
+    void proxyOgcProcessRequest(req, res).finally(() => done.resolve?.());
+  });
+  proxy.listen(0, "127.0.0.1");
+  await once(proxy, "listening");
+  try {
+    const received = fetch(
+      `http://127.0.0.1:${(proxy.address() as AddressInfo).port}/proxy?url=${encodeURIComponent("https://process.example/execution")}`,
+      {
+        method: "POST",
+        body: "{}",
+        headers: { "Content-Type": "application/json", "x-geolibre-max-bytes": "1" },
+        signal: AbortSignal.timeout(5000),
+      },
+    ).then(
+      (response) => ({ response, error: undefined }),
+      (error) => ({ response: undefined, error }),
+    );
+    await handled;
+    done.release?.();
+    const result = await received;
+    assert.ok(result.response, String(result.error));
+    assert.equal(result.response.status, 202);
+    assert.equal(result.response.headers.get("location"), "/jobs/queued");
+    await assert.rejects(result.response.arrayBuffer());
+    assert.equal(writes, 1);
+  } finally {
+    done.release?.();
+    await delegate.close();
+    proxy.closeAllConnections();
+    proxy.close();
+    upstream.close();
+    await Promise.all([once(proxy, "close"), once(upstream, "close")]);
+  }
+});
+
 test("process proxy preserves execution/job controls, redirect methods and response limits", async (t) => {
   const delegate = new Agent();
   delegate.dispatch = delegate.dispatch.bind(delegate);
@@ -266,6 +336,13 @@ test("process proxy preserves execution/job controls, redirect methods and respo
       ["POST", "{}", { "content-type": "text/plain" }, 415, false],
       ["POST", "[]", {}, 400, false],
       ["POST", "broken", {}, 400, false],
+      [
+        "POST",
+        '{"inputs":{"payload":' + "[".repeat(126) + "0" + "]".repeat(126) + "}}",
+        {},
+        400,
+        false,
+      ],
       ["POST", Buffer.from([255]), {}, 400, false],
       ["POST", "{}", { origin: "https://attacker.example" }, 403, false],
       ["POST", "{}", { origin: "null" }, 403, false],

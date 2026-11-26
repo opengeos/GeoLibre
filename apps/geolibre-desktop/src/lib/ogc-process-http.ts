@@ -5,6 +5,8 @@ import { normalizeFetchError } from "./ogc-json";
 import { waitForWcsRequest } from "./wcs";
 import {
   MAX_PROCESS_INPUT_BYTES,
+  MAX_PROCESS_INPUT_DEPTH,
+  processInputDepthAllowed,
   MAX_PROCESS_METADATA_BYTES,
   MAX_PROCESS_RESULT_BYTES,
   OGC_PROCESS_PROXY_PATH,
@@ -63,6 +65,8 @@ export async function processHttp(
     const body: unknown = JSON.parse(options.body);
     if (!body || typeof body !== "object" || Array.isArray(body))
       throw new OgcProcessError("inputObject");
+    if (!processInputDepthAllowed(body))
+      throw new OgcProcessError("inputDepth", { depth: MAX_PROCESS_INPUT_DEPTH });
   } else if (options.body !== undefined) {
     throw new OgcProcessError("requestBody");
   }
@@ -90,8 +94,7 @@ export async function processHttp(
       // rejection while the host finishes its bounded error-body read.
       const result = method === "GET" ? await waitForWcsRequest(pending, signal) : await pending;
       const rejected = result.status < 200 || result.status >= 300;
-      if (!acknowledged(method, result.status) && (!rejected || signal.aborted))
-        abort.throwIfAborted();
+      if (!acknowledged(method, result.status)) signal.throwIfAborted();
       const body =
         result.body.buffer instanceof ArrayBuffer
           ? new Uint8Array(result.body.buffer, result.body.byteOffset, result.body.byteLength)
@@ -126,7 +129,12 @@ export async function processHttp(
     } catch (error) {
       void response.body?.cancel().catch(() => {});
       const accepted = acknowledged(method, response.status);
-      if (!accepted && (response.ok || signal.aborted)) throw error;
+      if (!accepted && (response.ok || signal.aborted)) {
+        abort.throwIfAborted();
+        if (error instanceof TypeError && !abort.aborted)
+          throw new OgcProcessError("responseInterrupted");
+        throw error;
+      }
       body = new Uint8Array();
       bodyReadFailed = true;
     }
