@@ -10,6 +10,10 @@ type Services =
   import("../apps/geolibre-desktop/src/components/layout/AddNetcdfDialog").AddNetcdfServices;
 type CloudOptions = Parameters<Services["addCloudNetcdfLayer"]>[1];
 
+// The first load pulls in the kerchunk reader on demand, which can take well
+// over Testing Library's 1 s default on a busy CI runner.
+const LOAD_TIMEOUT = { timeout: 10_000 };
+
 const KERCHUNK_URL = "https://data.example.com/air.kerchunk.json";
 
 /** A kerchunk reference with one 3-D variable and a 1-D coordinate array. */
@@ -86,7 +90,7 @@ describe("AddNetcdfDialog", () => {
     const { services, added } = fakeServices();
     const isOpen = renderDialog(services);
     useCloudSource(KERCHUNK_URL);
-    await waitFor(() => assert.ok(text().includes("Found 1 variable.")));
+    await waitFor(() => assert.ok(text().includes("Found 1 variable.")), LOAD_TIMEOUT);
     assert.equal((screen.getByLabelText("Variable") as HTMLSelectElement).value, "air");
 
     fireEvent.change(screen.getByLabelText("time index"), { target: { value: "2" } });
@@ -111,7 +115,7 @@ describe("AddNetcdfDialog", () => {
     const { services, added } = fakeServices();
     renderDialog(services);
     useCloudSource(KERCHUNK_URL);
-    await waitFor(() => assert.ok(text().includes("Found 1 variable.")));
+    await waitFor(() => assert.ok(text().includes("Found 1 variable.")), LOAD_TIMEOUT);
     fireEvent.change(screen.getByLabelText("Color min (optional)"), { target: { value: "300" } });
     fireEvent.change(screen.getByLabelText("Color max (optional)"), { target: { value: "200" } });
     fireEvent.click(screen.getByRole("button", { name: "Add layer" }));
@@ -172,7 +176,7 @@ describe("AddNetcdfDialog", () => {
     });
     renderDialog(services);
     fireEvent.click(screen.getByRole("button", { name: "Choose file" }));
-    await waitFor(() => assert.ok(text().includes("Found 1 variable.")));
+    await waitFor(() => assert.ok(text().includes("Found 1 variable.")), LOAD_TIMEOUT);
     fireEvent.click(screen.getByRole("button", { name: "Add layer" }));
     await waitFor(() => assert.equal(added.length, 1));
     assert.deepEqual(builds[0], {
