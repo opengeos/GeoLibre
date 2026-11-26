@@ -45,7 +45,7 @@ export interface OgcProcessOutput {
 }
 export type OgcProcessExecution =
   | { kind: "job"; job: OgcProcessJob }
-  | { kind: "results"; outputs: OgcProcessOutput[]; jobUrl?: string };
+  | { kind: "results"; outputs: OgcProcessOutput[]; job?: OgcProcessJob };
 
 const object = (value: unknown): JsonObject => {
   if (!value || typeof value !== "object" || Array.isArray(value))
@@ -453,8 +453,32 @@ export async function executeOgcProcess(
     maxBytes: MAX_PROCESS_RESULT_BYTES,
   });
   successful(response);
+  const retainedUrl =
+    optionalLink(response.location, response.url) ??
+    ogcProcessMonitorLinks(response.link).flatMap((href) => {
+      try {
+        return [ogcProcessLink(href, response.url)];
+      } catch {
+        return [];
+      }
+    })[0];
+  const retainedJob = (url: string, status: "accepted" | "successful"): OgcProcessJob => ({
+    id: pathIdentifier(url),
+    url,
+    status,
+    message: "",
+    resultsUrl: append(url, "/results"),
+    retryAfterMs: ogcProcessRetryDelay(response.retryAfter),
+    outputIds: Object.keys(process.outputs),
+    outputDefinitions: process.outputs,
+    processUrl: process.url,
+  });
+  if (response.bodyReadFailed) {
+    if (!retainedUrl) throw new OgcProcessError("executionUncertain", { detail: "" });
+    return { kind: "job", job: retainedJob(retainedUrl, "accepted") };
+  }
   if (response.status === 201 || response.status === 202) {
-    let fallback = optionalLink(response.location, response.url);
+    let fallback: string | undefined = retainedUrl;
     if (!fallback && response.body.length) {
       const document = object(decode(response));
       const jobs = linked(process.links, REL + "job-list", process.url);
@@ -483,33 +507,19 @@ export async function executeOgcProcess(
     }
     return {
       kind: "job",
-      job: {
-        id: pathIdentifier(fallback),
-        url: fallback,
-        status: "accepted",
-        message: "",
-        resultsUrl: append(fallback, "/results"),
-        retryAfterMs: ogcProcessRetryDelay(response.retryAfter),
-        outputIds: Object.keys(process.outputs),
-        outputDefinitions: process.outputs,
-        processUrl: process.url,
-      },
+      job: retainedJob(fallback, "accepted"),
     };
   }
-  const retainedJob =
-    optionalLink(response.location, response.url) ??
-    ogcProcessMonitorLinks(response.link).flatMap((href) => {
-      try {
-        return [ogcProcessLink(href, response.url)];
-      } catch {
-        return [];
-      }
-    })[0];
-  return {
-    kind: "results",
-    outputs: outputs(response, Object.keys(process.outputs), process.outputs),
-    ...(retainedJob ? { jobUrl: retainedJob } : {}),
-  };
+  try {
+    return {
+      kind: "results",
+      outputs: outputs(response, Object.keys(process.outputs), process.outputs),
+      ...(retainedUrl ? { job: retainedJob(retainedUrl, "successful") } : {}),
+    };
+  } catch (error) {
+    if (!retainedUrl) throw error;
+    return { kind: "job", job: retainedJob(retainedUrl, "accepted") };
+  }
 }
 
 /** Read a submitted or explicitly resumed job without modifying it. */
@@ -555,7 +565,9 @@ export async function downloadOgcProcessOutput(
   if (output.encoding === "base64" && typeof output.value === "string") {
     const value = atob(output.value);
     if (value.length > MAX_PROCESS_RESULT_BYTES) throw new OgcProcessError("resultTooLarge");
-    return new Blob([Uint8Array.from(value, (c) => c.charCodeAt(0))], { type: output.mediaType });
+    const bytes = new Uint8Array(value.length);
+    for (let index = 0; index < value.length; index++) bytes[index] = value.charCodeAt(index);
+    return new Blob([bytes], { type: output.mediaType });
   }
   return new Blob(
     [typeof output.value === "string" ? output.value : (JSON.stringify(output.value) ?? "null")],

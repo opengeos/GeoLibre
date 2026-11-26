@@ -221,6 +221,9 @@ the bounded request alive to retain an eventual accepted job URL, and prevents
 another submission until that outcome arrives. Reopening shows the pending
 state and recovery notice. A failed request can still leave work running remotely;
 check the service before retrying, since a retry starts a new execution.
+A successful execution with a monitor URL remains recoverable if its result
+body cannot be read. Synchronous jobs retain their Resume and Dismiss controls
+after switching processes, including when their response arrives after Stop.
 The actual advertised execution endpoint is
 shown before submission, including when it differs from the catalog host.
 Input documents are

@@ -106,6 +106,33 @@ test("compact native result transport retains all byte values", async () => {
   assert.deepEqual(result.body, bytes);
 });
 
+test("native synchronous write acknowledgement retains routing and body failure separately", async () => {
+  Object.defineProperty(window, "__TAURI_INTERNALS__", {
+    configurable: true,
+    value: {
+      invoke: async () => ({
+        status: 200,
+        final_url: "https://example.org/execution",
+        content_type: "application/json",
+        location: null,
+        retry_after: null,
+        link: '</jobs/sync>; rel="monitor"',
+        body_base64: "",
+        body_read_failed: true,
+      }),
+    },
+  });
+  const { processHttp } = await import("../apps/geolibre-desktop/src/lib/ogc-process-http");
+  const response = await processHttp(
+    "https://example.org/execution",
+    new AbortController().signal,
+    { method: "POST", body: "{}" },
+  );
+  assert.equal(response.status, 200);
+  assert.equal(response.link, '</jobs/sync>; rel="monitor"');
+  assert.equal(response.bodyReadFailed, true);
+});
+
 test("process diagnostics identify writes and redact URL credentials", () => {
   const record = nativeHttpSuccessRecord(
     "ogc_process_http_request",

@@ -277,6 +277,74 @@ test("a failed accepted body read preserves the job status and URL", async () =>
   assert.equal((await executeOgcProcess(process, {}, new AbortController().signal)).kind, "job");
 });
 
+test("successful synchronous writes recover monitor routing after body failures without resubmission", async () => {
+  const process = await processDescription();
+  for (const failure of ["stream", "malformed JSON"] as const) {
+    const calls = serve((url, init) => {
+      if (init?.method === "POST")
+        return new Response(
+          failure === "stream"
+            ? new ReadableStream({
+                start(controller) {
+                  controller.error(new Error("interrupted"));
+                },
+              })
+            : "{broken",
+          {
+            status: 200,
+            headers: {
+              "Content-Type": "application/json",
+              Link: '</api/jobs/sync>; rel="monitor"',
+              "Retry-After": "0",
+            },
+          },
+        );
+      if (url.includes("/results")) return { echo: "Recovered" };
+      return { status: "successful", jobID: "sync" };
+    });
+    const signal = new AbortController().signal;
+    const result = await executeOgcProcess(process, {}, signal);
+    assert.equal(result.kind, "job");
+    if (result.kind !== "job") throw new Error("Expected recoverable job");
+    assert.equal(new URL(result.job.url).pathname, "/api/jobs/sync");
+    assert.deepEqual(await monitorOgcProcessJob(result.job, signal), [
+      { id: "echo", value: "Recovered", mediaType: "application/json" },
+    ]);
+    assert.equal(calls.filter((call) => call.init?.method === "POST").length, 1);
+  }
+});
+
+test("an unreadable successful execution without routing remains uncertain rather than empty success", async () => {
+  const process = await processDescription();
+  const calls = serve(
+    () =>
+      new Response(
+        new ReadableStream({
+          start(controller) {
+            controller.error(new Error("interrupted"));
+          },
+        }),
+        { status: 200 },
+      ),
+  );
+  await assert.rejects(executeOgcProcess(process, {}, new AbortController().signal), {
+    code: "executionUncertain",
+  });
+  assert.equal(calls.length, 1);
+  serve(
+    () =>
+      new Response(
+        new ReadableStream({
+          start(controller) {
+            controller.error(new Error("interrupted GET"));
+          },
+        }),
+        { status: 200, headers: { Link: '</api/jobs/sync>; rel="monitor"' } },
+      ),
+  );
+  await assert.rejects(processHttp("https://example.org/results", new AbortController().signal));
+});
+
 test("monitoring and request deadlines use localized errors and preserve caller cancellation", async (t) => {
   const original = AbortSignal.timeout;
   const observation = new AbortController();
@@ -549,7 +617,7 @@ test("invalid optional Location headers preserve outputs and usable monitor or b
   assert.equal(sync.kind, "results");
   if (sync.kind !== "results") return;
   assert.equal(sync.outputs[0].value, "Done");
-  assert.equal(new URL(sync.jobUrl!).pathname, "/api/jobs/retained");
+  assert.equal(new URL(sync.job!.url).pathname, "/api/jobs/retained");
   serve(
     () =>
       new Response(
@@ -589,8 +657,8 @@ test("synchronous monitor links retain job routing without changing successful o
     const result = await executeOgcProcess(process, { name: "GeoLibre" }, signal);
     assert.equal(result.kind, "results");
     if (result.kind !== "results") return;
-    assert.equal(new URL(result.jobUrl!).pathname, location ?? "/api/processes/jobs/retained");
-    assert.equal(new URL(result.jobUrl!).searchParams.get("token"), "secret");
+    assert.equal(new URL(result.job!.url).pathname, location ?? "/api/processes/jobs/retained");
+    assert.equal(new URL(result.job!.url).searchParams.get("token"), "secret");
     assert.equal(result.outputs[0].value, "Done");
   }
 });

@@ -18,14 +18,12 @@ export interface ProcessHttpResponse {
   retryAfter: string | null;
   link: string | null;
   body: Uint8Array<ArrayBuffer>;
+  bodyReadFailed?: boolean;
 }
 
 /** Mutation acknowledgements remain useful without their optional response bodies. */
-function acknowledged(method: string, status: number, location: string | null): boolean {
-  return (
-    (method === "DELETE" && status >= 200 && status < 300) ||
-    (method === "POST" && [201, 202].includes(status) && Boolean(location))
-  );
+function acknowledged(method: string, status: number): boolean {
+  return (method === "DELETE" || method === "POST") && status >= 200 && status < 300;
 }
 
 /** Validate service links without allowing URL user information or non-HTTP schemes. */
@@ -86,14 +84,14 @@ export async function processHttp(
       // Once dispatched, the bounded native write may outlive observation.
       // Await its outcome so an accepted job is not discarded on cancellation.
       const result = method === "GET" ? await waitForWcsRequest(pending, abort) : await pending;
-      if (!acknowledged(method, result.status, result.location)) abort.throwIfAborted();
+      if (!acknowledged(method, result.status)) abort.throwIfAborted();
       const body =
         result.body.buffer instanceof ArrayBuffer
           ? new Uint8Array(result.body.buffer, result.body.byteOffset, result.body.byteLength)
           : new Uint8Array(result.body);
       if (body.byteLength > maxBytes) {
-        if (acknowledged(method, result.status, result.location))
-          return { ...result, body: new Uint8Array() };
+        if (acknowledged(method, result.status))
+          return { ...result, body: new Uint8Array(), bodyReadFailed: true };
         throw new OgcProcessError("responseTooLarge");
       }
       return { ...result, body };
@@ -112,18 +110,19 @@ export async function processHttp(
       redirect: method === "GET" ? "follow" : "error",
     });
     let body: Uint8Array<ArrayBuffer>;
+    let bodyReadFailed = dev && response.headers.get("x-geolibre-process-body-incomplete") === "1";
     try {
       body = await readLimitedBody(
         response,
         response.ok ? maxBytes : Math.min(maxBytes, 64 * 1024),
       );
     } catch (error) {
-      const accepted = acknowledged(method, response.status, response.headers.get("location"));
+      const accepted = acknowledged(method, response.status);
       if (!accepted && (response.ok || abort.aborted)) throw error;
       body = new Uint8Array();
+      bodyReadFailed = true;
     }
-    if (!acknowledged(method, response.status, response.headers.get("location")))
-      abort.throwIfAborted();
+    if (!acknowledged(method, response.status)) abort.throwIfAborted();
     return {
       status: response.status,
       url: dev ? (response.headers.get("x-geolibre-final-url") ?? url) : response.url || url,
@@ -132,6 +131,7 @@ export async function processHttp(
       retryAfter: response.headers.get("retry-after"),
       link: response.headers.get("link"),
       body,
+      ...(bodyReadFailed ? { bodyReadFailed: true } : {}),
     };
   } catch (error) {
     if (

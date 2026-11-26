@@ -331,6 +331,64 @@ test("equivalent resumed status URLs update the tracked process and unlock Run",
   assert.equal(screen.getByRole("button", { name: "Dismiss job" }).hasAttribute("disabled"), true);
 });
 
+test("stopped synchronous results retain their job association across process selection", async () => {
+  const first = description();
+  const second = JSON.parse(JSON.stringify(first).replaceAll("hello-world", "second"));
+  second.title = "Second process";
+  let posts = 0;
+  const pending: { resolve?: (response: Response) => void } = {};
+  globalThis.fetch = async (input, init) => {
+    const path = new URL(String(input)).pathname;
+    if (init?.method === "POST") {
+      posts++;
+      return new Promise<Response>((resolve) => {
+        pending.resolve = resolve;
+      });
+    }
+    return new Response(
+      JSON.stringify(
+        path.endsWith("/hello-world")
+          ? first
+          : path.endsWith("/second")
+            ? second
+            : path.includes("/results")
+              ? { echo: "Resumed snapshot" }
+              : path.includes("/jobs/")
+                ? { status: "successful" }
+                : { processes: [first, second] },
+      ),
+      { headers: { "Content-Type": "application/json" } },
+    );
+  };
+  await form();
+  fireEvent.click(screen.getByRole("button", { name: "Run process" }));
+  await waitFor(() => assert.ok(pending.resolve));
+  fireEvent.click(screen.getByRole("button", { name: "Stop waiting" }));
+  await act(async () =>
+    pending.resolve?.(
+      new Response(JSON.stringify({ echo: "Late snapshot" }), {
+        headers: { "Content-Type": "application/json", Link: '</master/jobs/sync>; rel="monitor"' },
+      }),
+    ),
+  );
+  await waitFor(() => assert.ok(screen.queryByText("Late snapshot")));
+  fireEvent.change(screen.getByLabelText("Process"), { target: { value: "second" } });
+  await waitFor(() =>
+    assert.equal((screen.getByLabelText("Process") as HTMLSelectElement).value, "second"),
+  );
+  await waitFor(() => assert.ok(screen.queryByLabelText("Name *")));
+  fireEvent.change(screen.getByLabelText("Process"), { target: { value: "hello-world" } });
+  await waitFor(() =>
+    assert.match(
+      (screen.getByLabelText("Job status URL") as HTMLInputElement).value,
+      /\/jobs\/sync/,
+    ),
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Resume monitoring" }));
+  await waitFor(() => assert.ok(screen.queryByText("Resumed snapshot")));
+  assert.equal(posts, 1);
+});
+
 test("submission timeouts report uncertain remote completion without retrying", async () => {
   let posts = 0;
   serve(async () => {
@@ -727,6 +785,53 @@ for (const action of ["project switch", "unmount"] as const) {
     assert.ok(signal?.aborted);
     assert.equal(useAppStore.getState().layers.length, 0);
     assert.equal(screen.queryByRole("alert") === null, true);
+  });
+}
+
+for (const outcome of ["accepted job", "synchronous result"] as const) {
+  test(`a late successful ${outcome} cannot cross a project replacement`, async () => {
+    let signal: AbortSignal | undefined;
+    let posts = 0;
+    const pending: { resolve?: (response: Response) => void } = {};
+    serve(async (_url, init) => {
+      posts++;
+      signal = init?.signal ?? undefined;
+      return new Promise<Response>((resolve) => {
+        pending.resolve = resolve;
+      });
+    });
+    await form();
+    fireEvent.click(screen.getByRole("button", { name: "Run process" }));
+    await waitFor(() => assert.ok(pending.resolve));
+    await act(async () => {
+      useAppStore.setState((state) => ({ projectLoadCount: state.projectLoadCount + 1 }));
+      // This submission intentionally ignores abort, as a native dispatch may.
+      pending.resolve?.(
+        outcome === "accepted job"
+          ? new Response(null, { status: 202, headers: { Location: "/master/jobs/old-project" } })
+          : new Response(
+              JSON.stringify({
+                echo: {
+                  value: { type: "FeatureCollection", features: [] },
+                  mediaType: "application/geo+json",
+                },
+              }),
+              {
+                headers: {
+                  "Content-Type": "application/json",
+                  Link: '</master/jobs/old-project>; rel="monitor"',
+                },
+              },
+            ),
+      );
+    });
+    assert.ok(signal?.aborted);
+    assert.equal(posts, 1);
+    assert.equal((screen.getByLabelText("Job status URL") as HTMLInputElement).value, "");
+    assert.equal(screen.queryByRole("button", { name: "Add to map" }), null);
+    assert.equal(screen.queryByRole("alert"), null);
+    assert.equal(useAppStore.getState().layers.length, 0);
+    assert.equal(screen.queryByText("Successful"), null);
   });
 }
 

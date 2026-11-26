@@ -148,6 +148,7 @@ export async function proxyOgcProcessRequest(
     const signal = AbortSignal.any([abort.signal, AbortSignal.timeout(120_000)]);
     const upstream = await processRequest(url, method, body, headers, signal);
     let data: Buffer;
+    let bodyReadFailed = false;
     try {
       data = await readBodyWithLimit(
         upstream.response,
@@ -156,9 +157,7 @@ export async function proxyOgcProcessRequest(
     } catch (error) {
       await upstream.response.body?.cancel().catch(() => {});
       const accepted =
-        (method === "POST" &&
-          [201, 202].includes(upstream.response.status) &&
-          upstream.response.headers.has("location")) ||
+        (method === "POST" && upstream.response.ok) ||
         (method === "DELETE" && upstream.response.ok);
       if (!accepted && upstream.response.ok)
         throw new ProcessProxyError(
@@ -169,6 +168,7 @@ export async function proxyOgcProcessRequest(
         );
       if (!accepted && signal.aborted) throw error;
       data = Buffer.alloc(0);
+      bodyReadFailed = true;
     }
     res.statusCode = upstream.response.status;
     res.setHeader("cache-control", "no-store");
@@ -177,6 +177,7 @@ export async function proxyOgcProcessRequest(
       upstream.response.headers.get("content-type") ?? "application/octet-stream",
     );
     res.setHeader("x-geolibre-final-url", upstream.url);
+    if (bodyReadFailed) res.setHeader("x-geolibre-process-body-incomplete", "1");
     for (const name of ["location", "retry-after", "link"]) {
       const value = upstream.response.headers.get(name);
       if (value) res.setHeader(name, value);

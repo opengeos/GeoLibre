@@ -262,9 +262,10 @@ export function useOgcProcesses(open: boolean) {
         }
       })();
       if (!result || !ownsProject()) return;
+      const submissionJob = result.job;
       if (context.signal.aborted) {
-        if (result.kind === "job")
-          setJobsByProcess((previous) => new Map(previous).set(process.url, result.job));
+        if (submissionJob)
+          setJobsByProcess((previous) => new Map(previous).set(process.url, submissionJob));
         if (canPublishDetached()) {
           setError(null);
           if (result.kind === "job") {
@@ -272,8 +273,9 @@ export function useOgcProcesses(open: boolean) {
             setJobUrl(result.job.url);
           } else {
             setOutputs(result.outputs);
-            setOutputSourceUrl(result.jobUrl ?? process.url);
-            setJobUrl(result.jobUrl ?? "");
+            setOutputSourceUrl(result.job?.url ?? process.url);
+            setJob(result.job ?? null);
+            setJobUrl(result.job?.url ?? "");
           }
         }
         return;
@@ -285,15 +287,16 @@ export function useOgcProcesses(open: boolean) {
       } else {
         context.commit(() => {
           setOutputs(result.outputs);
-          setOutputSourceUrl(result.jobUrl ?? process.url);
-          setJobUrl(result.jobUrl ?? "");
+          setOutputSourceUrl(result.job?.url ?? process.url);
+          setJobUrl(result.job?.url ?? "");
         });
-        if (result.jobUrl) {
+        if (result.job) {
+          updateJob(context, result.job, process.url);
           try {
             updateJob(
               context,
               {
-                ...(await readOgcProcessJob(result.jobUrl, context.signal)),
+                ...(await readOgcProcessJob(result.job.url, context.signal)),
                 outputIds: Object.keys(process.outputs),
                 outputDefinitions: process.outputs,
                 processUrl: process.url,

@@ -255,6 +255,7 @@ export interface NativeProcessHttpResponse extends NativeHttpResponse {
   location: string | null;
   retryAfter: string | null;
   link: string | null;
+  bodyReadFailed?: boolean;
 }
 
 /** Execute a bounded OGC process request through the guarded native command. */
@@ -276,6 +277,7 @@ export async function requestOgcProcess(
     retry_after: string | null;
     link: string | null;
     body_base64: string;
+    body_read_failed?: boolean;
   }>(
     "ogc_process_http_request",
     url,
@@ -294,5 +296,6 @@ export async function requestOgcProcess(
     retryAfter: raw.retry_after,
     link: raw.link ?? null,
     body: bytes,
+    ...(raw.body_read_failed ? { bodyReadFailed: true } : {}),
   };
 }

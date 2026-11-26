@@ -65,6 +65,9 @@ test("process proxy preserves execution/job controls, redirect methods and respo
     .intercept({ path: "/accepted-large", method: "POST", body })
     .reply(202, "12345678", { headers: { Location: "/jobs/retained" } });
   pool.intercept({ path: "/large", method: "GET" }).reply(200, "123456789");
+  pool.intercept({ path: "/sync-large", method: "POST", body }).reply(200, "12345678", {
+    headers: { Link: '</jobs/sync>; rel="monitor"' },
+  });
   pool.intercept({ path: "/failure", method: "GET" }).reply(503, "123456789");
   pool.intercept({ path: "/html", method: "GET" }).reply(200, "<script>unsafe()</script>", {
     headers: { "Content-Type": "text/html" },
@@ -138,6 +141,11 @@ test("process proxy preserves execution/job controls, redirect methods and respo
     assert.equal(retained.status, 202);
     assert.equal(retained.headers.location, "/jobs/retained");
     assert.equal(retained.body, "");
+    const synchronous = await send("POST", "/sync-large", body, { "x-geolibre-max-bytes": "4" });
+    assert.equal(synchronous.status, 200);
+    assert.equal(synchronous.headers.link, '</jobs/sync>; rel="monitor"');
+    assert.equal(synchronous.headers["x-geolibre-process-body-incomplete"], "1");
+    assert.equal(synchronous.body, "");
     const dismissed = await send("DELETE", "/delete-large", undefined, {
       "x-geolibre-max-bytes": "4",
     });

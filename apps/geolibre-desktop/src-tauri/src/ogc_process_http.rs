@@ -22,6 +22,7 @@ pub(crate) struct ProcessHttpResponse {
     retry_after: Option<String>,
     link: Option<String>,
     body_base64: String,
+    body_read_failed: bool,
 }
 
 fn request_method(method: &str, body: Option<&str>) -> Result<reqwest::Method, String> {
@@ -144,13 +145,16 @@ fn request_blocking(
     let max_bytes = max_bytes.unwrap_or(2 * 1024 * 1024).min(MAX_RESPONSE_BYTES);
     // Keep small OGC exception documents, but an oversized/broken error page
     // must not hide the server's HTTP status behind a download-limit error.
-    let accepted =
-        method == reqwest::Method::POST && matches!(status, 201 | 202) && location.is_some();
+    let accepted = method == reqwest::Method::POST && (200..300).contains(&status);
     let dismissed = method == reqwest::Method::DELETE && (200..300).contains(&status);
+    let mut body_read_failed = false;
     let body = if accepted || dismissed {
-        // Status/Location are sufficient to recover a submitted job even if
-        // the optional response body is interrupted or exceeds its limit.
-        crate::http_body::read_limited_body(response, length, max_bytes).unwrap_or_default()
+        // Keep write acknowledgements and routing even if body processing fails.
+        // The caller distinguishes a missing body from valid empty results.
+        crate::http_body::read_limited_body(response, length, max_bytes).unwrap_or_else(|_| {
+            body_read_failed = true;
+            Vec::new()
+        })
     } else if (200..300).contains(&status) {
         crate::http_body::read_limited_body(response, length, max_bytes)?
     } else {
@@ -165,6 +169,7 @@ fn request_blocking(
         retry_after,
         link,
         body_base64: base64::engine::general_purpose::STANDARD.encode(body),
+        body_read_failed,
     })
 }
 
@@ -364,6 +369,8 @@ mod transport_tests {
                 ),
                 ("POST", "/accepted-broken", "202 Accepted", "Location: /jobs/accepted\r\n", "{}"),
                 ("POST", "/accepted-large", "201 Created", "Location: /jobs/accepted\r\n", "12345678"),
+                ("POST", "/sync-broken", "200 OK", "Link: </jobs/sync>; rel=monitor\r\n", "{}"),
+                ("POST", "/sync-large", "200 OK", "Link: </jobs/sync>; rel=monitor\r\n", "12345678"),
                 ("DELETE", "/delete-broken", "200 OK", "", "{}"),
             ] {
                 let deadline = Instant::now() + Duration::from_secs(10);
@@ -502,6 +509,23 @@ mod transport_tests {
             assert_eq!(accepted.status, status);
             assert_eq!(accepted.location.as_deref(), Some("/jobs/accepted"));
             assert!(accepted.body_base64.is_empty());
+            assert!(accepted.body_read_failed);
+        }
+        for (path, max) in [("/sync-broken", 1024), ("/sync-large", 4)] {
+            let recovered = request_blocking(
+                url(path),
+                "POST".into(),
+                Some(r#"{"inputs":{"name":"GeoLibre"}}"#.into()),
+                None,
+                true,
+                Some(max),
+                Some(10),
+            )
+            .unwrap();
+            assert_eq!(recovered.status, 200);
+            assert_eq!(recovered.link.as_deref(), Some("</jobs/sync>; rel=monitor"));
+            assert!(recovered.body_base64.is_empty());
+            assert!(recovered.body_read_failed);
         }
         let dismissed = request_blocking(
             url("/delete-broken"),
