@@ -152,6 +152,13 @@ export function isZoomRangeInvalid(minZoom: string, maxZoom: string): boolean {
   );
 }
 
+/** The messages explaining why a package cannot be shown at the map's zooms. */
+export type PackageZoomErrorKey =
+  | "basemapExtract.errorPackageZoom"
+  | "basemapExtract.errorPackageZoomUnsupported"
+  | "basemapExtract.errorSavedPackageZoom"
+  | "basemapExtract.errorSavedPackageZoomUnsupported";
+
 /**
  * The translation key explaining why a package that starts at `minZoom` cannot
  * be shown, or `null` when the map can display it.
@@ -171,8 +178,9 @@ export function packageZoomErrorKey(
   minZoom: number,
   mapMaxZoom: number,
   saved = false,
-): string | null {
-  if (minZoom <= Math.min(MAX_PACKAGE_MIN_ZOOM, mapMaxZoom)) return null;
+): PackageZoomErrorKey | null {
+  // Written as a negated ">" so a missing (NaN) zoom passes, as it always has.
+  if (!(minZoom > Math.min(MAX_PACKAGE_MIN_ZOOM, mapMaxZoom))) return null;
   const unsupported = minZoom > MAX_PACKAGE_MIN_ZOOM;
   if (saved)
     return unsupported

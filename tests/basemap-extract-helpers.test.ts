@@ -69,6 +69,8 @@ describe("zoom validation", () => {
 
   it("explains a package that starts past the map's maximum zoom", () => {
     assert.equal(packageZoomErrorKey(16, 18), null);
+    // A package with no recorded zoom is not rejected.
+    assert.equal(packageZoomErrorKey(Number.NaN, 18), null);
     assert.equal(packageZoomErrorKey(18, 18), null);
     assert.equal(packageZoomErrorKey(19, 18), "basemapExtract.errorPackageZoom");
     // 24 caps a looser preference; past it no setting can show the package.

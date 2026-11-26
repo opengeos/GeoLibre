@@ -484,7 +484,7 @@ export function BasemapExtractPanel({
     );
     if (requestedZoomError) {
       applicationRequests.invalidate();
-      setError(t(requestedZoomError as never, { zoom: minZoomValue }));
+      setError(t(requestedZoomError, { zoom: minZoomValue }));
       return;
     }
     const completed = await nativeMbtiles.extract(
@@ -505,7 +505,7 @@ export function BasemapExtractPanel({
         true,
       );
       if (savedZoomError)
-        throw new Error(t(savedZoomError as never, { name: entry.name, zoom: entry.minZoom }));
+        throw new Error(t(savedZoomError, { name: entry.name, zoom: entry.minZoom }));
       if (entry.tileType === "raster" || entry.flavor != null) {
         setBasemapStyleUrl(
           nativeOfflineBasemapStyleUrl(entry, (entry.flavor as ProtomapsFlavor | null) ?? "light"),
@@ -773,7 +773,7 @@ export function BasemapExtractPanel({
             verified.minZoom,
             useAppStore.getState().preferences.map.maxZoom,
           );
-          if (zoomError) throw new Error(t(zoomError as never, { zoom: verified.minZoom }));
+          if (zoomError) throw new Error(t(zoomError, { zoom: verified.minZoom }));
           if (
             verified.archiveFormat === "mbtiles" &&
             verified.tileType === "vector" &&
