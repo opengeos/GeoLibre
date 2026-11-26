@@ -282,7 +282,7 @@ describe("ArcGIS sync adapter", () => {
       new Map([[first.entry!.ops[0].id, "mine" as const]]),
     );
     const second = await syncOutboxEntry(resolved, adapter);
-    assert.equal(second.kind, "synced", second.error);
+    assert.equal(second.kind, "synced", second.error ?? "");
     assert.equal(service.rows.get(2)!.properties!.status, "mine");
   });
 
@@ -426,7 +426,7 @@ describe("ArcGIS keep mine on a server delete", () => {
       new Map([[first.entry!.ops[0].id, "mine" as const]]),
     );
     const second = await syncOutboxEntry(resolved, adapter);
-    assert.equal(second.kind, "synced", second.error);
+    assert.equal(second.kind, "synced", second.error ?? "");
     const added = (service.edits.at(-1)!.adds![0] as { attributes: Record<string, unknown> })
       .attributes;
     assert.equal(added.status, "keep me");
