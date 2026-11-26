@@ -95,9 +95,12 @@ def _extent_bounds(extent: Any) -> list[float] | None:
     if not isinstance(extent, dict):
         return None
     reference = extent.get("spatialReference")
-    wkid = (
-        reference.get("latestWkid", reference.get("wkid")) if isinstance(reference, dict) else None
-    )
+    # `latestWkid ?? wkid`, as arcgisExtentToBounds reads it.
+    wkid = None
+    if isinstance(reference, dict):
+        wkid = reference.get("latestWkid")
+        if wkid is None:
+            wkid = reference.get("wkid")
     values = [extent.get(key) for key in ("xmin", "ymin", "xmax", "ymax")]
     if any(
         isinstance(item, bool) or not isinstance(item, (int, float)) or not math.isfinite(item)

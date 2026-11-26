@@ -334,6 +334,18 @@ def test_non_json_numbers_are_refused(vts, where):
         _build()
 
 
+def test_null_latest_wkid_falls_back_to_wkid(vts):
+    """Read ``latestWkid ?? wkid`` like the app.
+
+    Args:
+        vts: The mutable metadata transport fixture.
+    """
+    info, style, _ = vts
+    del style["sources"]["Santa_Monica_parcels_VTL"]["bounds"]
+    info["fullExtent"]["spatialReference"] = {"latestWkid": None, "wkid": 102100}
+    assert _build()["metadata"]["bounds"][0] == pytest.approx(-118.517, abs=1e-3)
+
+
 def test_overflowing_float_is_refused(vts, monkeypatch):
     """Refuse a numeric literal that decodes to infinity.
 
