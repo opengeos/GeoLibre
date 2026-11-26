@@ -137,7 +137,8 @@ an `engines` list. This lets a project retain an unsupported layer or suspended
 plugin across a switch without asking every SDK to emulate every feature.
 
 Inside `packages/map/src`, a file named for an engine (`arcgis-*`, `cesium-*`,
-`mapbox-*`, and MapLibre's `layer-sync`, `map-controller`, and `MapCanvas`)
+`mapbox-*`, and MapLibre's `layer-sync`, `map-controller`, the `layer-sync-*` and
+`map-controller-*` modules split from them, and `MapCanvas`)
 never imports another engine's file. Code two engines share lives in a neutral
 module named for what it does (`pmtiles-archive.ts`, `protocol-tiles.ts`,
 `gl-style-compiler.ts`, `feature-style.ts`, and so on). The

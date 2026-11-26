@@ -13,6 +13,7 @@ import {
   selectedIndex,
 } from "./gui-state";
 import { constrainGuiPanelToViewport } from "./shared";
+import { GEOLIBRE_GUI_OUTPUT_STYLE } from "./gui-output-style";
 
 const legendControlPosition: GeoLibreMapControlPosition = "top-left";
 
@@ -193,24 +194,7 @@ function createLegendControl(LegendGuiControlClass: LegendGuiControlConstructor)
 
 /** Apply theme defaults only to outputs managed by this GUI, including grid children. */
 export function themeLegendControlOutputs(control: LegendGuiControl): void {
-  // LegendGuiControl 0.31.1 creates each output Legend in a private factory
-  // without forwarding its GUI options. Apply live theme defaults through the
-  // public Legend.update API to each output created by the GUI.
-  type ThemedLegendOutput = {
-    update(options: { backgroundColor: string; fontColor: string }): void;
-  };
-  const guiControl = control as unknown as {
-    _createLegend: (entry: unknown) => ThemedLegendOutput;
-  };
-  const createOutput = guiControl._createLegend;
-  guiControl._createLegend = (entry) => {
-    const output = createOutput.call(guiControl, entry);
-    output.update({
-      backgroundColor: "var(--geolibre-bg)",
-      fontColor: "var(--geolibre-fg)",
-    });
-    return output;
-  };
+  control.setOutputStyle(GEOLIBRE_GUI_OUTPUT_STYLE);
 }
 
 export function teardownLegendControl(app: GeoLibreAppAPI): void {

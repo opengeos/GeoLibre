@@ -3618,6 +3618,37 @@ class Map(anywidget.AnyWidget):
             )
         )
 
+    def add_arcgis_vector_tile_layer(
+        self,
+        url: str,
+        name: str | None = None,
+        *,
+        bounds: list[float] | None = None,
+        attribution: str | None = None,
+    ) -> str:
+        """Add an ArcGIS VectorTileServer with the service's own style.
+
+        The service description and its default style are read now and stored
+        on the layer the way the app's ArcGIS plugin saves one, so the project
+        opens with the service's cartography. Reads are limited to 2 MiB
+        (description) and 8 MiB (style) with a 30-second deadline each. Styles
+        the app cannot draw are refused. Tokens and portal items are not
+        supported.
+
+        Args:
+            url: The ``.../VectorTileServer`` URL.
+            name: Layer display name; defaults to the service name.
+            bounds: ``[west, south, east, north]`` extent for "Zoom to layer",
+                instead of the style's or service's extent.
+            attribution: Attribution text instead of the service credit.
+
+        Returns:
+            The id of the added layer.
+        """
+        return self._add_layer(
+            _project.arcgis_vector_tile_layer(url, name, bounds=bounds, attribution=attribution)
+        )
+
     def add_zarr(
         self,
         url: str,

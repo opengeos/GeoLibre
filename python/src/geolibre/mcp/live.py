@@ -1,27 +1,38 @@
 """Drive the map open in GeoLibre Desktop from the MCP server.
 
-GeoLibre Desktop answers scripting commands on one of two loopback relays,
-which speak the same protocol:
+GeoLibre Desktop answers scripting commands on a loopback relay. Three
+servers speak the same protocol:
 
+- the **desktop relay** (``POST /relay/command``), served by the desktop shell
+  itself once Settings → Startup → "Allow AI agents to drive the map" is on. No
+  Python sidecar or Jupyter server is involved. It listens on an ephemeral
+  ``127.0.0.1`` port, except in the sandboxed Mac App Store build, which
+  listens on a Unix socket inside its container (the sandbox refuses TCP
+  listeners). It advertises itself in ``~/.geolibre/runtime/live-relay.json``
+  (see :func:`sidecar_discovery_file`), or in that file under the Mac App Store
+  container's home (:func:`discovery_files`).
 - the **sidecar relay** (``POST /relay/command`` on the processing sidecar,
-  port 8765). The sidecar advertises it in ``~/.geolibre/runtime/live-relay.json``
-  (see :func:`sidecar_discovery_file`) while it runs. Desktop starts the sidecar
-  at launch when Settings → Startup → "Allow AI agents to drive the map" is on,
-  or whenever a processing tool needs it.
+  port 8765), which older desktop releases served and advertised in the same
+  file.
 - the **Jupyter relay** (``POST /geolibre/relay/command`` on the JupyterLab
   server Desktop starts from Processing → Jupyter Notebook, port 8766), found
   through Jupyter's own connection file.
 
 The endpoint is never taken from the model. It comes from ``GEOLIBRE_RELAY_URL``
-or from one of those files, and only a loopback URL is accepted. Redirects are
-refused so the relay token cannot be sent off the machine.
+or from one of those files, and only a loopback URL (or a Unix socket beside the
+owner-only discovery file) is accepted. Redirects are refused so the relay token
+cannot be sent off the machine.
 """
 
 from __future__ import annotations
 
+import http.client
 import json
 import math
 import os
+import socket
+import stat
+import sys
 import urllib.error
 import urllib.request
 import uuid
@@ -35,6 +46,7 @@ __all__ = [
     "Relay",
     "command_timeout_seconds",
     "discover",
+    "discovery_files",
     "require",
     "runtime_directories",
     "sidecar_discovery_file",
@@ -53,8 +65,9 @@ MAX_COMMAND_BYTES = 8 * 1024 * 1024
 DEFAULT_TIMEOUT_SECONDS = 5.0
 
 #: Result waits for commands that do real work in the app. Mirrors
-#: ``METHOD_RESULT_TIMEOUT_SECONDS`` in the backend's ``relay_protocol.py``;
-#: this side sends its choice as ``timeoutSeconds`` so the two cannot disagree.
+#: ``METHOD_RESULT_TIMEOUT_SECONDS`` in the backend's ``relay_protocol.py`` and
+#: in the desktop shell's ``live_relay.rs`` (tests compare all three); this side
+#: sends its choice as ``timeoutSeconds`` so they cannot disagree.
 METHOD_TIMEOUT_SECONDS: dict[str, float] = {
     "runAlgorithm": 30 * 60.0,
     "runWhiteboxTool": 30 * 60.0,
@@ -76,8 +89,12 @@ SOCKET_GRACE_SECONDS = 5.0
 #: Kept for callers that read it: the socket timeout of a default command.
 COMMAND_TIMEOUT_SECONDS = DEFAULT_TIMEOUT_SECONDS + SOCKET_GRACE_SECONDS
 
-#: Overrides where the sidecar relay's discovery file is read from.
+#: Overrides where the relay discovery file is read from.
 SIDECAR_DISCOVERY_ENV = "GEOLIBRE_LIVE_RELAY_FILE"
+
+#: Bundle id of the sandboxed Mac App Store build, whose home (and so its
+#: discovery file and socket) lives in ``~/Library/Containers/<id>/Data``.
+MAS_BUNDLE_ID = "org.geolibre.desktop"
 
 NOT_CONNECTED = (
     "No GeoLibre window is listening. Open GeoLibre Desktop with Settings → "
@@ -102,19 +119,67 @@ class _RefuseRedirects(urllib.request.HTTPRedirectHandler):
         raise LiveError(f"Refusing to follow a relay redirect to {newurl}.")
 
 
+class _UnixHTTPConnection(http.client.HTTPConnection):
+    """An HTTP connection over a Unix domain socket."""
+
+    def __init__(self, socket_path: str, *args: Any, **kwargs: Any) -> None:
+        super().__init__("localhost", *args, **kwargs)
+        self.socket_path = socket_path
+
+    def connect(self) -> None:
+        """Open the Unix socket instead of a TCP connection."""
+        sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        if self.timeout is not None and self.timeout is not socket._GLOBAL_DEFAULT_TIMEOUT:
+            sock.settimeout(self.timeout)
+        try:
+            sock.connect(self.socket_path)
+        except OSError:
+            sock.close()
+            raise
+        self.sock = sock
+
+
+class _UnixHTTPHandler(urllib.request.HTTPHandler):
+    """Send ``http://localhost`` requests over one Unix socket.
+
+    A subclass of ``HTTPHandler`` so ``build_opener`` uses it instead of the
+    default TCP handler rather than alongside it.
+    """
+
+    def __init__(self, socket_path: str) -> None:
+        super().__init__()
+        self.socket_path = socket_path
+
+    def http_open(self, req: urllib.request.Request) -> http.client.HTTPResponse:
+        """Open ``req`` on the relay's socket.
+
+        Args:
+            req: The request to send.
+
+        Returns:
+            The HTTP response.
+        """
+        return self.do_open(
+            lambda _host, **kwargs: _UnixHTTPConnection(self.socket_path, **kwargs), req
+        )
+
+
 class Relay:
     """One discovered desktop relay."""
 
-    def __init__(self, base_url: str, token: str) -> None:
+    def __init__(self, base_url: str, token: str, socket_path: str | None = None) -> None:
         parsed = _require_loopback(base_url)
         self.base_url = base_url.rstrip("/")
         self.token = token
         self.host = parsed.hostname or ""
         self.port = parsed.port or 80
+        self.socket_path = socket_path
 
     @property
     def redacted_url(self) -> str:
         """The relay URL with no token, safe to return to a model."""
+        if self.socket_path:
+            return f"unix:{self.socket_path}"
         host = f"[{self.host}]" if ":" in self.host else self.host
         path = urlparse(self.base_url).path or "/geolibre/relay"
         return f"http://{host}:{self.port}{path}"
@@ -192,7 +257,13 @@ class Relay:
         )
         # An empty ProxyHandler stops HTTP_PROXY from routing the token
         # through a proxy instead of straight to the loopback relay.
-        opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), _RefuseRedirects)
+        handlers: list[urllib.request.BaseHandler] = [
+            urllib.request.ProxyHandler({}),
+            _RefuseRedirects(),
+        ]
+        if self.socket_path:
+            handlers.append(_UnixHTTPHandler(self.socket_path))
+        opener = urllib.request.build_opener(*handlers)
         try:
             with opener.open(request, timeout=timeout) as response:
                 payload = json.loads(response.read().decode("utf-8"))
@@ -238,8 +309,8 @@ def command_timeout_seconds(method: str, requested: float | None = None) -> floa
 def discover() -> Relay | None:
     """Find the desktop relay, or None when Desktop has not started one.
 
-    ``GEOLIBRE_RELAY_URL`` wins when set. Next is the sidecar relay's discovery
-    file (:func:`sidecar_discovery_file`) when its pid is alive. Last, Jupyter
+    ``GEOLIBRE_RELAY_URL`` wins when set. Next are the desktop relay's
+    discovery files (:func:`discovery_files`) whose pid is alive. Last, Jupyter
     connection files for port 8766 whose ``root_dir`` is the desktop notebooks
     directory are candidates; a dead pid is skipped, and two live servers is an
     error (set the environment variable to pick one).
@@ -249,9 +320,10 @@ def discover() -> Relay | None:
         token = os.environ.get("GEOLIBRE_RELAY_TOKEN", "").strip()
         return Relay(_with_relay_path(explicit), token)
 
-    sidecar = _relay_from_sidecar_file(sidecar_discovery_file())
-    if sidecar is not None:
-        return sidecar
+    for path in discovery_files():
+        desktop = _relay_from_sidecar_file(path)
+        if desktop is not None:
+            return desktop
 
     found: list[Relay] = []
     for directory in runtime_directories():
@@ -280,17 +352,39 @@ def require() -> Relay:
 
 
 def sidecar_discovery_file() -> Path:
-    """Return where the desktop sidecar advertises its relay.
+    """Return where the desktop advertises its relay.
 
     Returns:
         ``GEOLIBRE_LIVE_RELAY_FILE`` when set, else
-        ``~/.geolibre/runtime/live-relay.json`` (written by the backend's
-        ``geolibre_server.app.relay``).
+        ``~/.geolibre/runtime/live-relay.json`` (written by the desktop shell's
+        ``live_relay.rs``, or by the processing sidecar in older releases).
     """
     override = os.environ.get(SIDECAR_DISCOVERY_ENV, "").strip()
     if override:
         return Path(override)
     return Path.home() / ".geolibre" / "runtime" / "live-relay.json"
+
+
+def discovery_files() -> list[Path]:
+    """Return every place a desktop relay may advertise itself, in order.
+
+    Returns:
+        :func:`sidecar_discovery_file`, then, on macOS without an override and
+        when the Mac App Store build is installed (its container exists), the
+        same file under that container's home. Reading inside another app's
+        container can raise a macOS privacy prompt, so users without the store
+        build never trigger it.
+    """
+    files = [sidecar_discovery_file()]
+    if sys.platform == "darwin" and not os.environ.get(SIDECAR_DISCOVERY_ENV, "").strip():
+        container = Path.home() / "Library" / "Containers" / MAS_BUNDLE_ID
+        try:
+            installed = container.is_dir()
+        except OSError:
+            installed = False
+        if installed:
+            files.append(container / "Data" / ".geolibre" / "runtime" / "live-relay.json")
+    return files
 
 
 def runtime_directories() -> list[Path]:
@@ -317,19 +411,61 @@ def _relay_from_sidecar_file(path: Path) -> Relay | None:
         return None
     if not isinstance(info, dict):
         return None
-    url = info.get("url")
     token = info.get("token")
+    unix = info.get("transport") == "unix"
+    # A Unix-socket record carries no dialable URL, so an older reader that
+    # ignores `transport` skips it instead of sending the token to port 80.
+    url = "http://localhost/relay" if unix else info.get("url")
     if not isinstance(url, str) or not isinstance(token, str) or not token:
         return None
     pid = info.get("pid")
     if not isinstance(pid, int) or not _pid_alive(pid):
         return None
+    socket_path: str | None = None
+    if unix:
+        socket_path = _unix_socket_beside(path, info.get("socket"))
+        if socket_path is None:
+            return None
     try:
         if not _loopback_host(url):
             return None
-        return Relay(url, token)
+        return Relay(url, token, socket_path)
     except (LiveError, ValueError):
         return None
+
+
+def _unix_socket_beside(discovery: Path, value: Any) -> str | None:
+    """Accept a relay socket only when it sits beside its discovery file.
+
+    The discovery file is owner-only, so a socket in the same directory was
+    created by the process that wrote it, not planted elsewhere.
+
+    Args:
+        discovery: The discovery file that named the socket.
+        value: The ``socket`` field it carries.
+
+    Returns:
+        The socket path, or None when it is missing, elsewhere, or not a socket.
+    """
+    if os.name == "nt" or not isinstance(value, str) or not value:
+        return None
+    candidate = Path(value)
+    if not candidate.is_absolute():
+        return None
+    try:
+        # A relative GEOLIBRE_LIVE_RELAY_FILE names the same directory the
+        # app resolved to an absolute socket path.
+        same_dir = candidate.parent.resolve() == discovery.parent.resolve()
+    except OSError:
+        return None
+    if not same_dir:
+        return None
+    try:
+        if not stat.S_ISSOCK(candidate.lstat().st_mode):
+            return None
+    except OSError:
+        return None
+    return str(candidate)
 
 
 def _relay_from_connection_file(path: Path) -> Relay | None:

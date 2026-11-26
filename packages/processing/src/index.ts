@@ -76,8 +76,11 @@ export {
   LocalNetwork,
   buildLocalNetwork,
   createNetworkSearchBudget,
+  getNetworkSearchEngine,
   MAX_NETWORK_ADJACENCY_VISITS,
+  NETWORK_SEARCH_CHUNK,
   parseDirection,
+  setNetworkSearchEngine,
   turnRulesActive,
   type LocalNetworkOptions,
   type NetworkCostMode,
@@ -85,11 +88,22 @@ export {
   type NetworkEdge,
   type NetworkPath,
   type NetworkSearchBudget,
+  type NetworkSearchEngine,
   type NetworkSearchOptions,
+  type NetworkSearchRun,
+  type NetworkSearchStop,
+  type NetworkSearchYield,
+  type SearchResult,
   type TurnRules,
   type TurnTableEntry,
   type UTurnPolicy,
 } from "./local-network";
+export {
+  createWasmNetworkEngine,
+  loadWasmNetworkEngine,
+  installWasmNetworkEngine,
+  type RoutingWasmModule,
+} from "./local-network-wasm";
 export {
   STATISTICS_TOOLS,
   getStatisticsTool,
@@ -242,6 +256,17 @@ export {
   type TransitionParams,
 } from "./raster-change";
 export {
+  cutFill,
+  cellAreasByRow,
+  formatCutFillSummary,
+  isGeographicRaster,
+  projectedAreaScale,
+  projectedMetersPerUnit,
+  CUT_FILL_NODATA,
+  type CutFillParams,
+  type CutFillSummary,
+} from "./raster-volume";
+export {
   sarDbConvert,
   speckleFilter,
   dualPolRgb,
@@ -318,7 +343,6 @@ export {
   LOCAL_SIDECAR_URL,
   checkSidecarHealth,
   setSidecarAuthToken,
-  setSidecarRelayAccess,
   setSidecarFetch,
   clearRemoteWhiteboxCatalogSnapshotCache,
   cancelConversionJob,
@@ -575,14 +599,25 @@ export {
   type ViewshedResult,
 } from "./terrain-viewshed";
 export {
-  computeLineOfSight,
   curvatureDrop,
+  horizonDistance,
+  resolveCurvature,
+  DEFAULT_REFRACTION_COEFFICIENT,
+  EARTH_RADIUS_METERS,
+  MAX_EARTH_RADIUS_METERS,
+  MAX_REFRACTION_COEFFICIENT,
+  MIN_EARTH_RADIUS_METERS,
+  MIN_REFRACTION_COEFFICIENT,
+  type CurvatureOptions,
+  type ResolvedCurvature,
+} from "./earth-curvature";
+export {
+  computeLineOfSight,
   fetchLineOfSightProfile,
   greatCircleDistance,
   sampleGreatCircleProfile,
   DEFAULT_LOS_OBSERVER_HEIGHT_METERS,
   DEFAULT_LOS_TARGET_HEIGHT_METERS,
-  DEFAULT_REFRACTION_COEFFICIENT,
   MAX_LINE_OF_SIGHT_METERS,
   MIN_LINE_OF_SIGHT_METERS,
   type LineOfSightOptions,
