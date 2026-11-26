@@ -145,6 +145,11 @@ export function localTimeToUtc(date: string, time: string, utcOffsetHours: numbe
   if (!tm) throw new Error(`Enter the time as HH:MM (got "${time}").`);
   const [year, month, day] = [Number(d[1]), Number(d[2]), Number(d[3])];
   const [hour, minute] = [Number(tm[1]), Number(tm[2])];
+  // Date.UTC maps years 0-99 to 1900-1999, and the solar series is only
+  // valid for 1800-2100 anyway, so reject anything outside that.
+  if (year < 1800 || year > 2100) {
+    throw new Error(`The year must be between 1800 and 2100 (got ${year}).`);
+  }
   const probe = new Date(Date.UTC(year, month - 1, day));
   if (probe.getUTCMonth() !== month - 1 || probe.getUTCDate() !== day) {
     throw new Error(`"${date}" is not a calendar date.`);

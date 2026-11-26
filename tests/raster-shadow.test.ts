@@ -218,9 +218,17 @@ describe("buildingShadows", () => {
     const band = raster.bands[0];
     // The north-west corner of the grid is 30 m from the building.
     near(band[0], 12, 0.5, "open ground");
-    // Right next to the west wall the morning sun is blocked for hours.
-    const minimum = Math.min(...Array.from(band).filter((_, i) => band[i] > 0));
-    assert.ok(minimum < band[0] - 2, "ground beside the building loses hours");
+    // The ground cell just west of the west wall, halfway up it, loses the
+    // afternoon sun to the building.
+    const grid = buildHeightGrid([box(0, 0, 10, 10, 10)], { cell_size: 1, margin: 30 });
+    const [west, , , north] = grid.bbox;
+    const resX = (grid.bbox[2] - west) / grid.width;
+    const resY = (north - grid.bbox[1]) / grid.height;
+    const col = Math.floor((-0.5 * M - west) / resX);
+    const row = Math.floor((north - 5 * M) / resY);
+    const beside = row * grid.width + col;
+    assert.equal(grid.heights[beside], 0, "a ground cell");
+    assert.ok(band[beside] < band[0] - 3, `beside the wall: ${band[beside]} h vs ${band[0]} h`);
   });
 
   it("integrates insolation consistently with a fine reference sum", () => {
@@ -364,5 +372,97 @@ describe("geometric versus apparent elevation", () => {
     const sun = sunPosition(Date.parse("2026-09-23T06:30:00Z"), 51.5, -0.12);
     assert.ok(sun.elevation - sun.geometricElevation > 0.1, "about 0.15° of refraction near 6°");
     assert.ok(sun.elevation - sun.geometricElevation < 0.25);
+  });
+});
+
+describe("review hardening", () => {
+  it("traces every cell the roof ray crosses", () => {
+    // 2 x 2 grid of 1 m cells: a 1 m roof bottom-left, a 10 m roof
+    // bottom-right. Toward a sun along (0.8, -0.6) in grid space at 45°, the
+    // ray from the low roof's centre crosses the tall cell between 0.625 and
+    // 0.833 m, where fixed 0.5 m samples would miss it.
+    const grid = {
+      width: 2,
+      height: 2,
+      heights: Float32Array.from([0, 0, 1, 10]),
+      cellSize: 1,
+      buildings: [],
+      maxHeight: 10,
+      bbox: [0, 0, 1, 1] as [number, number, number, number],
+      lat0: 0,
+      lon0: 0,
+    };
+    const mask = new Uint8Array(4);
+    castShadows(grid, (Math.atan2(0.8, 0.6) * 180) / Math.PI, 45, mask);
+    assert.equal(mask[2], 1, "the low roof is shaded by its tall neighbour");
+  });
+
+  it("counts wall-sweep visits against the budget", () => {
+    const grid = buildHeightGrid([box(0, 0, 20, 20, 30)], { cell_size: 1, margin: 50 });
+    const mask = new Uint8Array(grid.width * grid.height);
+    assert.throws(() => castShadows(grid, 180, 10, mask, 50), /taking too long/);
+  });
+
+  it("caps a day at 24 hours when the step does not divide it", () => {
+    // Midsummer at 75°N: the sun never sets, so open ground gets exactly 24 h.
+    const arctic = buildingShadows(
+      [
+        {
+          type: "Feature",
+          properties: { height: 10 },
+          geometry: {
+            type: "Polygon",
+            coordinates: [
+              [
+                [0, 75],
+                [0.0003, 75],
+                [0.0003, 75.0001],
+                [0, 75.0001],
+                [0, 75],
+              ],
+            ],
+          },
+        },
+      ],
+      { mode: "sun-hours", date: "2026-06-21", cell_size: 2, margin: 20, step_minutes: 115 },
+    );
+    near(arctic.raster.bands[0][0], 24, 1e-5, "a full day, not 24.9 h");
+  });
+
+  it("rejects years outside the solar model's range", () => {
+    assert.throws(() => localTimeToUtc("0099-06-21", "12:00", 0), /between 1800 and 2100/);
+  });
+
+  it("ignores non-string, non-number heights and validates the storey height", () => {
+    assert.equal(buildingHeight({ height: [25], "building:levels": 2 }, {}), 6);
+    assert.equal(buildingHeight({ height: { toString: null }, "building:levels": 2 }, {}), 6);
+    assert.throws(
+      () => buildingHeight({ "building:levels": 2 }, { level_height: -3 }),
+      /storey height/,
+    );
+    assert.throws(
+      () => buildHeightGrid([box(0, 0, 10, 10, 10)], { cell_size: Infinity }),
+      /finite/,
+    );
+  });
+
+  it("keeps a footprint split at the antimeridian local", () => {
+    const part = (a: number, b: number) => [
+      [a, 0],
+      [b, 0],
+      [b, 0.0001],
+      [a, 0.0001],
+      [a, 0],
+    ];
+    const split: Feature = {
+      type: "Feature",
+      properties: { height: 10 },
+      geometry: {
+        type: "MultiPolygon",
+        coordinates: [[part(179.9999, 180)], [part(-180, -179.9999)]],
+      },
+    };
+    const grid = buildHeightGrid([split], { cell_size: 1, margin: 10 });
+    assert.ok(grid.width < 60, `a ~22 m wide building plus margins, got ${grid.width} cells`);
   });
 });

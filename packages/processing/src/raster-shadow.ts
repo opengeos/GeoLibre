@@ -50,12 +50,13 @@ export const MAX_SHADOW_CELLS = 4_000_000;
 export const MAX_SHADOW_WORK = 100_000_000;
 
 /**
- * Most roof-walk samples one run may take before it stops. The walk's length
- * depends on the skyline, so it cannot be bounded up front the way
- * {@link MAX_SHADOW_WORK} bounds the cell passes; it is counted inside the
- * walk instead, so even a single sun position cannot run away. The Midtown
- * Manhattan example takes about 1 billion over a solstice day at 15-minute
- * steps (roughly 8 s), so the cap leaves it about 2x headroom.
+ * Most cell visits one run may make, counting every cell a wall sweep paints
+ * (overlaps included) and every cell a roof trace crosses. Both depend on the
+ * skyline, so they cannot be bounded up front the way {@link MAX_SHADOW_WORK}
+ * bounds the cell passes; they are counted as they happen instead, so even a
+ * single sun position cannot run away. The Midtown Manhattan example makes
+ * about 620 million over a solstice day at 15-minute steps (roughly 6 s), so
+ * the cap leaves it about 3x headroom.
  */
 export const MAX_ROOF_WALK_SAMPLES = 2_000_000_000;
 
@@ -167,13 +168,20 @@ export function buildingHeight(
   const read = (key: string | undefined): number | null => {
     if (!key || !properties) return null;
     const raw = properties[key];
-    const n = typeof raw === "number" ? raw : parseLength(String(raw ?? ""));
+    // External GeoJSON: only numbers and strings are heights.
+    const n = typeof raw === "number" ? raw : typeof raw === "string" ? parseLength(raw) : null;
     return n != null && Number.isFinite(n) && n > 0 ? n : null;
   };
   const h = read(params.height_field ?? "height");
   if (h != null) return h;
   const levels = read(params.levels_field ?? "building:levels");
-  if (levels != null) return levels * (Number(params.level_height) || 3);
+  if (levels != null) {
+    const levelHeight = params.level_height == null ? 3 : Number(params.level_height);
+    if (!(Number.isFinite(levelHeight) && levelHeight > 0)) {
+      throw new Error("The storey height must be greater than zero.");
+    }
+    return levels * levelHeight;
+  }
   const fallback = Number(params.default_height ?? 10);
   return Number.isFinite(fallback) && fallback > 0 ? fallback : 10;
 }
@@ -227,7 +235,9 @@ export function fillPolygon(
  */
 export function buildHeightGrid(features: Feature[], params: BuildingShadowParams): HeightGrid {
   const cellSize = Number(params.cell_size ?? 2);
-  if (!(cellSize > 0)) throw new Error("The cell size must be greater than zero.");
+  if (!(Number.isFinite(cellSize) && cellSize > 0)) {
+    throw new Error("The cell size must be a finite number greater than zero.");
+  }
   const margin = Math.max(0, Number(params.margin ?? 100) || 0);
   const polys: { rings: Position[][]; height: number }[] = [];
   let west = Infinity;
@@ -248,6 +258,21 @@ export function buildHeightGrid(features: Feature[], params: BuildingShadowParam
     }
   }
   if (!polys.length) throw new Error("The buildings layer has no polygon footprints.");
+  // Footprints split at the antimeridian (RFC 7946) span ~360° numerically;
+  // shift the western-hemisphere parts by +360° so the extent stays local.
+  let shiftLon = (lon: number) => lon;
+  if (east - west > 180) {
+    shiftLon = (lon: number) => (lon < 0 ? lon + 360 : lon);
+    west = Infinity;
+    east = -Infinity;
+    for (const poly of polys) {
+      for (const [lon] of poly.rings[0]) {
+        const shifted = shiftLon(lon);
+        if (shifted < west) west = shifted;
+        if (shifted > east) east = shifted;
+      }
+    }
+  }
   const lat0 = (south + north) / 2;
   const lon0 = (west + east) / 2;
   const { lat: mPerDegLat, lon: mPerDegLon } = metersPerDegree(lat0);
@@ -263,7 +288,7 @@ export function buildHeightGrid(features: Feature[], params: BuildingShadowParam
     );
   }
   const toCell = ([lon, lat]: Position): Position => [
-    ((lon - gWest) * mPerDegLon) / cellSize,
+    ((shiftLon(lon) - gWest) * mPerDegLon) / cellSize,
     ((gNorth - lat) * mPerDegLat) / cellSize,
   ];
   const heights = new Float32Array(width * height);
@@ -299,9 +324,10 @@ export function buildHeightGrid(features: Feature[], params: BuildingShadowParam
  * @param azimuth - Sun azimuth, degrees clockwise from north.
  * @param elevation - Sun elevation, degrees (must be above the horizon).
  * @param out - Reused mask: 1 shadowed, 0 lit; cleared first.
- * @param sampleBudget - Most roof-walk samples this call may take.
- * @returns The number of roof-walk samples taken, for work accounting.
- * @throws When the roof walk exceeds `sampleBudget`.
+ * @param sampleBudget - Most cell visits (wall sweeps plus roof traces)
+ *   this call may make.
+ * @returns The number of cell visits made, for work accounting.
+ * @throws When the visits exceed `sampleBudget`.
  */
 export function castShadows(
   grid: HeightGrid,
@@ -317,12 +343,15 @@ export function castShadows(
   // Unit vector toward the sun in cell space: x east, y south (rows grow down).
   const sunX = Math.sin(az);
   const sunY = -Math.cos(az);
-  // Ground: footprint plus the edge sweeps, offset away from the sun.
+  // Ground: footprint plus the edge sweeps, offset away from the sun. Every
+  // cell a sweep visits counts against the budget, overlaps included.
+  let work = 0;
   for (const building of grid.buildings) {
     const length = building.height / tanEl / cellSize;
     const ox = -sunX * length;
     const oy = -sunY * length;
     const markGround = (i: number) => {
+      work += 1;
       if (heights[i] === 0) out[i] = 1;
     };
     // Every wall casts, courtyard (hole) walls included.
@@ -344,34 +373,53 @@ export function castShadows(
           height,
           markGround,
         );
+        if (work > sampleBudget) throw new Error(ROOF_WALK_BUDGET_MESSAGE);
       }
     }
   }
-  // Roofs: walk toward the sun until the ray clears the tallest building.
-  const step = 0.5;
-  let samples = 0;
+  // Roofs: trace the ray toward the sun cell by cell (Amanatides-Woo), so no
+  // crossed cell is skipped, until it clears the tallest building or leaves
+  // the grid. A crossed cell shades the roof when it rises above the ray at
+  // the point the ray enters it.
+  const stepX = sunX > 0 ? 1 : -1;
+  const stepY = sunY > 0 ? 1 : -1;
+  const tDeltaX = sunX !== 0 ? Math.abs(1 / sunX) : Infinity;
+  const tDeltaY = sunY !== 0 ? Math.abs(1 / sunY) : Infinity;
+  const rise = cellSize * tanEl;
   for (let row = 0; row < height; row += 1) {
     for (let col = 0; col < width; col += 1) {
       const i = row * width + col;
       const h0 = heights[i];
       if (h0 === 0) continue;
-      const maxDistance = (grid.maxHeight - h0) / tanEl / cellSize;
-      const x0 = col + 0.5;
-      const y0 = row + 0.5;
-      for (let d = step; d <= maxDistance; d += step) {
-        samples += 1;
-        if (samples > sampleBudget) throw new Error(ROOF_WALK_BUDGET_MESSAGE);
-        const c = Math.floor(x0 + sunX * d);
-        const r = Math.floor(y0 + sunY * d);
+      const maxDistance = (grid.maxHeight - h0) / rise;
+      let c = col;
+      let r = row;
+      // From the cell centre, the first boundary is half a cell away.
+      let tMaxX = sunX !== 0 ? 0.5 * tDeltaX : Infinity;
+      let tMaxY = sunY !== 0 ? 0.5 * tDeltaY : Infinity;
+      for (;;) {
+        let tEntry: number;
+        if (tMaxX < tMaxY) {
+          tEntry = tMaxX;
+          tMaxX += tDeltaX;
+          c += stepX;
+        } else {
+          tEntry = tMaxY;
+          tMaxY += tDeltaY;
+          r += stepY;
+        }
+        if (tEntry > maxDistance) break;
         if (c < 0 || r < 0 || c >= width || r >= height) break;
-        if (heights[r * width + c] > h0 + d * cellSize * tanEl) {
+        work += 1;
+        if (work > sampleBudget) throw new Error(ROOF_WALK_BUDGET_MESSAGE);
+        if (heights[r * width + c] > h0 + tEntry * rise) {
           out[i] = 1;
           break;
         }
       }
     }
   }
-  return samples;
+  return work;
 }
 
 /**
@@ -448,11 +496,16 @@ export function buildingShadows(
     const midnight = localTimeToUtc(date, "00:00", offset);
     // Count the daylight samples first, so an oversized run fails up front
     // instead of freezing the tab.
+    // Intervals of `step` minutes tiling the day, the last one clipped at
+    // midnight; each is sampled at its midpoint and weighted by its length.
+    const intervals: { mid: number; minutes: number }[] = [];
+    for (let start = 0; start < 1440; start += step) {
+      const end = Math.min(start + step, 1440);
+      intervals.push({ mid: (start + end) / 2, minutes: end - start });
+    }
     let daylight = 0;
-    for (let minute = step / 2; minute < 1440; minute += step) {
-      if (
-        sunPosition(midnight + minute * 60_000, lat0, lon0).elevation >= MIN_SUN_ELEVATION_DEGREES
-      )
+    for (const { mid } of intervals) {
+      if (sunPosition(midnight + mid * 60_000, lat0, lon0).elevation >= MIN_SUN_ELEVATION_DEGREES)
         daylight += 1;
     }
     if (daylight * cells > MAX_SHADOW_WORK) {
@@ -465,8 +518,7 @@ export function buildingShadows(
     let lastUp: number | null = null;
     let positions = 0;
     let maxElevation = -90;
-    // Midpoint sampling: each sample stands for the `step` minutes around it.
-    for (let minute = step / 2; minute < 1440; minute += step) {
+    for (const { mid: minute, minutes } of intervals) {
       const instant = midnight + minute * 60_000;
       const sun = sunPosition(instant, lat0, lon0);
       if (sun.elevation > maxElevation) maxElevation = sun.elevation;
@@ -483,8 +535,8 @@ export function buildingShadows(
       );
       const weight =
         mode === "sun-hours"
-          ? step / 60
-          : (clearSkyDni(sun.elevation) * Math.sin(sun.elevation * (Math.PI / 180)) * step) /
+          ? minutes / 60
+          : (clearSkyDni(sun.elevation) * Math.sin(sun.elevation * (Math.PI / 180)) * minutes) /
             60 /
             1000;
       for (let i = 0; i < cells; i += 1) if (!mask[i]) band[i] += weight;
