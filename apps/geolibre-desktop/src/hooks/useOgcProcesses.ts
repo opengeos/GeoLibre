@@ -231,8 +231,11 @@ export function useOgcProcesses(open: boolean) {
   ) => {
     context.commit(() => {
       setPhase("monitoring");
-      setOutputs([]);
-      setOutputSourceUrl("");
+      const target = typeof initial === "string" ? initial : initial.url;
+      if (!sameOgcProcessJob(outputSourceUrl, target)) {
+        setOutputs([]);
+        setOutputSourceUrl("");
+      }
     });
     let sourceUrl = typeof initial === "string" ? initial : initial.url;
     let owningProcessUrl = processUrl;

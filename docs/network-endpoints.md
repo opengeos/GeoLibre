@@ -237,8 +237,9 @@ A configured proxy resolves the destination itself, so GeoLibre cannot verify
 the address that proxy ultimately contacts. The proxy is therefore a trusted
 network component and must enforce the same destination-address policy on
 initial requests, redirects, and DNS resolution changes: block link-local and
-cloud-metadata addresses, unspecified addresses, multicast, and broadcast
-destinations. Loopback and private/LAN services are intentionally supported by
+cloud-metadata addresses, unspecified addresses, multicast, and the limited
+broadcast address `255.255.255.255`. Subnet-directed broadcasts are not blocked
+by this policy. Loopback and private/LAN services are intentionally supported by
 GeoLibre. An untrusted proxy or one without the required filtering invalidates
 the DNS-rebinding protection for proxied requests. This is an operator
 deployment requirement, not a guarantee enforced by the desktop resolver.

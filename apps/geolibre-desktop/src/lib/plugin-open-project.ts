@@ -6,7 +6,7 @@ import {
   s3ObjectHttpsUrl,
   useAppStore,
 } from "@geolibre/core";
-import { readLimitedBody } from "../components/layout/add-data/helpers";
+import { readLimitedBody } from "./bounded-response";
 import { fetchUrlBytes } from "./native-http";
 import { isTauri } from "./tauri-io";
 import { resolveProjectXyzLayers } from "./xyz-url";

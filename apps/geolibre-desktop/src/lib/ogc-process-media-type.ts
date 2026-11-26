@@ -29,6 +29,7 @@ export function parseProcessMediaType(
   if (!/^[!#$%&'*+.^_`|~\w-]+\/[!#$%&'*+.^_`|~\w-]+$/.test(base)) return undefined;
   const parameters = new Map<string, string>();
   for (const part of parts) {
+    if (!part.trim()) continue;
     const match =
       /^\s*([!#$%&'*+.^_`|~\w-]+)\s*=\s*(?:"((?:[^"\\]|\\.)*)"|([!#$%&'*+.^_`|~\w-]+))\s*$/.exec(
         part,

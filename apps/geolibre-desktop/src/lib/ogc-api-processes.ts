@@ -9,6 +9,7 @@ import {
 } from "./ogc-process-limits";
 import { parseProcessMediaType } from "./ogc-process-media-type";
 import { decodeProcessBase64 } from "./ogc-process-base64";
+import { multipartBytes } from "./multipart-bytes";
 
 type JsonObject = Record<string, unknown>;
 interface ProcessLink {
@@ -311,19 +312,19 @@ export async function resolveOgcProcessJobContext(
   signal: AbortSignal,
 ): Promise<OgcProcessJob> {
   if (current.outputDefinitions) return current;
-  let url = current.processUrl;
-  if (!url && current.processId) {
-    const target = processHttpUrl(current.url);
-    if (/\/jobs\/[^/]+\/?$/.test(target.pathname)) {
-      target.pathname = target.pathname.replace(
-        /\/jobs\/[^/]+\/?$/,
-        `/processes/${encodeURIComponent(current.processId)}`,
-      );
-      url = target.href;
-    }
-  }
-  if (!url) return current;
   try {
+    let url = current.processUrl;
+    if (!url && current.processId) {
+      const target = processHttpUrl(current.url);
+      if (/\/jobs\/[^/]+\/?$/.test(target.pathname)) {
+        target.pathname = target.pathname.replace(
+          /\/jobs\/[^/]+\/?$/,
+          `/processes/${encodeURIComponent(current.processId)}`,
+        );
+        url = target.href;
+      }
+    }
+    if (!url) return current;
     const response = await processHttp(jsonUrl(url), signal);
     successful(response);
     const description = processDocument(decode(response), response.url);
@@ -387,7 +388,7 @@ function outputFormat(
     // OGC Processes Core Requirement 54 makes the first oneOf format the default.
     if (Array.isArray(value.oneOf) && !selectedMediaType)
       return formats[0].mediaType || !mediaType ? formats[0] : { ...formats[0], mediaType };
-    if (formats.every((format) => format.encoding === "base64"))
+    if (!selectedMediaType && formats.every((format) => format.encoding === "base64"))
       return {
         encoding: "base64",
         mediaType: formats.every((format) => format.mediaType === formats[0].mediaType)
@@ -403,6 +404,56 @@ function outputs(
   outputIds?: readonly string[],
   definitions?: OgcProcess["outputs"],
 ): OgcProcessOutput[] {
+  if (/^multipart\//i.test(response.contentType?.trim() ?? "")) {
+    try {
+      const boundary = parseProcessMediaType(response.contentType!)?.parameters.get("boundary");
+      if (!boundary) throw new OgcProcessError("invalidDocument");
+      return multipartBytes(response.body, boundary).map(
+        ({ headers, body }, index): OgcProcessOutput => {
+          const rawId = headers.get("content-id");
+          const id = rawId?.replace(/^<(.*)>$/, "$1") || `result-${index + 1}`;
+          const mediaType =
+            headers.get("content-type") ??
+            outputFormat(definitions?.[id]).mediaType ??
+            "application/octet-stream";
+          const location = headers.get("content-location");
+          if (location && !body.length) {
+            const href = optionalLink(location, response.url);
+            return href
+              ? { id, href, mediaType }
+              : {
+                  id,
+                  value: { href: location },
+                  mediaType: "application/json",
+                  warning: "invalidReference",
+                };
+          }
+          const encoding = headers.get("content-transfer-encoding")?.toLowerCase();
+          try {
+            if (encoding && !["binary", "8bit", "7bit", "base64"].includes(encoding))
+              throw new Error("Unsupported MIME encoding");
+            return {
+              id,
+              mediaType,
+              bytes:
+                encoding === "base64" ? decodeProcessBase64(new TextDecoder().decode(body)) : body,
+            };
+          } catch {
+            return { id, mediaType, bytes: body, warning: "invalidDocument" };
+          }
+        },
+      );
+    } catch {
+      return [
+        {
+          id: "result",
+          bytes: response.body,
+          mediaType: response.contentType ?? "application/octet-stream",
+          warning: "invalidDocument",
+        },
+      ];
+    }
+  }
   if (!response.body.length) {
     const references = ogcProcessHeaderLinks(response.link)
       .filter(
@@ -608,12 +659,11 @@ export async function executeOgcProcess(
         /* Missing routing is reported below, without exposing a JSON parser error. */
       }
       const jobs = linked(process.links, REL + "job-list", process.url);
-      if (jobs && typeof document.jobID === "string")
+      fallback =
+        linked(links(document.links), "status", response.url) ??
+        linked(links(document.links), "self", response.url);
+      if (!fallback && jobs && typeof document.jobID === "string")
         fallback = append(jobs, `/${encodeURIComponent(document.jobID)}`);
-      else
-        fallback =
-          linked(links(document.links), "status", response.url) ??
-          linked(links(document.links), "self", response.url);
     }
     if (!fallback) throw new OgcProcessError("noStatusUrl");
     if (response.body.length) {
@@ -673,6 +723,7 @@ export async function readOgcProcessResults(
 ): Promise<OgcProcessOutput[]> {
   const response = await processHttp(job.resultsUrl, signal, {
     maxBytes: MAX_PROCESS_RESULT_BYTES,
+    accept: "application/json, */*;q=0.9",
   });
   successful(response);
   return outputs(response, job.outputIds, job.outputDefinitions);

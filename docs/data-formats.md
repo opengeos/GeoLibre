@@ -246,6 +246,12 @@ process identifier.
 Empty HTTP 200 raw results remain downloadable. When a sole advertised object
 output makes a JSON response ambiguous, **Complete JSON response** provides the
 original download alongside parsed outputs, preserving their identifiers.
+Multipart job results expose each part by its advertised output identifier,
+including binary GeoTIFF values and explicit `Content-Location` references.
+MIME framing is parsed without decoding raster bytes as text. Responses retain
+the 128 MiB limit, with at most 5,000 parts and 16 KiB of headers per part;
+malformed envelopes remain downloadable with a warning. Resuming the same job
+keeps its accepted outputs until a successful refresh replaces them.
 Monitoring honors bounded `Retry-After` values and stops after 30
 minutes; the job URL can be used to resume. Closing and reopening retains
 dialog state in the current session. Changing projects clears inputs, job

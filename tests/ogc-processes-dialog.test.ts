@@ -1125,6 +1125,78 @@ test("a completed synchronous job retains its advertised output context when res
   assert.equal(posts, 1);
 });
 
+for (const outcome of ["failure", "stop"] as const) {
+  test(`resuming the same job preserves accepted outputs after ${outcome}`, async () => {
+    let posts = 0,
+      refresh = false,
+      pending = false;
+    const data = {
+      type: "FeatureCollection",
+      features: [
+        {
+          type: "Feature",
+          properties: { retained: true },
+          geometry: { type: "Point", coordinates: [3, 4] },
+        },
+      ],
+    };
+    serve(async (url, init) => {
+      if (init?.method === "POST") {
+        posts++;
+        return new Response(
+          JSON.stringify({ echo: { value: data, mediaType: "application/geo+json" } }),
+          { headers: { "Content-Type": "application/json", Location: "/master/jobs/snapshot" } },
+        );
+      }
+      if (refresh) {
+        if (outcome === "failure" || url.includes("/other"))
+          return new Response("{}", { status: 503 });
+        pending = true;
+        return new Promise<Response>((_resolve, reject) =>
+          init?.signal?.addEventListener("abort", () => reject(init.signal?.reason), {
+            once: true,
+          }),
+        );
+      }
+      return new Response(JSON.stringify({ jobID: "snapshot", status: "successful" }), {
+        headers: { "Content-Type": "application/json" },
+      });
+    });
+    await form();
+    fireEvent.click(screen.getByRole("button", { name: "Run process" }));
+    await waitFor(() => assert.ok(screen.queryByRole("button", { name: "Add to map" })));
+    await waitFor(() =>
+      assert.equal(
+        screen.getByRole("button", { name: "Resume monitoring" }).hasAttribute("disabled"),
+        false,
+      ),
+    );
+    refresh = true;
+    fireEvent.click(screen.getByRole("button", { name: "Resume monitoring" }));
+    if (outcome === "stop") {
+      await waitFor(() => assert.equal(pending, true));
+      fireEvent.click(screen.getByRole("button", { name: "Stop waiting" }));
+    } else await waitFor(() => assert.match(screen.getByRole("alert").textContent ?? "", /503/));
+    await waitFor(() =>
+      assert.equal(
+        screen.getByRole("button", { name: "Add to map" }).hasAttribute("disabled"),
+        false,
+      ),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Add to map" }));
+    await waitFor(() => assert.equal(useAppStore.getState().layers.length, 1));
+    assert.deepEqual(useAppStore.getState().layers[0].geojson, data);
+    assert.match(String(useAppStore.getState().layers[0].metadata.sourceUrl), /\/jobs\/snapshot/);
+    fireEvent.change(screen.getByLabelText("Job status URL"), {
+      target: { value: "https://demo.pygeoapi.io/master/jobs/other" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Resume monitoring" }));
+    await waitFor(() => assert.match(screen.getByRole("alert").textContent ?? "", /503/));
+    assert.equal(screen.queryByRole("button", { name: "Add to map" }) === null, true);
+    assert.equal(posts, 1);
+  });
+}
+
 test("the owning monitor can replace its status URL with the canonical redirect target", async () => {
   let deleted = "";
   let posts = 0;

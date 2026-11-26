@@ -1,5 +1,5 @@
 import { OgcProcessError } from "./ogc-process-errors";
-import { readLimitedBody } from "../components/layout/add-data/helpers";
+import { readLimitedBody } from "./bounded-response";
 import { isTauri } from "./is-tauri";
 import { normalizeFetchError } from "./ogc-json";
 import { waitForWcsRequest } from "./wcs";

@@ -5,6 +5,7 @@ import type { IncomingHttpHeaders } from "node:http";
 import { createRequire } from "node:module";
 import type { AddressInfo } from "node:net";
 import { test } from "node:test";
+import { setTimeout as delay } from "node:timers/promises";
 import { proxyOgcProcessRequest } from "../apps/geolibre-desktop/vite-ogc-process-proxy";
 import { MAX_PROCESS_INPUT_BYTES } from "../apps/geolibre-desktop/src/lib/ogc-process-limits";
 
@@ -141,7 +142,17 @@ test("a body-limit failure preserves acknowledgement headers queued in a real so
       (response) => ({ response, error: undefined }),
       (error) => ({ response: undefined, error }),
     );
-    await handled;
+    const deadline = new AbortController();
+    try {
+      await Promise.race([
+        handled,
+        delay(5000, undefined, { signal: deadline.signal }).then(() => {
+          throw new Error("Proxy handler did not settle");
+        }),
+      ]);
+    } finally {
+      deadline.abort();
+    }
     done.release?.();
     const result = await received;
     assert.ok(result.response, String(result.error));
@@ -151,8 +162,9 @@ test("a body-limit failure preserves acknowledgement headers queued in a real so
     assert.equal(writes, 1);
   } finally {
     done.release?.();
-    await delegate.close();
     proxy.closeAllConnections();
+    upstream.closeAllConnections();
+    await delegate.destroy();
     proxy.close();
     upstream.close();
     await Promise.all([once(proxy, "close"), once(upstream, "close")]);
@@ -259,7 +271,7 @@ test("process proxy preserves execution/job controls, redirect methods and respo
           hostname: "127.0.0.1",
           port,
           method,
-          path: `/proxy?url=${encodeURIComponent(`https://process.example${path}`)}`,
+          path: `/proxy?url=${encodeURIComponent(new URL(path, "https://process.example").href)}`,
           headers: { "content-type": "application/json", ...headers },
         },
         (res) => {
@@ -334,6 +346,16 @@ test("process proxy preserves execution/job controls, redirect methods and respo
     assert.equal((await send("GET", "/private")).status, 502);
     upstream.assertNoPendingInterceptors();
     const before = dispatches;
+    for (const [url, reason] of [
+      ["http://localhost/", /private\/reserved/],
+      ["https://process.example:8443/", /non-default port/],
+      ["https://private-user:private-password@process.example/", /credentials/],
+    ] as const) {
+      const rejected = await send("GET", url);
+      assert.equal(rejected.status, 400);
+      assert.match(rejected.body, reason);
+      assert.equal(rejected.body.includes("private-password"), false);
+    }
     for (const [method, payload, headers, expected, chunked] of [
       ["PUT", undefined, {}, 405, false],
       ["POST", "{}", { "content-type": "text/plain" }, 415, false],

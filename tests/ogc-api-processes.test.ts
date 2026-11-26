@@ -955,6 +955,141 @@ test("zero-byte raw HTTP 200 outputs remain downloadable while empty 204 has no 
   assert.deepEqual(await readOgcProcessResults(job, signal), []);
 });
 
+test("mixed multipart results preserve real TIFF samples, part IDs and explicit references", async () => {
+  const signal = new AbortController().signal;
+  serve(() => ({ jobID: "one", status: "successful" }));
+  const job = await readOgcProcessJob("https://example.org/api/jobs/one?token=secret", signal);
+  const raster = new Uint8Array(
+    readFileSync(new URL("./fixtures/ogc-processes/gdps-striped-float64.tif", import.meta.url)),
+  );
+  const boundary = "process-output";
+  const message = Buffer.concat([
+    Buffer.from(
+      `Preamble\r\n--${boundary}\r\nContent-ID: <dem>\r\nContent-Type: image/tiff\r\n\r\n`,
+    ),
+    raster,
+    Buffer.from(
+      `\r\n--${boundary}\r\nContent-ID: report\r\nContent-Type: application/json\r\nContent-Location: ../../reports/report.json\r\n\r\n\r\n--${boundary}\r\nContent-ID: label\r\nContent-Type: text/plain\r\nContent-Transfer-Encoding: base64\r\n\r\ndGV4dA==\r\n--${boundary}--\r\nEpilogue`,
+    ),
+  ]);
+  const calls = serve((url, init) =>
+    url.includes("/reports/")
+      ? { mean: 1.25 }
+      : !new Headers(init?.headers).get("accept")?.includes("*/*")
+        ? new Response("No raw result format accepted", { status: 406 })
+        : new Response(message, {
+            headers: { "Content-Type": `multipart/related; boundary="${boundary}";` },
+          }),
+  );
+  const result = await readOgcProcessResults(job, signal);
+  assert.deepEqual(
+    result.map((output) => output.id),
+    ["dem", "report", "label"],
+  );
+  assert.equal(calls.length, 1, "references must not be fetched while parsing");
+  assert.equal(canImportOgcProcessOutput(result[0]), true);
+  assert.deepEqual(
+    new Uint8Array(await (await downloadOgcProcessOutput(result[0], signal)).arrayBuffer()),
+    raster,
+  );
+  const original = await (await fromArrayBuffer(raster.buffer)).getImage();
+  const decoded = await (
+    await fromArrayBuffer(await (await downloadOgcProcessOutput(result[0], signal)).arrayBuffer())
+  ).getImage();
+  assert.deepEqual(
+    Array.from((await decoded.readRasters())[0]),
+    Array.from((await original.readRasters())[0]),
+  );
+  assert.equal(result[1].href, "https://example.org/api/reports/report.json?token=secret");
+  assert.deepEqual(JSON.parse(await (await downloadOgcProcessOutput(result[1], signal)).text()), {
+    mean: 1.25,
+  });
+  assert.equal(await (await downloadOgcProcessOutput(result[2], signal)).text(), "text");
+});
+
+test("malformed multipart framing remains downloadable without losing accepted response bytes", async () => {
+  const process = await processDescription();
+  const original = "--broken\r\nContent-ID: dem\r\nContent-Type: image/tiff\r\n\r\ntruncated";
+  serve(
+    () =>
+      new Response(original, { headers: { "Content-Type": "multipart/related; boundary=broken" } }),
+  );
+  const signal = new AbortController().signal;
+  const result = await executeOgcProcess(process, {}, signal);
+  if (result.kind !== "results") throw Error("Expected completed response");
+  assert.equal(result.outputs[0].warning, "invalidDocument");
+  assert.equal(await (await downloadOgcProcessOutput(result.outputs[0], signal)).text(), original);
+});
+
+test("advertised body routing wins over a job-list guess even when optional status is malformed", async () => {
+  const process = await processDescription();
+  process.links.push({
+    rel: "http://www.opengis.net/def/rel/ogc/1.0/job-list",
+    href: "https://example.org/guessed/jobs",
+  });
+  serve(
+    () =>
+      new Response(
+        JSON.stringify({
+          jobID: "one",
+          status: null,
+          links: [{ rel: "self", href: "https://example.org/actual/jobs/one" }],
+        }),
+        { status: 202, headers: { "Content-Type": "application/json" } },
+      ),
+  );
+  const result = await executeOgcProcess(process, {}, new AbortController().signal);
+  assert.equal(result.kind, "job");
+  assert.equal(result.job?.url, "https://example.org/actual/jobs/one?token=secret");
+});
+
+test("an unusable optional process identifier cannot prevent retrieval of known job results", async () => {
+  serve((url) =>
+    url.includes("/results")
+      ? { echo: "Recovered" }
+      : { jobID: "one", processID: "\ud800", status: "successful" },
+  );
+  const result = await monitorOgcProcessJob(
+    "https://example.org/api/jobs/one",
+    new AbortController().signal,
+  );
+  assert.equal(result[0].value, "Recovered");
+});
+
+test("explicit unmatched output media types do not inherit an all-binary alternative encoding", async () => {
+  const process = await processDescription();
+  process.outputs.echo.schema = {
+    anyOf: [
+      { type: "string", contentEncoding: "base64", contentMediaType: "image/tiff" },
+      { type: "string", contentEncoding: "base64", contentMediaType: "application/octet-stream" },
+    ],
+  };
+  for (const [mediaType, encoding, expected] of [
+    ["text/plain", undefined, "hello"],
+    ["image/tiff; ;", undefined, "hello"],
+    ["text/plain", "base64", "hello"],
+  ] as const) {
+    serve(() => ({
+      echo: {
+        value: mediaType === "text/plain" && !encoding ? "hello" : "aGVsbG8=",
+        mediaType,
+        ...(encoding ? { encoding } : {}),
+      },
+    }));
+    const signal = new AbortController().signal;
+    const result = await executeOgcProcess(process, {}, signal);
+    if (result.kind !== "results") throw Error("Expected outputs");
+    assert.equal(
+      result.outputs[0].encoding,
+      mediaType === "text/plain" && !encoding ? undefined : "base64",
+    );
+    assert.equal(
+      await (await downloadOgcProcessOutput(result.outputs[0], signal)).text(),
+      expected,
+    );
+  }
+});
+
 test("a raw JSON report retains its original bytes without changing wrapped document outputs", async () => {
   const signal = new AbortController().signal;
   serve(() => ({ jobID: "one", status: "successful" }));

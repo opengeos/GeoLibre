@@ -116,8 +116,9 @@ export async function proxyOgcProcessRequest(
       req.url ?? "",
       `http://localhost${OGC_PROCESS_PROXY_PATH}`,
     ).searchParams.get("url");
-    if (!url || validatePublicUrl(url))
-      throw new ProcessProxyError(400, "Invalid OGC process URL.");
+    if (!url) throw new ProcessProxyError(400, "Invalid OGC process URL.");
+    const invalid = validatePublicUrl(url);
+    if (invalid) throw new ProcessProxyError(400, invalid);
     if (
       method === "POST" &&
       !/^application\/json(?:\s*;|$)/i.test(req.headers["content-type"] ?? "")
