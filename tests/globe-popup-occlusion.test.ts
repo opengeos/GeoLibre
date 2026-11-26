@@ -1,6 +1,16 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import type { PopupOptions } from "maplibre-gl";
+import { Popup as MapLibrePopup, type PopupOptions } from "maplibre-gl";
+// The installed engine's camera modules, to drive its real Popup on a globe.
+import { createCameraContext } from "../node_modules/maplibre-gl/src/camera/camera_context.ts";
+import {
+  resize,
+  setCenter,
+  setZoom,
+} from "../node_modules/maplibre-gl/src/camera/camera_updates.ts";
+import { createCameraViewState } from "../node_modules/maplibre-gl/src/camera/camera_view_state.ts";
+import { projectCamera } from "../node_modules/maplibre-gl/src/camera/project_camera.ts";
+import { LngLat } from "../node_modules/maplibre-gl/src/geo/lng_lat.ts";
 import {
   GLOBE_POPUP_OCCLUDED_CLASS,
   installGlobePopupOcclusion,
@@ -22,9 +32,11 @@ interface FakeTransform {
 
 /**
  * Where the transform hangs off the map: v5 exposes `map.transform`, v6 moved
- * it to `map._camera.transform` when `Map` stopped extending `Camera`.
+ * it to `map._camera.transform` when `Map` stopped extending `Camera`, and
+ * 6.19 removed it, computing occlusion with camera math it does not export
+ * (stood in for here by `_camera.cameraMath`, which the module cannot see).
  */
-type TransformShape = "v5" | "v6";
+type TransformShape = "v5" | "v6" | "v6.19";
 
 type TestPopup = {
   _container: HTMLElement;
@@ -67,6 +79,7 @@ function createContainer(): HTMLElement {
 }
 
 function createMap(transform: FakeTransform, shape: TransformShape): unknown {
+  if (shape === "v6.19") return { _camera: { projectedCamera: {}, cameraMath: transform } };
   return shape === "v6" ? { _camera: { transform } } : { transform };
 }
 
@@ -77,7 +90,10 @@ function neverOccluded(): FakeTransform {
 function createMaplibreStub(shape: TransformShape): MapLibrePopupNamespace {
   class FakePopup {
     _container = createContainer();
-    _map: { _camera?: { transform: FakeTransform }; transform?: FakeTransform } = {};
+    _map: {
+      _camera?: { transform?: FakeTransform; cameraMath?: FakeTransform };
+      transform?: FakeTransform;
+    } = {};
     _updateOpacity: () => void;
     options: PopupOptions;
 
@@ -88,7 +104,12 @@ function createMaplibreStub(shape: TransformShape): MapLibrePopupNamespace {
       // prototype. Each version reads the transform from its own location.
       this._updateOpacity = () => {
         if (this.options.locationOccludedOpacity === undefined) return;
-        const transform = shape === "v6" ? this._map._camera?.transform : this._map.transform;
+        const transform =
+          shape === "v6.19"
+            ? this._map._camera?.cameraMath
+            : shape === "v6"
+              ? this._map._camera?.transform
+              : this._map.transform;
         if (transform?.isLocationOccluded()) {
           this._container.style.opacity = `${this.options.locationOccludedOpacity}`;
         } else {
@@ -124,7 +145,7 @@ function openPopup(
   return popup;
 }
 
-for (const shape of ["v5", "v6"] as const) {
+for (const shape of ["v5", "v6", "v6.19"] as const) {
   describe(`installGlobePopupOcclusion (maplibre ${shape} transform)`, () => {
     it("defaults popups to hidden globe occlusion and restores interaction", () => {
       const maplibre = createMaplibreStub(shape);
@@ -325,5 +346,32 @@ describe("installGlobePopupOcclusion", () => {
     installGlobePopupOcclusion(maplibre);
 
     assert.equal((maplibre.Popup.prototype as { addTo: unknown }).addTo, once);
+  });
+});
+
+describe("the installed maplibre-gl Popup", () => {
+  it("writes the occluded opacity behind the globe and clears it in front, on every call", () => {
+    // The 6.19 fallback reads this write back, so it must also clear on
+    // visible frames, or a popup that came round the globe would stay hidden.
+    const context = createCameraContext({ projection: "globe", projectionTransition: 1 });
+    let view = resize(createCameraViewState(), context, 1000, 600);
+    view = setCenter(view, context, new LngLat(0, 0));
+    view = setZoom(view, context, 1);
+    const popup = new MapLibrePopup({ locationOccludedOpacity: "50%" }) as unknown as {
+      _container: { style: { opacity: string } };
+      _map: unknown;
+      _lngLat: unknown;
+      _updateOpacity: () => void;
+    };
+    popup._container = { style: { opacity: "" } };
+    popup._map = { _camera: { projectedCamera: projectCamera(view, context), context } };
+
+    popup._lngLat = new LngLat(180, 0);
+    popup._updateOpacity();
+    assert.equal(popup._container.style.opacity, "50%");
+
+    popup._lngLat = new LngLat(0, 0);
+    popup._updateOpacity();
+    assert.equal(popup._container.style.opacity, "");
   });
 });

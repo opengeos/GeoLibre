@@ -65,11 +65,29 @@ const hiddenPopupStyles = new WeakMap<HTMLElement, InteractiveStyles>();
  * `_map._camera.transform`; v5 exposes `_map.transform` directly. Both are
  * checked because this module ships against either. Getting this wrong fails
  * silently — the occlusion check just never runs — so it stays in one place.
+ * From 6.19 neither carries `isLocationOccluded` and
+ * `maplibreMarkedOccluded` reads MapLibre's own result instead.
  */
 function resolveOccludableTransform(
   map: PopupHostMap | undefined,
 ): OccludableTransform | undefined {
   return map?._camera?.transform ?? map?.transform;
+}
+
+/**
+ * Whether MapLibre's own `_updateOpacity` just faded the popup as occluded.
+ *
+ * MapLibre 6.19 removed the transform and computes occlusion with camera math
+ * it does not export, so there is nothing left to ask. Its `_updateOpacity`
+ * (which the instrumented wrapper runs right before this) writes
+ * `locationOccludedOpacity` onto the container on every call when the location
+ * is behind the globe and clears it otherwise, so a non-empty inline opacity is
+ * the answer. Comparing it with the option would miss values the browser
+ * normalizes or cannot read as a number, such as `"50%"`.
+ * `tests/globe-popup-occlusion.test.ts` holds the installed `Popup` to that.
+ */
+function maplibreMarkedOccluded(container: HTMLElement): boolean {
+  return container.style.opacity !== "";
 }
 
 function shouldSuppressInteraction(popup: PopupInternals): boolean {
@@ -121,7 +139,10 @@ export function syncPopupGlobeOcclusion(popup: Popup): boolean {
   }
 
   const lngLat = popupInternals.getLngLat();
-  const occluded = Boolean(lngLat) && Boolean(isLocationOccluded?.call(transform, lngLat));
+  const occluded =
+    typeof isLocationOccluded === "function"
+      ? Boolean(lngLat) && Boolean(isLocationOccluded.call(transform, lngLat))
+      : Boolean(lngLat) && maplibreMarkedOccluded(container);
   container.style.opacity = occluded ? `${opacity}` : "";
   setPopupOccluded(container, occluded && shouldSuppressInteraction(popupInternals));
   return occluded;
