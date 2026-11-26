@@ -16,7 +16,7 @@ import { Map as MapLibreMap } from "maplibre-gl";
  *   every deck render while terrain is on. With `transform` gone those throw
  *   `Cannot read properties of undefined` per frame and the deck.gl overlay
  *   stops drawing: the maplibre-gl-raster GPU engine, point clouds, 3D Tiles,
- *   the deck.gl-viz layers. Current as of 9.4.2.
+ *   the deck.gl-viz layers. Current as of 9.4.1.
  *
  * The prototype getter below hands them the camera's transform, which carries
  * every property they read. It is installed only when `Map` genuinely has no
