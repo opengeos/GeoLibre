@@ -30,6 +30,25 @@ def _number(value: Any) -> float:
     return number
 
 
+def remote_credit_text(value: Any) -> str:
+    """Reduce a remote service credit to plain text.
+
+    MapLibre's attribution control renders HTML, so keep only the text of a
+    remote credit. Unlike arcgis-basemap.ts, which strips only complete tags,
+    an unclosed "<" also drops the rest of the credit, so no partial tag can
+    survive. A literal "<" in a credit is lost with what follows.
+
+    Args:
+        value: The service's ``copyrightText`` (or a style attribution).
+
+    Returns:
+        The credit without markup, or an empty string.
+    """
+    if not isinstance(value, str):
+        return ""
+    return " ".join(re.sub(r"<[^>]*>?", "", value).split())
+
+
 def cached_arcgis_source(info: Any, service_url: str) -> dict[str, Any]:
     """Build a raster source only for an image cache using the standard XYZ grid.
 
@@ -111,13 +130,7 @@ def cached_arcgis_source(info: Any, service_url: str) -> dict[str, Any]:
         "minzoom": ordered[0],
         "maxzoom": ordered[-1],
     }
-    credit = info.get("copyrightText")
-    if isinstance(credit, str):
-        # MapLibre's attribution control renders HTML, so keep only the text of
-        # a remote credit. Unlike arcgis-basemap.ts, which strips only complete
-        # tags, an unclosed "<" also drops the rest of the credit, so no partial
-        # tag can survive. A literal "<" in a credit is lost with what follows.
-        text = " ".join(re.sub(r"<[^>]*>?", "", credit).replace("<", "").split())
-        if text:
-            source["attribution"] = text
+    text = remote_credit_text(info.get("copyrightText"))
+    if text:
+        source["attribution"] = text
     return source
