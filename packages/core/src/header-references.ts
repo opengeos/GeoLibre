@@ -13,7 +13,7 @@ const HEADER_REFERENCE = /\$\{([A-Za-z_][A-Za-z0-9_]*)\}/g;
 const HAS_HEADER_REFERENCE = /\$\{[A-Za-z_][A-Za-z0-9_]*\}/;
 /**
  * Optional auth scheme word, whitespace, one reference, nothing else. Kept in
- * lockstep with `_HEADER_REFERENCE_ONLY` in `python/src/geolibre/project.py`.
+ * lockstep with `_HEADER_REFERENCE_ONLY` in `python/src/geolibre/project/credentials.py`.
  */
 const REFERENCE_ONLY = /^(?:[A-Za-z][A-Za-z0-9._-]*\s+)?\$\{[A-Za-z_][A-Za-z0-9_]*\}$/;
 

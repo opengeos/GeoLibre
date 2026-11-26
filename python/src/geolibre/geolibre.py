@@ -2709,7 +2709,7 @@ class Map(anywidget.AnyWidget):
         if isinstance(data, (str, os.PathLike)):
             source = str(data)
             if source.startswith(("http://", "https://")):
-                # Same defences as the remote GeoJSON fetch in project.py: reject
+                # Same defences as the remote GeoJSON fetch in project/fetch.py: reject
                 # non-public hosts up front, re-check every redirect hop through
                 # the shared opener, and bound the response. read(limit + 1)
                 # detects an over-limit body without buffering the whole thing.

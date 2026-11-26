@@ -1193,7 +1193,7 @@ def test_decode_point_label_node_rejects_an_overlong_varint():
 def test_point_cloud_annotations_cap_the_decoded_entry_count(monkeypatch):
     from geolibre import project as p
 
-    monkeypatch.setattr(p, "MAX_POINT_LABEL_EDITS", 3)
+    monkeypatch.setattr(p.scene, "MAX_POINT_LABEL_EDITS", 3)
     node = _encode_node({0: 6, 1: 6})
     project = {
         "plugins": {
@@ -1420,7 +1420,7 @@ def test_point_cloud_annotations_charge_the_inflated_size(monkeypatch):
     from geolibre import project as p
 
     # Long varints: these two edits inflate to 11 bytes, not 2 per edit.
-    monkeypatch.setattr(p, "MAX_POINT_LABEL_BYTES", 12)
+    monkeypatch.setattr(p.scene, "MAX_POINT_LABEL_BYTES", 12)
     far = _encode_node({2**28: 6, 2**29: 6})
     near = _encode_node({0: 6})
     project = {
@@ -1440,15 +1440,15 @@ def test_point_cloud_annotations_charge_the_inflated_size(monkeypatch):
 def test_point_cloud_annotations_charge_rejected_nodes_to_the_budget(monkeypatch):
     from geolibre import project as p
 
-    monkeypatch.setattr(p, "MAX_POINT_LABEL_BYTES", 10)
-    monkeypatch.setattr(p, "MAX_POINT_LABEL_NODE_BYTES", 6)
+    monkeypatch.setattr(p.scene, "MAX_POINT_LABEL_BYTES", 10)
+    monkeypatch.setattr(p.scene, "MAX_POINT_LABEL_NODE_BYTES", 6)
     calls = []
 
     def reject(text, limit, wide=False):
         calls.append(limit)
         raise ValueError("too large")
 
-    monkeypatch.setattr(p, "_decode_point_label_node_sized", reject)
+    monkeypatch.setattr(p.scene, "_decode_point_label_node_sized", reject)
     nodes = {str(i): "x" for i in range(50)}
     project = {
         "plugins": {
@@ -1510,7 +1510,7 @@ def test_assert_public_url_rejects_bad_schemes_and_special_ips(monkeypatch):
 
     for addr in ("64:ff9b::169.254.169.254", "224.0.0.1", "::ffff:169.254.169.254"):
         monkeypatch.setattr(
-            project.socket,
+            project.fetch.socket,
             "getaddrinfo",
             lambda _host, _port, _addr=addr: [(0, 0, 0, "", (_addr, 0))],
         )
