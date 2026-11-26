@@ -1859,12 +1859,14 @@ describe("ArcgisEngine picking and highlight", () => {
     service.objectIdField = "OBJECTID";
     const point = { type: "point" as const, x: 3, y: 4, spatialReference: { wkid: 4326 } };
     const starts: unknown[] = [];
-    // No ORDER BY support: the second page overlaps the first by one row.
+    // No ORDER BY support: each later page overlaps the one before it, and
+    // the second even repeats the first page's first row.
+    const pages: Record<string, number[]> = { first: [1, 2], 2: [1, 3], 4: [3, 4] };
     service.queryFeatures = async (query: { start?: number; num?: number }) => {
       starts.push(query.start === undefined ? undefined : [query.start, query.num]);
-      const oids = query.start === undefined ? [1, 2] : [2, 3];
+      const oids = pages[query.start === undefined ? "first" : String(query.start)];
       return {
-        exceededTransferLimit: query.start === undefined,
+        exceededTransferLimit: query.start !== 4,
         features: oids.map((oid) => ({
           attributes: { OBJECTID: oid },
           geometry: point,
@@ -1875,10 +1877,10 @@ describe("ArcgisEngine picking and highlight", () => {
     const collection = await engine.getLayerGeoJson("fs");
     assert.deepEqual(
       collection?.features.map((f) => f.id),
-      [1, 2, 3],
+      [1, 2, 3, 4],
     );
     // The next offset counts the rows the service sent, not the kept ones.
-    assert.deepEqual(starts, [undefined, [2, 2]]);
+    assert.deepEqual(starts, [undefined, [2, 2], [4, 2]]);
   });
   it("keeps synchronous control results when a native hit test outlives the engine", async () => {
     const { setArcgisControlPicker } = await import("../packages/map/src/arcgis-control-adapters");

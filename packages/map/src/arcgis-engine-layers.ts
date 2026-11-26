@@ -785,10 +785,13 @@ export abstract class ArcgisEngineLayers extends ArcgisEngineIdentify {
         if (page === 0) pageSize = result.features.length;
         offset += result.features.length;
         // A service that ignores the offset returns its first page again;
-        // stop rather than repeat it.
+        // stop rather than repeat it. With an object id field that is a page
+        // adding no new row (an overlapping page that adds one still counts);
+        // without one, a repeated first row is the only signal.
         const first = JSON.stringify(result.features[0]?.attributes ?? null);
-        if (page > 0 && first === firstOfPreviousPage) break;
+        if (!oidField && page > 0 && first === firstOfPreviousPage) break;
         firstOfPreviousPage = first;
+        const keptBefore = graphics.length;
         // Without a stable order (no ORDER BY support, or a service that
         // ignores it) offset pages can overlap; the object id says which rows
         // were already read.
@@ -800,6 +803,7 @@ export abstract class ArcgisEngineLayers extends ArcgisEngineIdentify {
           }
           graphics.push(graphic);
         }
+        if (oidField && page > 0 && graphics.length === keptBefore) break;
         if (!result.exceededTransferLimit || !result.features.length) break;
       }
       return toCollection();
