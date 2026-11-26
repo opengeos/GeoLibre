@@ -4541,6 +4541,24 @@ def _refuse_non_json_number(token: str) -> Any:
     raise json.JSONDecodeError(f"non-JSON number {token}", token, 0)
 
 
+def _finite_float(token: str) -> float:
+    """Decode a JSON float, refusing one that overflows to infinity.
+
+    Args:
+        token: The numeric literal, e.g. ``1e400``.
+
+    Returns:
+        The finite value.
+
+    Raises:
+        json.JSONDecodeError: When the literal is out of float range.
+    """
+    value = float(token)
+    if not math.isfinite(value):
+        raise json.JSONDecodeError(f"non-JSON number {token}", token, 0)
+    return value
+
+
 def _read_public_arcgis_json(url: str, label: str, limit: int = 2 * 1024 * 1024) -> Any:
     """Read one bounded public ArcGIS REST JSON document.
 
@@ -4582,7 +4600,11 @@ def _read_public_arcgis_json(url: str, label: str, limit: int = 2 * 1024 * 1024)
     if len(raw) > limit:
         raise ValueError(f"{label} exceeds the {limit // (1024 * 1024)} MiB size limit")
     try:
-        return json.loads(raw.decode("utf-8"), parse_constant=_refuse_non_json_number)
+        return json.loads(
+            raw.decode("utf-8"),
+            parse_constant=_refuse_non_json_number,
+            parse_float=_finite_float,
+        )
     except RecursionError as exc:
         raise ValueError(f"{label} is too deeply nested") from exc
     except (UnicodeDecodeError, json.JSONDecodeError) as exc:
@@ -4892,7 +4914,7 @@ def arcgis_vector_tile_layer(
                 raise ValueError(
                     f"ArcGIS vector tile sources must point at public http(s) hosts ({exc})"
                 ) from exc
-    if attribution:
+    if attribution is not None:
         for source in resolved["sources"].values():
             source["attribution"] = attribution
     layer_bounds = resolved_bounds if resolved_bounds is not None else resolved["bounds"]

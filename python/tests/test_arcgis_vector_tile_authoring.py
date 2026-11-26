@@ -334,6 +334,47 @@ def test_non_json_numbers_are_refused(vts, where):
         _build()
 
 
+def test_overflowing_float_is_refused(vts, monkeypatch):
+    """Refuse a numeric literal that decodes to infinity.
+
+    Args:
+        vts: The metadata transport fixture.
+        monkeypatch: Pytest fixture for the response body.
+    """
+    _, style, _ = vts
+    body = json.dumps(style).replace('"fill-color"', '"fill-opacity": 1e400, "fill-color"', 1)
+    real_open = project_api._GEOJSON_OPENER.open
+
+    def open_metadata(url, timeout):
+        """Serve the style with an overflowing number.
+
+        Args:
+            url: The requested URL.
+            timeout: The request timeout.
+
+        Returns:
+            The binary response.
+        """
+        if "/resources/" in url:
+            return io.BytesIO(body.encode())
+        return real_open(url, timeout)
+
+    monkeypatch.setattr(project_api._GEOJSON_OPENER, "open", open_metadata)
+    with pytest.raises(ValueError, match="not valid JSON"):
+        _build()
+
+
+def test_empty_attribution_clears_the_credit(vts):
+    """Treat an empty attribution as an explicit override.
+
+    Args:
+        vts: The mutable metadata transport fixture.
+    """
+    vts[0]["copyrightText"] = "Service credit"
+    (spec,) = _build(attribution="")["source"]["arcgisSources"].values()
+    assert spec["attribution"] == ""
+
+
 def test_attribution_must_be_a_string(vts):
     """Refuse a non-string attribution before any request.
 
