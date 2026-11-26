@@ -258,6 +258,65 @@ def test_bad_urls_are_refused_before_any_request(vts, url):
     assert vts[2] == []
 
 
+def test_encoded_token_and_lowercase_service_name(vts):
+    """Refuse a percent-encoded token; accept a lowercase service segment.
+
+    Args:
+        vts: The metadata transport fixture.
+    """
+    with pytest.raises(ValueError, match="token"):
+        _build(SERVICE + "?%74oken=abc")
+    layer = _build(SERVICE.replace("VectorTileServer", "vectortileserver"))
+    assert layer["type"] == "arcgis"
+
+
+def test_tile_hosts_must_be_public(vts, monkeypatch):
+    """Keep a remote style from aiming saved tile URLs at a private host.
+
+    Args:
+        vts: The mutable metadata transport fixture.
+        monkeypatch: Pytest fixture for the public-address guard.
+    """
+    _, style, _ = vts
+    checked = []
+
+    def guard(url):
+        """Refuse loopback hosts the way the real guard would.
+
+        Args:
+            url: The URL being checked.
+
+        Raises:
+            ValueError: For a loopback host.
+        """
+        checked.append(url)
+        if "127.0.0.1" in url:
+            raise ValueError("non-public address")
+
+    monkeypatch.setattr(project_api, "_assert_public_url", guard)
+    _build()
+    assert SERVICE + "/tile/0/0/0.pbf" in checked
+    style["sources"]["Santa_Monica_parcels_VTL"]["tiles"] = ["http://127.0.0.1:8765/{z}/{y}/{x}"]
+    with pytest.raises(ValueError, match="public"):
+        _build()
+
+
+@pytest.mark.parametrize("ymax", [4.5e9, float("inf")])
+def test_out_of_range_service_extent_has_no_bounds(vts, ymax):
+    """Treat an extent outside the Web Mercator square as unknown.
+
+    Args:
+        vts: The mutable metadata transport fixture.
+        ymax: An absurd northern edge.
+    """
+    info, style, _ = vts
+    del style["sources"]["Santa_Monica_parcels_VTL"]["bounds"]
+    info["fullExtent"]["ymax"] = ymax
+    layer = _build()
+    assert "bounds" not in layer["metadata"]
+    assert "bounds" not in layer["source"]
+
+
 def test_private_hosts_are_refused():
     """Keep the kernel-side SSRF guard on the metadata reads."""
     with pytest.raises(ValueError):
@@ -299,6 +358,14 @@ def _damage(info, style, damage):
         source["tiles"] = ["https://example.org/t/{z}/{y}/{x}.pbf?token=abc"]
     elif damage == "not_object":
         style.clear()
+    elif damage == "list_type":
+        layer["type"] = ["fill"]
+    elif damage == "list_source":
+        layer["source"] = ["Santa_Monica_parcels_VTL"]
+    elif damage == "userinfo_tiles":
+        source["tiles"] = ["https://user:pw@example.org/t/{z}/{y}/{x}.pbf"]
+    elif damage == "encoded_token_tiles":
+        source["tiles"] = ["https://example.org/t/{z}/{y}/{x}.pbf?%74oken=abc"]
 
 
 @pytest.mark.parametrize(
@@ -316,6 +383,10 @@ def _damage(info, style, damage):
         "too_many_layers",
         "tokened_tiles",
         "not_object",
+        "list_type",
+        "list_source",
+        "userinfo_tiles",
+        "encoded_token_tiles",
     ],
 )
 def test_styles_the_app_cannot_draw_never_reach_the_map(vts, monkeypatch, damage):

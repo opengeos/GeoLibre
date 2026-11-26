@@ -4844,12 +4844,12 @@ def arcgis_vector_tile_layer(
     """
     if not isinstance(url, str) or not url.strip().lower().startswith(("https://", "http://")):
         raise ValueError("url must be an http(s) ArcGIS VectorTileServer URL")
-    if "token=" in url.lower():
+    if "token=" in unquote(url).lower():
         raise ValueError("url must not carry a token: it would be saved into the project")
     input_url = url.strip()
     service_url = input_url.split("?", 1)[0].split("#", 1)[0].rstrip("/")
     _assert_no_url_userinfo(service_url)
-    if not re.search(r"/VectorTileServer$", service_url):
+    if not re.search(r"/VectorTileServer$", service_url, re.IGNORECASE):
         raise ValueError("url must end in /VectorTileServer")
     resolved_bounds = _resolve_bounds(bounds)
     info = _read_public_arcgis_json(f"{service_url}?f=json", "ArcGIS vector tile service metadata")
@@ -4867,6 +4867,17 @@ def arcgis_vector_tile_layer(
         strokeColor="#1d4ed8",
     )
     resolved = build_arcgis_vector_tile_style(info, style, service_url, layer["id"])
+    # The app fetches these templates whenever the project opens, so a remote
+    # style must not aim them at loopback or private hosts.
+    for spec in resolved["sources"].values():
+        for target in [*spec["tiles"], *([spec["url"]] if spec.get("url") else [])]:
+            probe = re.sub(r"\{[^{}]*\}", "0", target)
+            try:
+                _assert_public_url(probe)
+            except ValueError as exc:
+                raise ValueError(
+                    f"ArcGIS vector tile sources must point at public http(s) hosts ({exc})"
+                ) from exc
     if attribution:
         for source in resolved["sources"].values():
             source["attribution"] = attribution

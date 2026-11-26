@@ -104,6 +104,11 @@ def _extent_bounds(extent: Any) -> list[float] | None:
         return None
     xmin, ymin, xmax, ymax = (float(item) for item in values)
     if wkid in _WEB_MERCATOR_WKIDS:
+        # Beyond the Web Mercator square the conversion is meaningless (and
+        # math.exp overflows for absurd values), so such an extent has no bounds.
+        limit = 20037508.342789244 * 1.0001
+        if any(abs(value) > limit for value in (xmin, ymin, xmax, ymax)):
+            return None
 
         def lat(y: float) -> float:
             degrees = (y / 20037508.34) * 180
@@ -111,8 +116,13 @@ def _extent_bounds(extent: Any) -> list[float] | None:
                 2 * math.atan(math.exp(degrees * math.pi / 180)) - math.pi / 2
             )
 
-        bounds = [(xmin / 20037508.34) * 180, lat(ymin), (xmax / 20037508.34) * 180, lat(ymax)]
-        return bounds if all(math.isfinite(item) for item in bounds) else None
+        bounds = [
+            max(-180.0, (xmin / 20037508.34) * 180),
+            lat(ymin),
+            min(180.0, (xmax / 20037508.34) * 180),
+            lat(ymax),
+        ]
+        return bounds if _is_geo_bounds(bounds) else None
     if isinstance(wkid, int) and not isinstance(wkid, bool) and not _is_geographic_wkid(wkid):
         return None
     bounds = [xmin, ymin, xmax, ymax]
@@ -252,8 +262,11 @@ def build_arcgis_vector_tile_style(
         for tile in [*tiles, *([url] if url else [])]:
             if not tile.lower().startswith(("https://", "http://")):
                 raise ValueError("ArcGIS vector tile sources must resolve to http(s) URLs")
-            if "token=" in tile.lower():
+            if "token=" in unquote(tile).lower():
                 raise ValueError("ArcGIS vector tile sources must not carry a token")
+            parts = urlsplit(tile)
+            if parts.username is not None or parts.password is not None:
+                raise ValueError("ArcGIS vector tile sources must not embed credentials")
         if not all(all(f"{{{part}}}" in tile for part in "zxy") for tile in tiles):
             raise ValueError("ArcGIS vector tile URLs must contain {z}, {x} and {y}")
         source["tiles"] = tiles
@@ -271,19 +284,22 @@ def build_arcgis_vector_tile_style(
         layer = dict(raw)
         kind = layer.get("type")
         if kind != "background":
-            if kind not in DRAWABLE_LAYER_TYPES:
+            if not isinstance(kind, str) or kind not in DRAWABLE_LAYER_TYPES:
                 raise ValueError(
                     f"ArcGIS vector tile style layer {raw['id']!r} has unsupported type {kind!r}"
                 )
             source_layer = layer.get("source-layer")
-            if layer.get("source") not in renamed or not (
-                isinstance(source_layer, str) and source_layer
+            source_key = layer.get("source")
+            if (
+                not isinstance(source_key, str)
+                or source_key not in renamed
+                or not (isinstance(source_layer, str) and source_layer)
             ):
                 raise ValueError(
                     f"ArcGIS vector tile style layer {raw['id']!r} must name one of the "
                     "style's sources and a source-layer"
                 )
-            layer["source"] = renamed[layer["source"]]
+            layer["source"] = renamed[source_key]
         layer["id"] = f"{layer_id}-layer-{index}-{_sanitize_id_part(raw['id'])}"
         layers.append(layer)
 
