@@ -39,19 +39,8 @@ export function EditOutboxStatus({ compact = false }: { compact?: boolean }) {
   );
 
   const unreadable = Boolean(snapshot.storageError);
-  if (pending === 0 && online && !unreadable) {
-    // Keep the dialog mounted while open so the last sync's result can close it.
-    return open ? (
-      <EditOutboxDialog
-        open={open}
-        onOpenChange={setOpen}
-        entries={snapshot.entries}
-        online={online}
-        durable={snapshot.durable}
-        storageError={snapshot.storageError}
-      />
-    ) : null;
-  }
+  const hidden = pending === 0 && online && !unreadable;
+  if (hidden && !open) return null;
 
   const label =
     pending === 0
@@ -63,21 +52,25 @@ export function EditOutboxStatus({ compact = false }: { compact?: boolean }) {
         : t("editOutbox.status", { count: pending });
   const Icon = needsReview || unreadable ? AlertTriangle : online ? CloudUpload : CloudOff;
 
+  // One tree whether or not the button shows, so an open dialog (and a
+  // conflict review in it) survives the last edit syncing or a network change.
   return (
     <>
-      <button
-        type="button"
-        data-testid="edit-outbox-status"
-        className={cn(
-          "inline-flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5 hover:bg-accent hover:text-accent-foreground",
-          (needsReview || unreadable) && "text-amber-700 dark:text-amber-300",
-        )}
-        title={t("editOutbox.title")}
-        onClick={() => setOpen(true)}
-      >
-        <Icon className="h-3 w-3" aria-hidden="true" />
-        {compact ? pending : label}
-      </button>
+      {hidden ? null : (
+        <button
+          type="button"
+          data-testid="edit-outbox-status"
+          className={cn(
+            "inline-flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5 hover:bg-accent hover:text-accent-foreground",
+            (needsReview || unreadable) && "text-amber-700 dark:text-amber-300",
+          )}
+          title={t("editOutbox.title")}
+          onClick={() => setOpen(true)}
+        >
+          <Icon className="h-3 w-3" aria-hidden="true" />
+          {compact ? pending : label}
+        </button>
+      )}
       <EditOutboxDialog
         open={open}
         onOpenChange={setOpen}
