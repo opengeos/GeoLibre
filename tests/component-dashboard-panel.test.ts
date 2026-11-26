@@ -37,6 +37,9 @@ function seed(widgets: DashboardWidget[]) {
 
 const text = () => document.body.textContent ?? "";
 const cards = () => screen.queryAllByRole("button", { name: "Remove widget" });
+/** The formatted value of each indicator tile, in widget order. */
+const indicatorValues = () =>
+  Array.from(document.querySelectorAll("span.text-3xl"), (span) => span.textContent);
 
 describe("DashboardPanel", () => {
   it("explains what to add when the project has no chartable layer", () => {
@@ -56,13 +59,12 @@ describe("DashboardPanel", () => {
         title: "Places",
         prefix: "#",
       },
-    ] as DashboardWidget[]);
+    ]);
     render(createElement(DashboardPanel));
     assert.ok(text().includes("2 widgets"));
     assert.ok(text().includes("Places"));
-    assert.ok(text().includes("#4"), text());
-    // 66,000 + 12,000 + 486,000 + 291,000
-    assert.ok(/855[,.\s ]?000|855K|855k/.test(text()), text());
+    // Sum of 66,000 + 12,000 + 486,000 + 291,000, then a prefixed count.
+    assert.deepEqual(indicatorValues(), [(855000).toLocaleString(), "#4"]);
   });
 
   it("filters other widgets on the same layer from a selector", async () => {
@@ -75,14 +77,14 @@ describe("DashboardPanel", () => {
         indicatorAggregation: "count",
         title: "Places",
       },
-    ] as DashboardWidget[]);
+    ]);
     render(createElement(DashboardPanel));
-    assert.ok(text().includes("PlacesCities4"), text());
+    assert.deepEqual(indicatorValues(), ["4"]);
     fireEvent.click(screen.getByRole("button", { name: /^NE/ }));
-    await waitFor(() => assert.ok(text().includes("PlacesCities2"), text()));
+    await waitFor(() => assert.deepEqual(indicatorValues(), ["2"]));
     assert.ok(text().includes("2 of 4 features"));
     fireEvent.click(screen.getByRole("button", { name: "Clear" }));
-    await waitFor(() => assert.ok(text().includes("PlacesCities4")));
+    await waitFor(() => assert.deepEqual(indicatorValues(), ["4"]));
   });
 
   it("reorders and removes widgets, and changes the column count", () => {
@@ -101,14 +103,16 @@ describe("DashboardPanel", () => {
         indicatorAggregation: "count",
         title: "Second",
       },
-    ] as DashboardWidget[]);
+    ]);
     render(createElement(DashboardPanel));
     fireEvent.click(screen.getAllByRole("button", { name: "Move forward" })[0]!);
     assert.deepEqual(
       useAppStore.getState().widgets.map((w) => w.id),
       ["b", "a"],
     );
-    fireEvent.click(cards()[0]!);
+    // Remove "Second" (id b), which Move forward placed first.
+    const second = useAppStore.getState().widgets.findIndex((w) => w.id === "b");
+    fireEvent.click(cards()[second]!);
     assert.deepEqual(
       useAppStore.getState().widgets.map((w) => w.id),
       ["a"],

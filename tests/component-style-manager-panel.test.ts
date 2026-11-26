@@ -82,18 +82,17 @@ describe("StyleManagerPanel", () => {
     assert.equal(useAppStore.getState().projectStyleLibrary.length, 1);
     assert.ok(text().includes("This project"));
 
-    // Delete through the entry's action menu.
+    const projectEntry = useAppStore.getState().projectStyleLibrary[0]!.name;
+    // Delete the project entry (its section renders first) through its menu.
     const menus = screen.getAllByRole("button", { name: "Preset actions" });
     fireEvent.pointerDown(menus[0]!, { button: 0, ctrlKey: false, pointerType: "mouse" });
     fireEvent.click(await screen.findByRole("menuitem", { name: "Delete" }));
-    await waitFor(() =>
-      assert.equal(
-        useAppStore.getState().projectStyleLibrary.length +
-          useAppStore.getState().styleLibrary.length,
-        1,
-      ),
+    await waitFor(() => assert.equal(useAppStore.getState().projectStyleLibrary.length, 0));
+    assert.deepEqual(
+      useAppStore.getState().styleLibrary.map((entry) => entry.name),
+      ["Blue parcels"],
     );
-    assert.ok(/Deleted "/.test(text()));
+    assert.ok(text().includes(`Deleted "${projectEntry}".`));
   });
 
   it("closes from the header", () => {
