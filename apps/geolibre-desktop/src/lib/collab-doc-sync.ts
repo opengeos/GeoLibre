@@ -76,6 +76,8 @@ export class CollabDocSync {
   private destroyed = false;
   private applyTimer: ReturnType<typeof setTimeout> | null = null;
   private chunkCounter = 0;
+  /** Whether an update went out since the last sync, which a refusal may concern. */
+  private sentSinceSync = false;
   private detach: () => void = () => {};
 
   constructor(
@@ -139,7 +141,9 @@ export class CollabDocSync {
         this.resync();
         return true;
       }
-      if (message.code === "forbidden" && this.synced) {
+      // The relay also says forbidden for host-only actions and view-only
+      // comments; only a refusal that can concern our updates resets.
+      if (message.code === "forbidden" && this.synced && this.sentSinceSync) {
         // Our document holds an update the relay refused, which would block
         // every later one; start over from the relay's copy.
         this.reset();
@@ -151,20 +155,21 @@ export class CollabDocSync {
   }
 
   /**
-   * Record a local edit. With `base`, the project the store last took from
-   * the document, only what changed since `base` is written, so a peer's edit
-   * that arrived in the meantime is kept; without it, `project` is written as
-   * the differences from the document.
+   * Record a local edit: only what changed since `base` (the project the
+   * store last took from the document) is written, so a peer's edit that
+   * arrived in the meantime is kept.
    */
-  pushLocal(project: GeoLibreProject, base?: GeoLibreProject | null): void {
+  pushLocal(project: GeoLibreProject, base: GeoLibreProject | null): void {
     if (!this.synced || this.paused || this.destroyed || !this.host.canEdit()) return;
-    const next = project as unknown as Crdt.ProjectRecord;
-    const options = { ignore: LOCAL_ONLY_KEYS };
-    if (base) {
-      this.project.writeChanges(next, base as unknown as Crdt.ProjectRecord, LOCAL_ORIGIN, options);
-    } else {
-      this.project.write(next, LOCAL_ORIGIN, options);
-    }
+    // Without a base the store has not yet taken the session's project (or
+    // seeded it), so there is nothing to diff a local edit against.
+    if (!base) return;
+    this.project.writeChanges(
+      project as unknown as Crdt.ProjectRecord,
+      base as unknown as Crdt.ProjectRecord,
+      LOCAL_ORIGIN,
+      { ignore: LOCAL_ONLY_KEYS },
+    );
   }
 
   canUndo(): boolean {
@@ -217,6 +222,7 @@ export class CollabDocSync {
   }
 
   private sendUpdate(update: Uint8Array): void {
+    this.sentSinceSync = true;
     for (const frame of this.crdt.splitUpdate(update, () => `u${++this.chunkCounter}`)) {
       this.host.send({ type: "doc-update", ...frame });
     }
@@ -226,6 +232,7 @@ export class CollabDocSync {
     const vector = this.crdt.decodeBase64(relayVector);
     const firstSync = !this.synced;
     this.synced = true;
+    this.sentSinceSync = false;
     if (vector && this.host.canEdit() && !this.paused) {
       // Whatever the relay lacks: edits made offline, or nothing.
       const missing = this.crdt.Y.encodeStateAsUpdate(this.project.doc, vector);

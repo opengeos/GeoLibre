@@ -613,6 +613,61 @@ describe("ProjectDoc.writeChanges (three-way)", () => {
   });
 });
 
+describe("writeChanges feature edge cases", () => {
+  const fc = (fs: unknown[]) =>
+    project({ layers: [{ id: "x", geojson: { type: "FeatureCollection", features: fs } }] });
+  const ids = (p: ProjectRecord) =>
+    (layers(p)[0].geojson!.features as unknown as { id: string }[]).map((f) => f.id);
+  const f = (id: string) => ({ type: "Feature", id, geometry: null, properties: {} });
+
+  it("anchors an insertion on the nearest surviving predecessor", () => {
+    const { a, b, sync } = pair();
+    a.write(fc([f("A"), f("B"), f("C")]), "local");
+    sync();
+    const base = a.read();
+    b.write(fc([f("A"), f("C")]), "local");
+    sync();
+    a.writeChanges(fc([f("A"), f("B"), f("X"), f("C")]), base, "local");
+    assert.deepEqual(ids(a.read()), ["A", "X", "C"]);
+  });
+
+  it("does not bring back a feature a peer deleted when the writer moves it", () => {
+    const { a, b, sync } = pair();
+    a.write(fc([f("A"), f("B")]), "local");
+    sync();
+    const base = a.read();
+    b.write(fc([f("B")]), "local");
+    sync();
+    a.writeChanges(fc([f("B"), f("A")]), base, "local");
+    assert.deepEqual(ids(a.read()), ["B"]);
+  });
+
+  it("recreates missing collection metadata when patching", () => {
+    const doc = new ProjectDoc();
+    doc.write(fc([f("A")]), "local");
+    const base = doc.read();
+    const roads = doc.layers.get("x")!;
+    (roads.get("geojson") as Y.Map<unknown>).delete("meta");
+    const named = {
+      ...base,
+      layers: [{ ...layers(base)[0], geojson: { ...layers(base)[0].geojson!, name: "n" } }],
+    };
+    doc.writeChanges(named, base, "local");
+    assert.equal((layers(doc.read())[0].geojson as { name?: string }).name, "n");
+  });
+
+  it("clears a large collection in one pass", () => {
+    const doc = new ProjectDoc();
+    const many = Array.from({ length: 20_000 }, (_, i) => f(`f${i}`));
+    doc.write(fc(many), "local");
+    const base = doc.read();
+    const started = Date.now();
+    doc.writeChanges(fc([]), base, "local");
+    assert.equal(ids(doc.read()).length, 0);
+    assert.ok(Date.now() - started < 5_000);
+  });
+});
+
 describe("per-user undo", () => {
   it("refuses a null local origin", () => {
     assert.throws(() => createLocalUndoManager(new ProjectDoc(), null), TypeError);

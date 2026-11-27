@@ -44,6 +44,9 @@ export const DOC_COMPACT_LOG_ENTRIES = 256;
  */
 export const DOC_STORAGE_CHUNK_BYTES = 1024 * 1024;
 
+/** Top-level fields only the relay writes; client updates to them are undone. */
+export const PROTECTED_FIELDS: readonly string[] = ["comments"];
+
 /** Origin label on updates the relay itself produces (reverts, comments). */
 export const RELAY_DOC_ORIGIN = "relay";
 
@@ -288,6 +291,11 @@ export class RelayDoc {
       );
       doc.on("afterTransaction", watch);
     }
+    // Fields only the relay writes (the comment list, which comment-mutation
+    // validates and rate-limits): a client update may not change them.
+    const protectedBefore = PROTECTED_FIELDS.map(
+      (key) => [key, this.project.fields.get(key)] as const,
+    );
     let unreadable = false;
     try {
       Y.applyUpdate(doc, update, origin);
@@ -322,6 +330,17 @@ export class RelayDoc {
       // it can be garbage collected; destroy() alone only detaches it.
       undo.clear();
       undo.destroy();
+    }
+    const tampered = protectedBefore.filter(
+      ([key, value]) => this.project.fields.get(key) !== value,
+    );
+    if (tampered.length) {
+      doc.transact(() => {
+        for (const [key, value] of tampered) {
+          if (value === undefined) this.project.fields.delete(key);
+          else this.project.fields.set(key, value);
+        }
+      }, RELAY_DOC_ORIGIN);
     }
     this.maybeCompact();
     return result;

@@ -590,6 +590,8 @@ function patchFeatureCollection(
   base: JsonObject & { features: unknown[] },
   newKey: () => string,
 ): void {
+  // A peer may have removed or replaced `meta`; recreate it rather than fail.
+  if (!(map.get(FC_META) instanceof Y.Map)) map.set(FC_META, new Y.Map<unknown>());
   const { meta, features, order } = featureCollectionParts(map);
   const { features: nextFeatures, ...nextRest } = next;
   const { features: baseFeatures, ...baseRest } = base;
@@ -598,23 +600,43 @@ function patchFeatureCollection(
   patchMap(meta, nextRest, baseRest);
 
   compactOrder(order, features, true);
+  // Find a base feature's key in the document: by identity, else by its JSON
+  // (the store's copies are rarely the document's objects). The JSON index is
+  // built once, on the first miss, so a large layer costs O(N), not O(k·N).
   const byValue = new Map<unknown, string>();
   features.forEach((value, key) => byValue.set(value, key));
+  let byJson: Map<string, string> | null = null;
   const keyOf = (value: unknown): string | undefined => {
     const exact = byValue.get(value);
     if (exact !== undefined) return exact;
-    for (const [candidate, key] of byValue) {
-      if (deepEqual(candidate, value)) return key;
+    if (!byJson) {
+      byJson = new Map();
+      for (const [candidate, key] of byValue) {
+        const json = JSON.stringify(candidate);
+        if (!byJson.has(json)) byJson.set(json, key);
+      }
+    }
+    return byJson.get(JSON.stringify(value));
+  };
+  /** The key of the nearest base feature at or before `index` still in the document. */
+  const anchorBefore = (index: number): string | undefined => {
+    for (let i = index; i >= 0; i -= 1) {
+      const key = keyOf(baseFeatures[i]);
+      if (key !== undefined) return key;
     }
     return undefined;
   };
+  // Ids of base features a peer deleted: a move of one of them must not bring
+  // it back.
+  const goneIds = new Set<string>();
 
   const { prefix, suffix } = commonEnds(baseFeatures, nextFeatures, sameValue);
   const oldEnd = baseFeatures.length - suffix;
   const newEnd = nextFeatures.length - suffix;
   const segments = matchMiddle(baseFeatures, nextFeatures, prefix, oldEnd, newEnd);
-  for (let s = segments.length - 1; s >= 0; s -= 1) {
-    const { oldStart, oldStop, newStart, newStop, anchor } = segments[s];
+  const removed = new Set<string>();
+  const insertions: { after: string | undefined; keys: string[] }[] = [];
+  for (const { oldStart, oldStop, newStart, newStop, anchor } of segments) {
     if (anchor && !deepEqual(baseFeatures[anchor[0]], nextFeatures[anchor[1]])) {
       const key = keyOf(baseFeatures[anchor[0]]);
       if (key !== undefined) features.set(key, cloneJson(nextFeatures[anchor[1]]));
@@ -628,25 +650,66 @@ function patchFeatureCollection(
     }
     for (let i = oldStart + paired; i < oldStop; i += 1) {
       const key = keyOf(baseFeatures[i]);
-      if (key === undefined) continue;
-      features.delete(key);
-      const index = order.toArray().indexOf(key);
-      if (index >= 0) order.delete(index, 1);
+      if (key === undefined) {
+        const id = featureId(baseFeatures[i]);
+        if (id) goneIds.add(id);
+        continue;
+      }
+      removed.add(key);
     }
     if (newStop - newStart > paired) {
-      // Anchor on the base feature just before this run (the last paired one,
-      // or the unchanged feature before the segment).
-      const anchorIndex = oldStart + paired - 1;
-      const anchorKey = anchorIndex >= 0 ? keyOf(baseFeatures[anchorIndex]) : undefined;
-      const at = anchorKey === undefined ? 0 : order.toArray().indexOf(anchorKey) + 1;
-      const inserted: string[] = [];
+      const keys: string[] = [];
       for (let i = newStart + paired; i < newStop; i += 1) {
+        const id = featureId(nextFeatures[i]);
+        if (id && goneIds.has(id)) continue;
         const featureKey = newKey();
         features.set(featureKey, cloneJson(nextFeatures[i]));
-        inserted.push(featureKey);
+        keys.push(featureKey);
       }
-      order.insert(Math.max(0, at), inserted);
+      if (keys.length) insertions.push({ after: anchorBefore(oldStart + paired - 1), keys });
     }
+  }
+  // A moved feature with an id shows up as a removal plus an insertion; if
+  // its removal came after the insertion was planned, drop that insertion.
+  if (goneIds.size) {
+    for (const insertion of insertions) {
+      insertion.keys = insertion.keys.filter((key) => {
+        const id = featureId(features.get(key));
+        if (id && goneIds.has(id)) {
+          features.delete(key);
+          return false;
+        }
+        return true;
+      });
+    }
+  }
+  // Removals in one backward pass over the order (runs merged).
+  if (removed.size) {
+    const keys = order.toArray();
+    for (let i = keys.length - 1; i >= 0; i -= 1) {
+      if (!removed.has(keys[i])) continue;
+      let start = i;
+      while (start > 0 && removed.has(keys[start - 1])) start -= 1;
+      order.delete(start, i - start + 1);
+      i = start;
+    }
+    for (const key of removed) features.delete(key);
+  }
+  // Insertions after their anchors, last position first so indexes hold.
+  if (insertions.length) {
+    const index = new Map<string, number>();
+    order.toArray().forEach((key, i) => index.set(key, i));
+    const placed = insertions
+      .filter((insertion) => insertion.keys.length)
+      .map((insertion, seq) => ({
+        at: insertion.after === undefined ? 0 : (index.get(insertion.after) ?? -1) + 1,
+        keys: insertion.keys,
+        seq,
+      }))
+      // Same position: insert the later run first so the earlier one ends up
+      // in front of it.
+      .sort((x, y) => y.at - x.at || y.seq - x.seq);
+    for (const { at, keys } of placed) order.insert(at, keys);
   }
 }
 

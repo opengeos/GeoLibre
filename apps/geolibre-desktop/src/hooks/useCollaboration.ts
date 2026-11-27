@@ -116,6 +116,7 @@ export function useCollaboration(
   const crdtRef = useRef<CrdtModule | null>(null);
   const docSyncRef = useRef<CollabDocSync | null>(null);
   const crdtActiveRef = useRef(false);
+  const delegateInstalledRef = useRef(false);
   // A local edit not yet written to the document: one scheduled behind the
   // debounce, or a snapshot still being built. Remote applies wait for it, or
   // replacing the store would drop the edit before it reached the document.
@@ -242,6 +243,13 @@ export function useCollaboration(
     connRef.current?.send({ type: "snapshot", project, rev: revRef.current });
   };
 
+  /** Hand undo back to the store if this session had taken it over. */
+  const releaseHistoryDelegate = (): void => {
+    if (!delegateInstalledRef.current) return;
+    delegateInstalledRef.current = false;
+    setHistoryDelegate(null);
+  };
+
   /** Stop the session after a project from a peer could not be applied. */
   const failSession = (error: unknown): void => {
     // Failed welcome/snapshot application must stop outbound sync. Preserve
@@ -276,9 +284,10 @@ export function useCollaboration(
       },
       seedProject: async () => {
         try {
-          const project = basemapEgressRef.current.apply(
-            await buildCollaborationSnapshot(mapControllerRef),
-          );
+          const built = await buildCollaborationSnapshot(mapControllerRef);
+          // The session may have been left (or replaced) while building.
+          if (docSyncRef.current !== docSync) return null;
+          const project = basemapEgressRef.current.apply(built);
           lastContentRef.current = serializeProject(project);
           baseProjectRef.current = project;
           return project;
@@ -399,6 +408,7 @@ export function useCollaboration(
         if (crdtActiveRef.current && docSync) {
           // Per-user undo: the store's snapshot history would revert peers'
           // edits too, so undo/redo go to this participant's CRDT history.
+          delegateInstalledRef.current = true;
           setHistoryDelegate({
             undo: () => docSync.undo(),
             redo: () => docSync.redo(),
@@ -406,10 +416,12 @@ export function useCollaboration(
             canRedo: () => docSync.canRedo(),
           });
           docSync.start();
-        } else if (message.snapshot) {
-          applyRemoteSnapshot(message.snapshot, true);
-        } else if (message.role === "host") {
-          void sendSnapshot();
+        } else {
+          // Snapshot fallback (e.g. a reconnect landed on an older relay):
+          // the store's own history applies again.
+          releaseHistoryDelegate();
+          if (message.snapshot) applyRemoteSnapshot(message.snapshot, true);
+          else if (message.role === "host") void sendSnapshot();
         }
         if (message.role === "guest" && useAppStore.getState().collaboration.followHost) {
           const host = message.participants.find((participant) => participant.role === "host");
@@ -770,10 +782,8 @@ export function useCollaboration(
       docSyncRef.current.destroy();
       docSyncRef.current = null;
     }
-    if (crdtActiveRef.current) {
-      crdtActiveRef.current = false;
-      setHistoryDelegate(null);
-    }
+    crdtActiveRef.current = false;
+    releaseHistoryDelegate();
     presenceTeardownRef.current?.();
     presenceTeardownRef.current = null;
     teardownRef.current?.();

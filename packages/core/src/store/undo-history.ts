@@ -384,6 +384,7 @@ function finishHistoryStep(previousBasemapStyleUrl: string): void {
 export function undo(): void {
   if (historyDelegate) {
     historyDelegate.undo();
+    boundStore().setState({ isDirty: true });
     return;
   }
   const temporal = boundStore().temporal.getState();
@@ -419,6 +420,7 @@ export function undo(): void {
 export function redo(): void {
   if (historyDelegate) {
     historyDelegate.redo();
+    boundStore().setState({ isDirty: true });
     return;
   }
   const temporal = boundStore().temporal.getState();

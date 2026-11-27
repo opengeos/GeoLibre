@@ -211,6 +211,19 @@ describe("RelayDoc", () => {
     }
   });
 
+  it("undoes a client update to the relay-owned comment list", () => {
+    const relay = new RelayDoc({ storage: memoryStorage() });
+    relay.setField("comments", [{ id: "c1" }]);
+    const client = new ProjectDoc();
+    Y.applyUpdate(client.doc, Y.encodeStateAsUpdate(relay.project.doc));
+    const updates: Uint8Array[] = [];
+    client.doc.on("update", (u: Uint8Array) => updates.push(u));
+    client.doc.transact(() => client.fields.set("comments", [{ id: "forged" }]));
+    const [frame] = splitUpdate(updates[0], () => "id");
+    relay.receive("c", frame, editor);
+    assert.deepEqual(relay.project.fields.get("comments"), [{ id: "c1" }]);
+  });
+
   it("compacts the log into a base state once it grows", () => {
     const storage = memoryStorage();
     const relay = new RelayDoc({ storage });

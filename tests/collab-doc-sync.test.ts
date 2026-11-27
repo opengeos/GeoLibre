@@ -34,6 +34,8 @@ interface Peer {
   sync: CollabDocSync;
   store: { project: GeoLibreProject | null; applies: { initial: boolean }[] };
   canEdit: boolean;
+  /** What the relay allows, which can briefly disagree with the client. */
+  relayCanEdit: boolean;
   online: boolean;
 }
 
@@ -78,7 +80,7 @@ class FakeRelay {
         });
       } else if (message.type === "doc-update") {
         const result = this.doc.receive(peer.id, message, {
-          canEdit: peer.canEdit,
+          canEdit: peer.relayCanEdit,
           isHost: peer.id === "host",
           lockedLayerIds: this.lockedLayerIds,
         });
@@ -95,6 +97,7 @@ class FakeRelay {
     const peer = {
       id,
       canEdit,
+      relayCanEdit: canEdit,
       online: true,
       store: { project: localProject, applies: [] as { initial: boolean }[] },
     } as Peer;
@@ -145,6 +148,12 @@ function rename(p: GeoLibreProject, id: string, name: string): GeoLibreProject {
   } as unknown as GeoLibreProject;
 }
 
+/** Push an edit the way the app does: derived from, and based on, the store's project. */
+function edit(peer: Peer, change: (p: GeoLibreProject) => GeoLibreProject): void {
+  const base = peer.store.project ?? peer.sync.read();
+  peer.sync.pushLocal(change(base), base);
+}
+
 function names(p: GeoLibreProject | null): string[] {
   return ((p?.layers ?? []) as unknown as AnyLayer[]).map((l) => l.name ?? "");
 }
@@ -177,8 +186,8 @@ describe("CollabDocSync", () => {
     const guest = relay.join("guest", null);
     await settle();
 
-    host.sync.pushLocal(rename(host.sync.read(), "roads", "Roads (host)"));
-    guest.sync.pushLocal(rename(guest.sync.read(), "parcels", "Parcels (guest)"));
+    edit(host, (p) => rename(p, "roads", "Roads (host)"));
+    edit(guest, (p) => rename(p, "parcels", "Parcels (guest)"));
     await settle();
     assert.deepEqual(names(host.store.project), ["Roads (host)", "Parcels (guest)"]);
     assert.deepEqual(names(guest.store.project), ["Roads (host)", "Parcels (guest)"]);
@@ -198,15 +207,37 @@ describe("CollabDocSync", () => {
     assert.deepEqual(names(guest.store.project), ["Roads (host)", "Parcels"]);
   });
 
+  it("keeps a peer's edit the store has not taken yet", async () => {
+    const relay = new FakeRelay();
+    const host = relay.join("host", project());
+    await settle();
+    const guest = relay.join("guest", null);
+    await settle();
+    const stale = guest.store.project!;
+    edit(host, (p) => rename(p, "roads", "Roads (host)"));
+    await settle();
+    // The guest's next edit still derives from its older store copy.
+    guest.sync.pushLocal(rename(stale, "parcels", "Parcels (guest)"), stale);
+    await settle();
+    assert.deepEqual(names(relay.doc.materialize() as unknown as GeoLibreProject), [
+      "Roads (host)",
+      "Parcels (guest)",
+    ]);
+  });
+
   it("never writes participant-local keys", async () => {
     const relay = new FakeRelay();
     const host = relay.join("host", project());
     await settle();
-    host.sync.pushLocal({
-      ...host.sync.read(),
-      mapView: { center: [9, 9], zoom: 9, bearing: 0, pitch: 0 },
-      selectedLayerId: "roads",
-    } as unknown as GeoLibreProject);
+    edit(
+      host,
+      (p) =>
+        ({
+          ...p,
+          mapView: { center: [9, 9], zoom: 9, bearing: 0, pitch: 0 },
+          selectedLayerId: "roads",
+        }) as unknown as GeoLibreProject,
+    );
     await settle();
     for (const key of LOCAL_ONLY_KEYS) {
       if (key !== "comments") assert.equal(relay.doc.materialize()[key], undefined, key);
@@ -220,7 +251,7 @@ describe("CollabDocSync", () => {
     const guest = relay.join("guest", null);
     await settle();
     guest.online = false;
-    guest.sync.pushLocal(rename(guest.sync.read(), "roads", "Offline edit"));
+    edit(guest, (p) => rename(p, "roads", "Offline edit"));
     await settle();
     assert.deepEqual(names(host.store.project), ["Roads", "Parcels"]);
     guest.online = true;
@@ -235,7 +266,7 @@ describe("CollabDocSync", () => {
     await settle();
     const guest = relay.join("guest", null, false);
     await settle();
-    guest.sync.pushLocal(rename(guest.sync.read(), "roads", "Ignored"));
+    edit(guest, (p) => rename(p, "roads", "Ignored"));
     await settle();
     assert.deepEqual(names(relay.doc.materialize() as unknown as GeoLibreProject), [
       "Roads",
@@ -245,13 +276,13 @@ describe("CollabDocSync", () => {
     // Edit rights flip mid-flight: the relay refuses, the client starts over
     // from the relay's copy and later edits sync again.
     guest.canEdit = true;
-    relay.peers.get("guest")!.canEdit = false;
-    guest.sync.pushLocal(rename(guest.sync.read(), "roads", "Refused"));
+    guest.relayCanEdit = false;
+    edit(guest, (p) => rename(p, "roads", "Refused"));
     await settle();
-    relay.peers.get("guest")!.canEdit = true;
+    guest.relayCanEdit = true;
     await settle();
     assert.deepEqual(names(guest.store.project), ["Roads", "Parcels"]);
-    guest.sync.pushLocal(rename(guest.sync.read(), "parcels", "Accepted"));
+    edit(guest, (p) => rename(p, "parcels", "Accepted"));
     await settle();
     assert.deepEqual(names(host.store.project), ["Roads", "Accepted"]);
   });
@@ -263,7 +294,7 @@ describe("CollabDocSync", () => {
     relay.lockedLayerIds = ["roads"];
     const guest = relay.join("guest", null);
     await settle();
-    guest.sync.pushLocal(rename(guest.sync.read(), "roads", "Hijacked"));
+    edit(guest, (p) => rename(p, "roads", "Hijacked"));
     await settle();
     assert.deepEqual(names(guest.store.project), ["Roads", "Parcels"]);
     assert.deepEqual(names(host.store.project ?? host.sync.read()), ["Roads", "Parcels"]);
