@@ -237,6 +237,11 @@ def test_server_not_ready_is_retryable() -> None:
 
     assert _is_transport_failure("FATAL:  the database system is starting up")
     assert _is_transport_failure("FATAL:  sorry, too many clients already")
+    assert _is_transport_failure(
+        'connection to server on socket "/run/postgresql/.s.PGSQL.5432" failed: '
+        "No such file or directory\n\tIs the server running locally and accepting "
+        "connections on that socket?"
+    )
     assert not _is_transport_failure('FATAL:  password authentication failed for user "a"')
 
 

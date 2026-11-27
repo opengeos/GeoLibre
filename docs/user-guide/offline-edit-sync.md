@@ -13,17 +13,27 @@ Sources that sync through the outbox:
 | Source | How a conflict is detected |
 | --- | --- |
 | PostGIS tables (Add Data → PostgreSQL, editable mode) | Each row is compared with the row as you loaded it; the write is rejected if a row changes between the check and the write |
+| ArcGIS feature services (writable feature layers) | Each feature's geometry and editable attributes are compared with the version you downloaded. Fields the service maintains (object and global IDs, editor tracking) are ignored, so a save that already landed is never mistaken for someone else's edit. A layer loaded with simplified shapes compares attributes only |
+| GeoLens datasets (edited from the GeoLens panel) | Each feature is read back from the dataset and compared with the version you loaded. GeoLens has no transaction or version token, so a change made in the instant between that read and the write is not caught |
 
-Layers loaded before the outbox existed keep the direct save for their first
-save, then switch to the outbox from the next one.
+PostGIS layers loaded before the outbox existed keep the direct save for their
+first save, then switch to the outbox from the next one.
+
+Credentials never go into the outbox. A PostGIS change set finds its
+connection among your saved connections when it syncs. An ArcGIS change set
+syncs through its layer's own sign-in, so it waits while the project that
+holds the layer is closed and syncs once the layer is open again. A GeoLens
+change set syncs while the GeoLens panel is connected to that server with an
+API key, and waits otherwise.
 
 ## Saving edits
 
 Edit features the usual way (the attribute table, the Geo Editor, Field
-Collection) and save with the layer's **Save edits to PostGIS table** action or
-with **Project → Save layer edits to source files**. GeoLibre works out what
-changed since the layer was loaded (new, changed and deleted features) and only
-sends those features.
+Collection) and save with the layer's **Save edits to PostGIS table** or **Save
+edits to ArcGIS service** action, with
+**Project → Save layer edits to source files**, or (for GeoLens) with **Save**
+in the GeoLens panel. GeoLibre works out what changed since the layer was
+loaded (new, changed and deleted features) and only sends those features.
 
 Saving again while edits are still queued replaces the queued version of every
 feature the new save touches. If you undid a queued edit in the same session
@@ -49,8 +59,9 @@ The save then reports one of four results:
   comes back online.
 - **Needs review**: some features were also changed on the source. Everything
   else was synced; the conflicting features wait for you to decide.
-- **Failed**: the source refused the edits (for example a constraint or a
-  permission). The edits stay in the outbox, with the source's message, until
+- **Failed**: the source refused the edits (for example a constraint, a
+  domain, or a permission). An ArcGIS service can refuse single features while
+  accepting the rest; only the refused ones stay queued. The edits stay in the outbox, with the source's message, until
   you sync again or discard them.
 
 ## The Pending edits indicator
