@@ -294,7 +294,7 @@ export class RelayDoc {
     // Fields only the relay writes (the comment list, which comment-mutation
     // validates and rate-limits): a client update may not change them.
     // The host's first write into an empty session (its seed) may carry them.
-    const seeding = this.project.isEmpty();
+    const seeding = context.isHost && this.project.isEmpty();
     const protectedBefore = seeding
       ? []
       : PROTECTED_FIELDS.map((key) => [key, this.project.fields.get(key)] as const);

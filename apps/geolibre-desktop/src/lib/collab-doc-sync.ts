@@ -247,8 +247,10 @@ export class CollabDocSync {
     }
     if (this.project.isEmpty()) {
       if (firstSync && this.host.isHost() && this.host.canEdit()) {
+        const project = this.project;
         const seed = await this.host.seedProject();
-        if (this.destroyed || !seed || !this.project.isEmpty()) return;
+        // Left, or reset onto a fresh document, while the seed was built.
+        if (this.destroyed || project !== this.project || !seed || !project.isEmpty()) return;
         // The host's own project becomes the session's, comments included
         // (later writes leave comments to the relay).
         const ignore = new Set(LOCAL_ONLY_KEYS);

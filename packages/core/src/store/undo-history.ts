@@ -383,6 +383,7 @@ function finishHistoryStep(previousBasemapStyleUrl: string): void {
  */
 export function undo(): void {
   if (historyDelegate) {
+    if (!historyDelegate.canUndo()) return;
     historyDelegate.undo();
     boundStore().setState({ isDirty: true });
     return;
@@ -419,6 +420,7 @@ export function undo(): void {
 /** Step the history forward one entry and mark the project dirty. */
 export function redo(): void {
   if (historyDelegate) {
+    if (!historyDelegate.canRedo()) return;
     historyDelegate.redo();
     boundStore().setState({ isDirty: true });
     return;

@@ -215,7 +215,12 @@ describe("RelayDoc", () => {
     const relay = new RelayDoc({ storage: memoryStorage() });
     const client = new ProjectDoc();
     const [frame] = clientWrite(client, { ...project(), comments: [{ id: "seeded" }] });
-    relay.receive("host", frame, editor);
+    // A guest writing first may not plant comments...
+    const guestRelay = new RelayDoc({ storage: memoryStorage() });
+    guestRelay.receive("guest", frame, editor);
+    assert.equal(guestRelay.project.fields.get("comments"), undefined);
+    // ...but the host's seed carries them.
+    relay.receive("host", frame, { ...editor, isHost: true });
     assert.deepEqual(relay.project.fields.get("comments"), [{ id: "seeded" }]);
   });
 
