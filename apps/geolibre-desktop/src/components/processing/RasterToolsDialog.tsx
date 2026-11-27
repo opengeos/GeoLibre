@@ -230,6 +230,9 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
   // long compute.
   const [clientCancellable, setClientCancellable] = useState(false);
   const [clientProgress, setClientProgress] = useState<ClientToolProgress | null>(null);
+  // False while the inputs are still being read and decoded on this thread,
+  // true once the compute has been handed to the worker.
+  const [clientComputing, setClientComputing] = useState(false);
   // True while fetching a picked layer's bytes for the client engine.
   const [resolvingLayer, setResolvingLayer] = useState(false);
   const [clientResult, setClientResult] = useState<{
@@ -747,6 +750,7 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
     setClientRunning(true);
     setClientCancellable(true);
     setClientProgress(null);
+    setClientComputing(false);
     setClientLog([t("toolbar.rasterTool.runningInBrowser", { tool: tool.name })]);
     const tracker = beginProcessingRun(
       {
@@ -814,6 +818,7 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
       // The compute runs on a Web Worker (#3701), so the dialog and the map
       // stay responsive and Cancel can terminate it. The decoded rasters are
       // transferred to the worker: they were read for this run only.
+      setClientComputing(true);
       const run = await runRasterToolInBackground(
         tool.id,
         { raster, rasters: additionalInputs, vectors },
@@ -828,6 +833,7 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
       if (isStale()) return;
       setClientCancellable(false);
       setClientProgress(null);
+      setClientComputing(false);
       // Tool-specific log lines (a transition matrix, flood pixel counts, ...).
       setClientLog((prev) => [
         ...prev,
@@ -931,6 +937,7 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
         setClientRunning(false);
         setClientCancellable(false);
         setClientProgress(null);
+        setClientComputing(false);
       }
     }
   }, [
@@ -1269,7 +1276,9 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
                         done: clientProgress.done,
                         total: clientProgress.total,
                       })
-                    : t("toolbar.rasterTool.computingInBackground")}
+                    : clientComputing
+                      ? t("toolbar.rasterTool.computingInBackground")
+                      : t("toolbar.rasterTool.readingInputs")}
                 </p>
                 <div
                   className="h-1.5 overflow-hidden rounded-full bg-muted"

@@ -89,6 +89,12 @@ function dem(): RasterData {
  */
 class LoopbackWorker {
   static instances: LoopbackWorker[] = [];
+  /**
+   * Keep delivering replies after terminate(), the way messages already
+   * queued by a real worker can still arrive, so the runner's own guard is
+   * what keeps them out.
+   */
+  static leaky = false;
   terminated = false;
   private listeners = new Map<string, Set<(event: unknown) => void>>();
 
@@ -109,7 +115,7 @@ class LoopbackWorker {
     const request = structuredClone(message, { transfer });
     setTimeout(() => {
       void handleRasterToolRequest(request, (reply, replyTransfer) => {
-        if (this.terminated) return;
+        if (this.terminated && !LoopbackWorker.leaky) return;
         const data = structuredClone(reply, { transfer: replyTransfer });
         for (const listener of this.listeners.get("message") ?? []) listener({ data });
       });
@@ -265,20 +271,36 @@ describe("runRasterToolInBackground", () => {
   it("stops a long shadow run mid-way: no result and no progress after Cancel", async () => {
     globalThis.Worker = LoopbackWorker as unknown as typeof Worker;
     LoopbackWorker.instances = [];
-    const controller = new AbortController();
-    const progress: ClientToolProgress[] = [];
-    const run = runRasterToolInBackground(
-      "building-shadows",
-      { vectors: { input: buildings } },
-      { ...sunHoursParams },
-      { signal: controller.signal, onProgress: (step) => progress.push(step) },
-    );
-    controller.abort();
-    await assert.rejects(run, (error: Error) => error.name === "AbortError");
-    assert.equal(LoopbackWorker.instances[0].terminated, true);
-    // Let the loopback finish its task: its replies must not surface.
-    await new Promise((resolve) => setTimeout(resolve, 50));
-    assert.equal(progress.length, 0);
+    LoopbackWorker.leaky = true;
+    try {
+      const controller = new AbortController();
+      const progress: ClientToolProgress[] = [];
+      const run = runRasterToolInBackground(
+        "building-shadows",
+        { vectors: { input: buildings } },
+        { ...sunHoursParams },
+        {
+          signal: controller.signal,
+          onProgress: (step) => {
+            progress.push(step);
+            // Cancel mid-run, after the third sun position.
+            if (step.done === 3) controller.abort();
+          },
+        },
+      );
+      await assert.rejects(run, (error: Error) => error.name === "AbortError");
+      assert.equal(LoopbackWorker.instances[0].terminated, true);
+      // The leaky loopback keeps posting the rest of the run (and its result)
+      // after Cancel; none of it may surface.
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      assert.deepEqual(
+        progress.map((step) => step.done),
+        [1, 2, 3],
+      );
+      assert.ok(progress[0].total > 3, "the run had more positions to go");
+    } finally {
+      LoopbackWorker.leaky = false;
+    }
   });
 
   it("does not start a run whose signal is already aborted", async () => {
