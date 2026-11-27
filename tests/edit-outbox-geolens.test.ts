@@ -367,3 +367,47 @@ describe("GeoLens identity guards", () => {
     assert.equal(outcome.entry!.ops[0].maybeApplied, true);
   });
 });
+
+describe("GeoLens run-level stops", () => {
+  it("keeps inserts that landed before a rate limit and retries the rest", async () => {
+    const { server, baseline } = seed();
+    const first = {
+      ...building(0, 4),
+      id: undefined,
+      geometry: { type: "Point" as const, coordinates: [40, 0] },
+    };
+    const second = {
+      ...building(0, 5),
+      id: undefined,
+      geometry: { type: "Point" as const, coordinates: [50, 0] },
+    };
+    const entry = entryFor(
+      [building(1, 10), building(2, 20), building(3, 30), first, second],
+      baseline,
+    );
+    let posts = 0;
+    const fetchImpl = server.fetch;
+    server.fetch = async (url, init) => {
+      if (init?.method === "POST" && ++posts === 2) {
+        return { ok: false, status: 429, json: async () => ({ detail: "slow down" }) };
+      }
+      return fetchImpl(url, init);
+    };
+    const outcome = await syncOutboxEntry(
+      entry,
+      createGeoLensSyncAdapter(entry, server.connection()),
+    );
+    assert.equal(outcome.kind, "offline");
+    assert.equal(outcome.inserted, 1, "the first insert is settled");
+    assert.equal(outcome.insertedKeys.size, 1);
+    assert.equal(outcome.entry!.ops.length, 1, "only the rate-limited insert stays queued");
+    assert.ok(outcome.entry!.nextAttemptAt);
+  });
+
+  it("gives a copied new feature its own local id", () => {
+    const drawn = { ...building(0, 1), id: "geolens-new-a" };
+    const fc = withGeoLensLocalIds({ type: "FeatureCollection", features: [drawn, { ...drawn }] });
+    assert.equal(fc.features[0].id, "geolens-new-a");
+    assert.notEqual(fc.features[1].id, "geolens-new-a");
+  });
+});

@@ -151,6 +151,12 @@ export interface ApplyResult {
   failed: Array<{ opId: string; message: string }>;
   /** Server keys assigned to applied inserts, by op id. */
   insertedKeys?: Map<string, string>;
+  /**
+   * Set when the run stopped part-way (a revoked key, a rate limit) after
+   * some writes landed. Those are kept as applied; the rest stay queued, as a
+   * refusal for an {@link EditSyncRejectedError}, else for a retry.
+   */
+  stop?: Error;
 }
 
 /** A backend's sync implementation. */
@@ -626,6 +632,29 @@ export async function syncOutboxEntry(
         return next;
       });
     if (remaining.length === 0) return outcome;
+    if (result.stop) {
+      const stopped = result.stop;
+      const at = now();
+      const hard = stopped instanceof EditSyncRejectedError;
+      const attempts = hard ? entry.attempts : entry.attempts + 1;
+      return {
+        ...outcome,
+        kind: hard ? "error" : "offline",
+        error: errorMessage(stopped),
+        entry: {
+          ...entry,
+          ops: remaining,
+          status: hard ? "error" : "pending",
+          conflicts: entry.conflicts.filter((c) => remaining.some((op) => op.id === c.opId)),
+          attempts,
+          lastError: errorMessage(stopped),
+          lastErrorCode: errorCode(stopped),
+          lastAttemptAt: startedAt,
+          nextAttemptAt: hard ? undefined : at + retryDelayMs(attempts),
+          updatedAt: at,
+        },
+      };
+    }
     const failed = remaining.some((op) => failedById.has(op.id));
     const hasConflicts = conflicts.length > 0 || remaining.some((op) => op.resolution === "skip");
     const status: OutboxEntryStatus = failed ? "error" : hasConflicts ? "conflict" : "pending";

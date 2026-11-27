@@ -245,8 +245,13 @@ export function withLocalFeatureIds(
 export function readFailure(error: unknown): Error {
   if (error instanceof EditSyncRejectedError || error instanceof EditSyncWaitingError) return error;
   const message = error instanceof Error ? error.message : String(error);
-  // No answer (a fetch TypeError) or a 5xx gateway answer: try again later.
-  if (error instanceof TypeError || /HTTP 5\d\d/.test(message)) {
+  const status = (error as { status?: unknown } | null)?.status;
+  // No answer (a fetch TypeError) or a 5xx/408/429 answer: try again later.
+  if (
+    error instanceof TypeError ||
+    /HTTP 5\d\d/.test(message) ||
+    (typeof status === "number" && (status >= 500 || status === 408 || status === 429))
+  ) {
     return new EditSyncOfflineError(message);
   }
   return new EditSyncRejectedError(message);

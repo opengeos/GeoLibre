@@ -87,6 +87,7 @@ function gidKey(feature: Feature): string | null {
 export function withGeoLensLocalIds(collection: FeatureCollection): FeatureCollection {
   let changed = false;
   const seen = new Set<number>();
+  const seenLocal = new Set<string>();
   const features = collection.features.map((feature) => {
     const gid = featureGid(feature);
     // A second feature claiming a gid (a copy) is new, and needs its own id.
@@ -94,7 +95,13 @@ export function withGeoLensLocalIds(collection: FeatureCollection): FeatureColle
       seen.add(gid);
       return feature;
     }
-    if (typeof feature.id === "string" && feature.id.startsWith("geolens-new-")) return feature;
+    // A copied new feature shares its source's local id: only the first keeps it.
+    if (typeof feature.id === "string" && feature.id.startsWith("geolens-new-")) {
+      if (!seenLocal.has(feature.id)) {
+        seenLocal.add(feature.id);
+        return feature;
+      }
+    }
     changed = true;
     return { ...feature, id: `geolens-new-${crypto.randomUUID()}` };
   });
@@ -150,6 +157,13 @@ export function geolensOutboxTarget(
   let maxGid = -1;
   for (const key of baseline.keys()) maxGid = Math.max(maxGid, Number(key));
   return { baseUrl, datasetId, featureLimit, maxGid };
+}
+
+/** Ends a per-feature write run early, carrying the error to report. */
+class RunStop extends Error {
+  constructor(readonly reason: Error) {
+    super(reason.message);
+  }
 }
 
 /** How many rows past the download limit the lost-insert search reads. */
@@ -254,12 +268,13 @@ export function createGeoLensSyncAdapter(
           await write();
           applied.push(op.id);
         } catch (error) {
-          // A revoked key or a rate limit stops the whole run, not one feature.
+          // A revoked key or a rate limit stops the whole run, not one feature;
+          // what already landed is reported as applied.
           if (error instanceof GeoLensHttpError && (error.status === 401 || error.status === 403)) {
-            throw new EditSyncRejectedError(error.message);
+            throw new RunStop(new EditSyncRejectedError(error.message));
           }
           if (error instanceof GeoLensHttpError && error.status === 429) {
-            throw new EditSyncOfflineError(error.message);
+            throw new RunStop(new EditSyncOfflineError(error.message));
           }
           if (error instanceof GeoLensHttpError && error.status < 500) {
             failed.push({ opId: op.id, message: error.message });
@@ -268,40 +283,45 @@ export function createGeoLensSyncAdapter(
           throw new EditSyncUncertainError(error instanceof Error ? error.message : String(error));
         }
       };
-      for (const op of plan.updates) {
-        const feature = op.feature as Feature;
-        await run(op, () =>
-          updateFeature(
-            client,
-            target.datasetId,
-            {
-              gid: Number(op.key),
-              mode: feature.geometry ? "replace" : "patch",
-              geometry: feature.geometry ?? null,
-              properties: cleanProperties(feature.properties),
-            },
-            fetchImpl,
-          ),
-        );
-      }
-      for (const op of plan.inserts) {
-        const feature = op.feature as Feature;
-        if (!feature.geometry) continue;
-        await run(op, async () => {
-          const gid = await createFeature(
-            client,
-            target.datasetId,
-            { geometry: feature.geometry, properties: cleanProperties(feature.properties) },
-            fetchImpl,
+      try {
+        for (const op of plan.updates) {
+          const feature = op.feature as Feature;
+          await run(op, () =>
+            updateFeature(
+              client,
+              target.datasetId,
+              {
+                gid: Number(op.key),
+                mode: feature.geometry ? "replace" : "patch",
+                geometry: feature.geometry ?? null,
+                properties: cleanProperties(feature.properties),
+              },
+              fetchImpl,
+            ),
           );
-          // Without its gid the feature cannot be linked to its row, and a
-          // later save would add it again: settle it through the dedupe.
-          if (gid === null) throw new Error("GeoLens did not return the new feature's id.");
-          insertedKeys.set(op.id, String(gid));
-        });
-      }
-      for (const op of plan.deletes) {
-        await run(op, () => deleteFeature(client, target.datasetId, Number(op.key), fetchImpl));
+        }
+        for (const op of plan.inserts) {
+          const feature = op.feature as Feature;
+          if (!feature.geometry) continue;
+          await run(op, async () => {
+            const gid = await createFeature(
+              client,
+              target.datasetId,
+              { geometry: feature.geometry, properties: cleanProperties(feature.properties) },
+              fetchImpl,
+            );
+            // Without its gid the feature cannot be linked to its row, and a
+            // later save would add it again: settle it through the dedupe.
+            if (gid === null) throw new Error("GeoLens did not return the new feature's id.");
+            insertedKeys.set(op.id, String(gid));
+          });
+        }
+        for (const op of plan.deletes) {
+          await run(op, () => deleteFeature(client, target.datasetId, Number(op.key), fetchImpl));
+        }
+      } catch (error) {
+        if (error instanceof RunStop) return { applied, failed, insertedKeys, stop: error.reason };
+        throw error;
       }
       return { applied, failed, insertedKeys };
     },
