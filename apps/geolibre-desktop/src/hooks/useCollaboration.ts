@@ -149,6 +149,8 @@ export function useCollaboration(
       disconnect();
       useAppStore.getState().resetCollaboration();
     },
+    // Unmount only; disconnect reads refs, so a stale closure is fine.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [],
   );
 
@@ -833,6 +835,8 @@ export function useCollaboration(
   const leave = useCallback(() => {
     disconnect();
     useAppStore.getState().resetCollaboration();
+    // disconnect reads refs only, so the first closure stays correct.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const setMode = useCallback((mode: CollaborationMode) => {
