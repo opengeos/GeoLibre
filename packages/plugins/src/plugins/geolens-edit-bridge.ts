@@ -52,6 +52,11 @@ export function setActiveGeoLensClient(
   else activeClients.delete(baseUrl);
 }
 
+/** Forget every signed-in connection (the plugin was turned off). */
+export function clearActiveGeoLensClients(): void {
+  activeClients.clear();
+}
+
 /** The connection the panel is signed in with for a server, if any. */
 export function getActiveGeoLensClient(
   baseUrl: string,

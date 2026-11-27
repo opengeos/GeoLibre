@@ -90,7 +90,10 @@ export function ensureEditSyncBackends(): void {
   setGeoLensSaveHandler(async (request) => {
     const store = useAppStore.getState();
     const layer = store.layers.find((candidate) => candidate.id === request.layerId);
-    if (!layer?.geojson) return { written: 0, errors: [] };
+    if (!layer?.geojson) {
+      const message = i18n.t("editOutbox.save.layerGone");
+      return { written: 0, errors: [message], message };
+    }
     const geojson = withGeoLensLocalIds(layer.geojson);
     if (geojson !== layer.geojson) store.updateLayer(layer.id, { geojson });
     const target = geolensOutboxTarget(

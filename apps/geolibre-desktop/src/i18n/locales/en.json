@@ -433,6 +433,7 @@
       "failed": "Could not sync to {{target}}. The edits stay queued under Pending edits in the status bar. {{error}}",
       "busy": "A sync to {{target}} is already running. Try again when it finishes.",
       "noChanges": "No changes to save to {{target}}.",
+      "layerGone": "The layer is no longer in the project, so nothing was saved.",
       "reloaded": "The layer was reloaded from the table, because the last sync could not refresh it. Check it and save again."
     }
   },

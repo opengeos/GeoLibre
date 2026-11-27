@@ -39,6 +39,7 @@ import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
 import { isTauriRuntime } from "./earth-engine-auth";
 import { getControlMap } from "./style-map";
 import {
+  clearActiveGeoLensClients,
   geoLensEditSessions,
   getGeoLensSaveHandler,
   setActiveGeoLensClient,
@@ -2332,6 +2333,9 @@ function createGeoLensPlugin(config: GeoLensPluginConfig): GeoLibrePlugin {
       // Baselines are the plugin's own bookkeeping and hold a full copy of each
       // loaded dataset; on reactivation they are read back from the server.
       clearEditSessions();
+      // Queued outbox edits then wait for the panel to be connected again
+      // instead of syncing with a key the user turned off.
+      clearActiveGeoLensClients();
       appRef = null;
     },
   };
