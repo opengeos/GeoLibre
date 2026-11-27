@@ -140,7 +140,7 @@
     "@turf/helpers": "^7.4.0",
     "@turf/mask": "^7.4.0",
     "cesium": "^1.147.0",
-    "cog-tiler-wasm": "^0.6.0",
+    "cog-tiler-wasm": "^0.6.1",
     "copc": "^0.0.9",
     "fast-xml-parser": "^5.12.1",
     "geotiff": "^3.0.5",

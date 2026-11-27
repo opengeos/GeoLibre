@@ -1,5 +1,8 @@
 import { registerHooks } from "node:module";
-import type { NonTiledRasterRequest } from "../../packages/plugins/src/plugins/maplibre-raster";
+import type {
+  NonTiledRasterRequest,
+  OverviewlessRasterRequest,
+} from "../../packages/plugins/src/plugins/maplibre-raster";
 import type { ConvertGeoTiffToCogOptions } from "../../packages/processing/src/cog-convert";
 
 export const conversions: {
@@ -15,6 +18,12 @@ export function setNonTiledRasterHandler(handler: typeof rasterHandler) {
   rasterHandler = handler;
 }
 
+export let overviewlessHandler: ((request: OverviewlessRasterRequest) => void) | null = null;
+
+export function setOverviewlessRasterHandler(handler: typeof overviewlessHandler) {
+  overviewlessHandler = handler;
+}
+
 export function convertGeoTiffToCog(bytes: Uint8Array, options: ConvertGeoTiffToCogOptions = {}) {
   const result = Promise.withResolvers<Uint8Array>();
   conversions.push({ bytes, options, result });
@@ -24,8 +33,11 @@ export function convertGeoTiffToCog(bytes: Uint8Array, options: ConvertGeoTiffTo
   return result.promise;
 }
 
+/** Dimensions `readGeoTiffInfo` reports; tests may enlarge them. */
+export const harnessInfo = { width: 32, height: 32, bands: 1 };
+
 export async function readGeoTiffInfo() {
-  return { ok: true, width: 32, height: 32, bands: 1, tiled: false };
+  return { ok: true, ...harnessInfo, tiled: false };
 }
 
 /** Options each `addRasterToMap` call received, in call order. */
@@ -54,6 +66,7 @@ export function saveBinaryFileWithFallback() {
 }
 
 export function resetCogHarness() {
+  Object.assign(harnessInfo, { width: 32, height: 32, bands: 1 });
   conversions.length = 0;
   saves.length = 0;
   addedRasters = 0;
@@ -78,7 +91,7 @@ registerHooks({
       source = `export * from ${JSON.stringify(processingUrl)};
         export { convertGeoTiffToCog, readGeoTiffInfo } from ${JSON.stringify(helperUrl)};`;
     } else if (specifier === "@geolibre/plugins/maplibre-raster") {
-      source = `export { setNonTiledRasterHandler, addRasterToMap } from ${JSON.stringify(helperUrl)};
+      source = `export { setNonTiledRasterHandler, setOverviewlessRasterHandler, addRasterToMap } from ${JSON.stringify(helperUrl)};
         export const setLocalRasterFileReader = () => {};
         export const setLocalRasterPicker = () => {};
         export const setUnrestorableRasterHandler = () => {};`;
