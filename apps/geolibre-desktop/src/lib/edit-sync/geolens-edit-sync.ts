@@ -321,6 +321,10 @@ export function createGeoLensSyncAdapter(
         }
       } catch (error) {
         if (error instanceof RunStop) return { applied, failed, insertedKeys, stop: error.reason };
+        // No answer mid-run: keep what already landed, the rest is unknown.
+        if (error instanceof EditSyncUncertainError) {
+          return { applied, failed, insertedKeys, stop: error };
+        }
         throw error;
       }
       return { applied, failed, insertedKeys };

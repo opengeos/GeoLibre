@@ -636,6 +636,13 @@ export async function syncOutboxEntry(
       const stopped = result.stop;
       const at = now();
       const hard = stopped instanceof EditSyncRejectedError;
+      // An unknown outcome may have landed any insert still unsettled.
+      if (stopped instanceof EditSyncUncertainError) {
+        const sent = new Set(toApply.filter((op) => op.kind === "insert").map((op) => op.id));
+        for (let i = 0; i < remaining.length; i++) {
+          if (sent.has(remaining[i].id)) remaining[i] = { ...remaining[i], maybeApplied: true };
+        }
+      }
       const attempts = hard ? entry.attempts : entry.attempts + 1;
       return {
         ...outcome,

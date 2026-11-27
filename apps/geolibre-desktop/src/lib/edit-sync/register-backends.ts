@@ -62,6 +62,10 @@ export function ensureEditSyncBackends(): void {
         session,
       });
     },
+    // Never keep a token-bearing session past its attempt.
+    afterAttempt: (entry) => {
+      arcgisSessions.delete(entry.id);
+    },
   });
 
   registerEditSyncBackend("geolens", {

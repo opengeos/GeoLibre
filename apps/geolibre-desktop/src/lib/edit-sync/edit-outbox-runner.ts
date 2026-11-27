@@ -37,6 +37,8 @@ export interface EditSyncBackendHandler {
   createAdapter(entry: OutboxEntry): EditSyncAdapter | Promise<EditSyncAdapter>;
   /** Called after an attempt that applied or resolved anything. */
   afterSync?(entry: OutboxEntry, outcome: SyncOutcome): void | Promise<void>;
+  /** Called after every attempt, whatever its outcome (to release resources). */
+  afterAttempt?(entry: OutboxEntry): void;
 }
 
 const handlers = new Map<EditSyncBackend, EditSyncBackendHandler>();
@@ -279,6 +281,7 @@ export function syncOutboxEntryNow(
         // Refreshing the open layer is best effort; the source is already in sync.
       }
     }
+    handler.afterAttempt?.(entry);
     return outcome;
   }).finally(() => inFlight.delete(id));
   inFlight.set(id, attempt);

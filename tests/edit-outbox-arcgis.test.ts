@@ -472,6 +472,26 @@ describe("ArcGIS sync guards", () => {
     assert.equal(outcome.entry!.ops.find((op) => op.kind === "insert")!.maybeApplied, true);
   });
 
+  it("defers a reshaped feature on a generalized layer and strips URL credentials", () => {
+    const service = seed();
+    const base = loadLayer(service);
+    const generalized = {
+      ...base,
+      metadata: { ...base.metadata, arcgisEditInfo: { ...INFO, geometryGeneralized: true } },
+    } as GeoLibreLayer;
+    const moved = edit(generalized, (features) => [
+      { ...features[0], geometry: { type: "Point", coordinates: [99, 1] } },
+      features[1],
+      features[2],
+    ]);
+    assert.equal(buildArcGISChangeSet(moved, arcgisOutboxTarget(moved)!), null);
+    const tokened = {
+      ...base,
+      source: { ...base.source, arcgisQueryUrl: `${base.source.arcgisQueryUrl}?token=SECRET` },
+    } as GeoLibreLayer;
+    assert.ok(!JSON.stringify(arcgisOutboxTarget(tokened)).includes("SECRET"));
+  });
+
   it("leaves the layer to a downloaded feature that lost its object ID", () => {
     const service = seed();
     const layer = edit(loadLayer(service), (features) => [

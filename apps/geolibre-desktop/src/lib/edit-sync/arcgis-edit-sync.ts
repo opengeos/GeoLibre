@@ -44,7 +44,7 @@ import {
   type RemoteState,
   type SyncOutcome,
 } from "./edit-outbox";
-import { featureFingerprint } from "./feature-fingerprint";
+import { canonicalJson, featureFingerprint } from "./feature-fingerprint";
 
 /** What the outbox stores to find an ArcGIS layer again (no credentials). */
 export interface ArcGISOutboxTarget {
@@ -63,7 +63,18 @@ export interface ArcGISOutboxTarget {
 function layerUrlOf(layer: GeoLibreLayer): string | null {
   const queryUrl = layer.source.arcgisQueryUrl;
   if (typeof queryUrl !== "string") return null;
-  return queryUrl.replace(/\/+$/, "").replace(/\/query$/i, "");
+  // Drop any query string or fragment (a pasted ?token=...), so no credential
+  // ends up in the persisted outbox target or entry id.
+  let base = queryUrl;
+  try {
+    const url = new URL(queryUrl);
+    url.search = "";
+    url.hash = "";
+    base = url.toString();
+  } catch {
+    base = queryUrl.split(/[?#]/)[0];
+  }
+  return base.replace(/\/+$/, "").replace(/\/query$/i, "");
 }
 
 function baselineOf(layer: GeoLibreLayer): FeatureCollection | undefined {
@@ -181,6 +192,22 @@ export function buildArcGISChangeSet(
     )
   ) {
     return null;
+  }
+  // A generalized layer's versions ignore geometry, so a reshaped feature
+  // would look unchanged; the direct save refuses that edit, so defer to it.
+  if (target.ignoreGeometry) {
+    const baseGeometry = new Map(
+      baseline.features.map((feature) => [keyOf(feature), canonicalJson(feature.geometry ?? null)]),
+    );
+    const reshaped = layer.geojson.features.some((feature) => {
+      const key = keyOf(feature);
+      return (
+        key !== null &&
+        baseGeometry.has(key) &&
+        baseGeometry.get(key) !== canonicalJson(feature.geometry ?? null)
+      );
+    });
+    if (reshaped) return null;
   }
   return buildChangeSet({
     baseline: base,
