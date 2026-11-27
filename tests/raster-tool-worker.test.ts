@@ -100,6 +100,12 @@ class LoopbackWorker {
 
   constructor() {
     LoopbackWorker.instances.push(this);
+    // The real worker announces itself once its module has loaded.
+    setTimeout(() => this.emit({ type: "ready" }), 0);
+  }
+
+  private emit(data: unknown) {
+    for (const listener of this.listeners.get("message") ?? []) listener({ data });
   }
 
   addEventListener(type: string, listener: (event: unknown) => void) {
@@ -116,8 +122,7 @@ class LoopbackWorker {
     setTimeout(() => {
       void handleRasterToolRequest(request, (reply, replyTransfer) => {
         if (this.terminated && !LoopbackWorker.leaky) return;
-        const data = structuredClone(reply, { transfer: replyTransfer });
-        for (const listener of this.listeners.get("message") ?? []) listener({ data });
+        this.emit(structuredClone(reply, { transfer: replyTransfer }));
       });
     }, 0);
   }
@@ -242,6 +247,36 @@ describe("runRasterToolInBackground", () => {
       }
     });
   }
+
+  it("runs inline with intact inputs when the worker module fails to load", async () => {
+    // A worker whose script never loads (a CSP without worker-src): it fires
+    // `error` and never posts `ready`, so the request is never posted.
+    const posted: unknown[] = [];
+    class UnloadableWorker {
+      listeners = new Map<string, (event: unknown) => void>();
+      terminated = false;
+      constructor() {
+        setTimeout(() => this.listeners.get("error")?.({ message: "blocked" }), 0);
+      }
+      addEventListener(type: string, listener: (event: unknown) => void) {
+        this.listeners.set(type, listener);
+      }
+      removeEventListener() {}
+      postMessage(message: unknown) {
+        posted.push(message);
+      }
+      terminate() {
+        this.terminated = true;
+      }
+    }
+    globalThis.Worker = UnloadableWorker as unknown as typeof Worker;
+    const direct = await runRasterToolClientAsync("hillshade", { raster: dem() }, {});
+    const sent = { raster: dem() };
+    const background = await runRasterToolInBackground("hillshade", sent, {});
+    assert.deepEqual(background, direct);
+    assert.equal(posted.length, 0, "nothing was posted to the dead worker");
+    assert.ok(sent.raster.bands[0].byteLength > 0, "the inputs were not transferred away");
+  });
 
   it("rejects with the worker's error", async () => {
     globalThis.Worker = LoopbackWorker as unknown as typeof Worker;

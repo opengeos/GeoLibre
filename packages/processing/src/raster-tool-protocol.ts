@@ -17,8 +17,12 @@ export interface RasterToolWorkerRequest {
   parameters: Record<string, unknown>;
 }
 
-/** What the worker posts back: any number of progress lines, then one result or error. */
+/**
+ * What the worker posts back: `ready` once its module has loaded, then any
+ * number of progress lines, then one result or error.
+ */
 export type RasterToolWorkerMessage =
+  | { type: "ready" }
   | { type: "progress"; progress: ClientToolProgress }
   | { type: "result"; result: ClientToolResult }
   | { type: "error"; name: string; message: string };

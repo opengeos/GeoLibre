@@ -59,8 +59,9 @@ async function runInline(
  *
  * The input rasters' band buffers are transferred to the worker, so they are
  * detached (empty) on the caller's side once the run starts: pass rasters
- * decoded for this run. Where Workers are unavailable (node, tests), or the
- * request cannot be posted, the tool runs inline on the calling thread instead.
+ * decoded for this run. Where Workers are unavailable (node, tests), the
+ * worker module fails to load, or the request cannot be posted, the tool runs
+ * inline on the calling thread instead.
  * That compute is synchronous, so an abort cannot interrupt it: the signal is
  * checked before and after, and an aborted run still rejects with an
  * `AbortError` (its result discarded) once the compute returns.
@@ -97,8 +98,27 @@ export function runRasterToolInBackground(
     };
     const onAbort = () => settle(() => reject(aborted()));
     signal?.addEventListener("abort", onAbort, { once: true });
+    // Inline instead, with the inputs untouched: the request is only posted
+    // (and the bands transferred) once the worker reports it has loaded.
+    const fallBackInline = () =>
+      settle(() => {
+        runInline(toolId, inputs, parameters, options).then(resolve, reject);
+      });
+    let posted = false;
     worker.addEventListener("message", (event: MessageEvent<RasterToolWorkerMessage>) => {
       const data = event.data;
+      if (data.type === "ready") {
+        if (settled || posted) return;
+        posted = true;
+        const request: RasterToolWorkerRequest = { toolId, inputs, parameters };
+        try {
+          worker.postMessage(request, requestTransferables(request));
+        } catch {
+          // Something in the inputs cannot be cloned; nothing was transferred.
+          fallBackInline();
+        }
+        return;
+      }
       if (data.type === "progress") {
         if (!settled) onProgress?.(data.progress);
         return;
@@ -106,21 +126,19 @@ export function runRasterToolInBackground(
       if (data.type === "result") settle(() => resolve(data.result));
       else settle(() => reject(workerError(data.name, data.message)));
     });
-    worker.addEventListener("error", (event) =>
-      settle(() => reject(new Error(event.message || "The raster tool worker failed."))),
-    );
+    worker.addEventListener("error", (event) => {
+      // Before `ready` the module never loaded (a CSP without worker-src, a
+      // host that cannot serve the chunk): run on this thread, as before
+      // workers. After it, the run itself failed.
+      if (!posted) {
+        event.preventDefault?.();
+        fallBackInline();
+        return;
+      }
+      settle(() => reject(new Error(event.message || "The raster tool worker failed.")));
+    });
     worker.addEventListener("messageerror", () =>
       settle(() => reject(new Error("The raster tool worker posted an unreadable message."))),
     );
-    const request: RasterToolWorkerRequest = { toolId, inputs, parameters };
-    try {
-      worker.postMessage(request, requestTransferables(request));
-    } catch {
-      // Something in the inputs cannot be cloned; nothing was transferred, so
-      // run on this thread instead.
-      settle(() => {
-        runInline(toolId, inputs, parameters, options).then(resolve, reject);
-      });
-    }
   });
 }

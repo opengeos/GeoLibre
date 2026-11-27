@@ -294,6 +294,8 @@ describe("Raster tools browser inputs", () => {
       );
       fireEvent.click(screen.getByRole("button", { name: "Run" }));
       await waitFor(() => assert.equal(workers.length, 1));
+      // The run is posted once the worker reports its module loaded.
+      await act(async () => workers[0].emit({ type: "ready" }));
       assert.equal((workers[0].posted[0] as { toolId: string }).toolId, "building-shadows");
       assert.ok(await screen.findByText(i18n.t("toolbar.rasterTool.computingInBackground")));
 
@@ -306,7 +308,12 @@ describe("Raster tools browser inputs", () => {
       assert.ok(
         screen.getByText(i18n.t("toolbar.rasterTool.progressSunPositions", { done: 3, total: 12 })),
       );
-      assert.equal(screen.getByRole("progressbar").getAttribute("aria-valuenow"), "25");
+      const bar = screen.getByRole("progressbar");
+      assert.equal(bar.getAttribute("aria-valuenow"), "25");
+      assert.equal(
+        bar.getAttribute("aria-label"),
+        i18n.t("toolbar.rasterTool.progressSunPositions", { done: 3, total: 12 }),
+      );
 
       fireEvent.click(screen.getByRole("button", { name: i18n.t("common.cancel") }));
       assert.ok(await screen.findByText(i18n.t("toolbar.rasterTool.cancelled")));

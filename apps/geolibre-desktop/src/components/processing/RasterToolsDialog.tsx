@@ -987,6 +987,15 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
   }, [clientResult, tool, t]);
 
   const running = Boolean(job && RUNNING_JOB_STATUSES.has(job.status)) || clientRunning;
+  // One caption for the client progress line and its bar's accessible name.
+  const clientProgressCaption = clientProgress
+    ? t("toolbar.rasterTool.progressSunPositions", {
+        done: clientProgress.done,
+        total: clientProgress.total,
+      })
+    : clientComputing
+      ? t("toolbar.rasterTool.computingInBackground")
+      : t("toolbar.rasterTool.readingInputs");
 
   return (
     <Dialog
@@ -1270,20 +1279,11 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
                 tool reports steps (the Building shadows sun positions). */}
             {engine === "client" && clientRunning && clientCancellable && (
               <div className="grid gap-1.5" data-testid="raster-tool-progress">
-                <p className="text-xs text-muted-foreground">
-                  {clientProgress
-                    ? t("toolbar.rasterTool.progressSunPositions", {
-                        done: clientProgress.done,
-                        total: clientProgress.total,
-                      })
-                    : clientComputing
-                      ? t("toolbar.rasterTool.computingInBackground")
-                      : t("toolbar.rasterTool.readingInputs")}
-                </p>
+                <p className="text-xs text-muted-foreground">{clientProgressCaption}</p>
                 <div
                   className="h-1.5 overflow-hidden rounded-full bg-muted"
                   role="progressbar"
-                  aria-label={t("toolbar.rasterTool.computingInBackground")}
+                  aria-label={clientProgressCaption}
                   aria-valuemin={0}
                   aria-valuemax={100}
                   aria-valuenow={
