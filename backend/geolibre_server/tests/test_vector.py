@@ -569,3 +569,19 @@ def test_write_refuses_when_the_file_changed_since_it_was_read(tmp_path) -> None
         )
     assert exc.value.status_code == 409
     assert _gpkg_rows(src, "wells") == [(1, "mine")]
+
+
+@requires_geopandas
+def test_preserve_fids_handles_uri_special_characters_in_the_file_name(tmp_path) -> None:
+    import geopandas as gpd
+
+    src = tmp_path / "wells?v2 %20#a.gpkg"
+    gpd.GeoDataFrame.from_features(
+        _points([(None, "a", 0), (None, "b", 1)])["features"], crs="EPSG:4326"
+    ).to_file(src, layer="wells", driver="GPKG", FID="ogc_fid")
+    vector_write(
+        WriteVectorRequest(
+            path=str(src), geojson=_points([(1, "a", 0), (7, "c", 2)]), preserve_fids=True
+        )
+    )
+    assert _gpkg_rows(src, "wells", "ogc_fid") == [(1, "a"), (7, "c")]

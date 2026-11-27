@@ -23,7 +23,7 @@ import {
   sha256Hex,
   withGeoPackageLocalIds,
 } from "../apps/geolibre-desktop/src/lib/edit-sync/geopackage-edit-sync";
-import { restoreFeatureIds } from "../apps/geolibre-desktop/src/lib/gpkg-reader";
+import { liftRowIds, tagRowIds } from "../apps/geolibre-desktop/src/lib/gpkg-reader";
 
 const PATH = "/data/field/wells.gpkg";
 
@@ -152,21 +152,26 @@ describe("GeoPackage bases", () => {
     assert.equal(geoPackageBaseline(layer), undefined);
   });
 
-  it("carries row ids across reprojection when the order is intact", () => {
+  it("carries row ids across reprojection by value, whatever the order", () => {
     const source: FeatureCollection = {
       type: "FeatureCollection",
       features: [well(4, "a"), well(9, "b")],
     };
+    const tagged = tagRowIds(source);
+    // Reprojection drops ids and may reorder features.
     const reprojected: FeatureCollection = {
       type: "FeatureCollection",
-      features: [well(undefined, "a", 10), well(undefined, "b", 20)],
+      features: [...tagged.features].reverse().map(({ id: _id, ...f }) => f as Feature),
     };
+    const lifted = liftRowIds(reprojected);
     assert.deepEqual(
-      restoreFeatureIds(source, reprojected).features.map((f) => f.id),
-      [4, 9],
+      lifted.features.map((f) => [f.id, f.properties!.status]),
+      [
+        [9, "b"],
+        [4, "a"],
+      ],
     );
-    const short = { type: "FeatureCollection" as const, features: [well(undefined, "a")] };
-    assert.equal(restoreFeatureIds(source, short), short);
+    assert.ok(lifted.features.every((f) => !("__geolibre_gpkg_rowid" in f.properties!)));
   });
 });
 
@@ -294,5 +299,34 @@ describe("reconcileGeoPackageLayerAfterSync", () => {
     assert.equal(byId.get(4), "new");
     assert.equal(live.metadata.geometryEdited, undefined);
     assert.deepEqual(buildGeoPackageChangeSet(live), [], "nothing left to save");
+  });
+});
+
+describe("GeoPackage identity guards", () => {
+  it("gives a copied row its own local id and never reuses an id twice", async () => {
+    const copied = withGeoPackageLocalIds({
+      type: "FeatureCollection",
+      features: [well(1, "a"), well(1, "a")],
+    });
+    assert.equal(copied.features[0].id, 1);
+    assert.match(String(copied.features[1].id), /^gpkg-new-/);
+
+    const { file, layer } = seed();
+    // A typed new id (4) plus a drawing without one: both must get distinct ids.
+    const entry = entryFor(
+      edited(layer, [
+        well(1, "ok"),
+        well(2, "ok"),
+        well(3, "ok"),
+        well(4, "typed"),
+        well(undefined, "drawn", 9),
+      ]),
+    );
+    const outcome = await syncOutboxEntry(entry, createGeoPackageSyncAdapter(entry, file.deps()));
+    assert.equal(outcome.kind, "synced");
+    assert.deepEqual(
+      [...file.rows.keys()].sort((a, b) => a - b),
+      [1, 2, 3, 4, 5],
+    );
   });
 });

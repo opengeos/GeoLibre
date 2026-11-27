@@ -406,8 +406,11 @@ def _write_shapefile(target: Path, geojson: dict) -> int:
 def _geopackage_fid_column(target: Path, table: str) -> str:
     """Return the integer primary-key (FID) column of a GeoPackage table, or ``fid``."""
     import sqlite3
+    from contextlib import closing
 
-    with sqlite3.connect(f"file:{target}?mode=ro", uri=True) as conn:
+    # A properly encoded file URI, so "?", "#" or "%" in a name stay literal.
+    uri = f"{target.resolve().as_uri()}?mode=ro"
+    with closing(sqlite3.connect(uri, uri=True)) as conn:
         quoted = '"' + table.replace('"', '""') + '"'
         for row in conn.execute(f"PRAGMA table_info({quoted})"):
             # table_info columns: cid, name, type, notnull, dflt_value, pk.

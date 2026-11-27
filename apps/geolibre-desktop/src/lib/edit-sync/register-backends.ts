@@ -162,12 +162,29 @@ export function ensureEditSyncBackends(): void {
     },
   });
   // Record each GeoPackage layer's base as it appears, before it is edited.
+  // A layer restored with a project carries the project's copy of its
+  // features, which may hold edits saved into the project (a save drops the
+  // edited flag), so only one re-read from its file (localFileReloadable)
+  // counts; others keep the direct save.
+  const restored = new Set<string>();
+  const markRestored = (layers: ReturnType<typeof useAppStore.getState>["layers"]) => {
+    for (const layer of layers) {
+      if (layer.metadata.localFileReloadable !== true) restored.add(layer.id);
+    }
+  };
   const captureBases = (layers: ReturnType<typeof useAppStore.getState>["layers"]) => {
-    for (const layer of layers) captureGeoPackageBaseline(layer);
+    for (const layer of layers) {
+      if (!restored.has(layer.id)) captureGeoPackageBaseline(layer);
+    }
     pruneGeoPackageBaselines(layers.map((layer) => layer.id));
   };
+  markRestored(useAppStore.getState().layers);
   captureBases(useAppStore.getState().layers);
   useAppStore.subscribe((state, previous) => {
+    if (state.projectGeneration !== previous.projectGeneration) {
+      restored.clear();
+      markRestored(state.layers);
+    }
     if (state.layers !== previous.layers) captureBases(state.layers);
   });
 }

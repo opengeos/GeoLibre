@@ -160,9 +160,15 @@ export function geopackageOutboxId(target: GeoPackageOutboxTarget, layerId: stri
  */
 export function withGeoPackageLocalIds(collection: FeatureCollection): FeatureCollection {
   let changed = false;
+  const seen = new Set<string | number>();
   const features = collection.features.map((feature) => {
-    if (rowIdKey(feature) !== null) return feature;
-    if (typeof feature.id === "string" && feature.id.startsWith("gpkg-new-")) return feature;
+    // A copy keeps its source's id: only the first occurrence keeps it.
+    const repeated = feature.id !== undefined && seen.has(feature.id);
+    if (feature.id !== undefined) seen.add(feature.id);
+    if (!repeated && rowIdKey(feature) !== null) return feature;
+    if (!repeated && typeof feature.id === "string" && feature.id.startsWith("gpkg-new-")) {
+      return feature;
+    }
     changed = true;
     return { ...feature, id: `gpkg-new-${crypto.randomUUID()}` };
   });
@@ -286,10 +292,13 @@ export function createGeoPackageSyncAdapter(
         features.push(update ? { ...(update.feature as Feature), id: Number(key) } : feature);
       }
       const insertedKeys = new Map<string, string>();
+      const taken = new Set(features.map((f) => String(f.id)));
       for (const op of plan.inserts) {
         // A re-created row (keep mine on a deleted row) keeps its id when free.
-        const wanted = op.key !== null && !features.some((f) => String(f.id) === op.key);
+        const wanted = op.key !== null && !taken.has(op.key);
         const fid = wanted ? Number(op.key) : ++maxFid;
+        maxFid = Math.max(maxFid, fid);
+        taken.add(String(fid));
         features.push({ ...(op.feature as Feature), id: fid });
         insertedKeys.set(op.id, String(fid));
       }
@@ -398,9 +407,15 @@ export function reconcileGeoPackageLayerAfterSync(
   }
   setGeoPackageBaseline(layer.id, target.path, base);
   const { geometryEdited: _cleared, ...metadata } = layer.metadata;
+  // Still "edited" while anything differs from the new base: queued ops, or
+  // edits made while the write was in flight.
+  const stillEdited =
+    outcome.entry !== null ||
+    (buildGeoPackageChangeSet({ ...layer, geojson: { ...layer.geojson, features } }) ?? []).length >
+      0;
   deps.updateLayer(layer.id, {
     geojson: { ...layer.geojson, features },
-    metadata: outcome.entry ? { ...metadata, geometryEdited: true } : metadata,
+    metadata: stillEdited ? { ...metadata, geometryEdited: true } : metadata,
   });
   return true;
 }

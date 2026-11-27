@@ -380,26 +380,49 @@ export async function loadGeoPackageTableRows(
   return readGeoPackageTableRowsSync(await loadSqlJs(), bytes, table, limit);
 }
 
+/** Attribute that carries a row id through reprojection (stripped afterwards). */
+export const GEOPACKAGE_ROW_ID_PROPERTY = "__geolibre_gpkg_rowid";
+
 /**
- * Carry the row ids of a GeoPackage read across reprojection, which goes
- * through GeoJSON and ST_Read and so drops `feature.id`. Features come back in
- * input order; when the counts differ the ids are left off rather than guessed.
+ * Copy each feature's row id into an attribute, so it survives reprojection
+ * (which goes through GeoJSON and ST_Read and drops `feature.id`) whatever the
+ * order the features come back in.
  *
- * @param source The collection as read, with row ids.
- * @param reprojected The same features in WGS84.
- * @returns The reprojected collection with the row ids restored.
+ * @param collection The collection as read, with row ids.
+ * @returns The collection with the row id also stored as an attribute.
  */
-export function restoreFeatureIds(
-  source: FeatureCollection,
-  reprojected: FeatureCollection,
-): FeatureCollection {
-  if (source.features.length !== reprojected.features.length) return reprojected;
-  if (!source.features.some((feature) => feature.id !== undefined)) return reprojected;
+export function tagRowIds(collection: FeatureCollection): FeatureCollection {
   return {
-    ...reprojected,
-    features: reprojected.features.map((feature, index) => {
-      const id = source.features[index].id;
-      return id === undefined ? feature : { ...feature, id };
+    ...collection,
+    features: collection.features.map((feature) =>
+      feature.id === undefined
+        ? feature
+        : {
+            ...feature,
+            properties: { ...(feature.properties ?? {}), [GEOPACKAGE_ROW_ID_PROPERTY]: feature.id },
+          },
+    ),
+  };
+}
+
+/**
+ * Move row ids tagged by {@link tagRowIds} back to `feature.id` and drop the
+ * attribute.
+ *
+ * @param collection The reprojected collection.
+ * @returns The collection with row ids as feature ids again.
+ */
+export function liftRowIds(collection: FeatureCollection): FeatureCollection {
+  return {
+    ...collection,
+    features: collection.features.map((feature) => {
+      const properties = { ...(feature.properties ?? {}) };
+      if (!(GEOPACKAGE_ROW_ID_PROPERTY in properties)) return feature;
+      const raw = properties[GEOPACKAGE_ROW_ID_PROPERTY];
+      delete properties[GEOPACKAGE_ROW_ID_PROPERTY];
+      const id = typeof raw === "bigint" ? Number(raw) : Number(raw);
+      const { id: _old, ...rest } = feature;
+      return Number.isSafeInteger(id) ? { ...rest, id, properties } : { ...rest, properties };
     }),
   };
 }
