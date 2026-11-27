@@ -177,7 +177,7 @@ export interface GeoLensConnection {
 
 function readFailure(error: unknown): Error {
   if (error instanceof GeoLensHttpError) {
-    return error.status >= 500
+    return error.status >= 500 || error.status === 408 || error.status === 429
       ? new EditSyncOfflineError(error.message)
       : new EditSyncRejectedError(error.message);
   }

@@ -645,7 +645,15 @@ export async function syncOutboxEntry(
           ...entry,
           ops: remaining,
           status: hard ? "error" : "pending",
-          conflicts: entry.conflicts.filter((c) => remaining.some((op) => op.id === c.opId)),
+          // Conflicts found this round, plus earlier ones still queued.
+          conflicts: [
+            ...conflicts,
+            ...entry.conflicts.filter(
+              (c) =>
+                !conflicts.some((found) => found.opId === c.opId) &&
+                remaining.some((op) => op.id === c.opId),
+            ),
+          ],
           attempts,
           lastError: errorMessage(stopped),
           lastErrorCode: errorCode(stopped),

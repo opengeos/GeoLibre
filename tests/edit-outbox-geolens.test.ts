@@ -404,6 +404,21 @@ describe("GeoLens run-level stops", () => {
     assert.ok(outcome.entry!.nextAttemptAt);
   });
 
+  it("retries a rate-limited read instead of failing the entry", async () => {
+    const { server, baseline } = seed();
+    const entry = entryFor([building(1, 99), building(2, 20), building(3, 30)], baseline);
+    const fetchImpl = server.fetch;
+    server.fetch = async (url, init) =>
+      (init?.method ?? "GET") === "GET"
+        ? { ok: false, status: 429, json: async () => ({}) }
+        : fetchImpl(url, init);
+    const outcome = await syncOutboxEntry(
+      entry,
+      createGeoLensSyncAdapter(entry, server.connection()),
+    );
+    assert.equal(outcome.kind, "offline");
+  });
+
   it("gives a copied new feature its own local id", () => {
     const drawn = { ...building(0, 1), id: "geolens-new-a" };
     const fc = withGeoLensLocalIds({ type: "FeatureCollection", features: [drawn, { ...drawn }] });
