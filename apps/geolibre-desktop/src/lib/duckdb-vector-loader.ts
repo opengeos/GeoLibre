@@ -28,7 +28,7 @@ import { confirmLargeDataset, type DuckDbVectorLoadOptions } from "./duckdb-vect
 import { readDxfCodepage, recodeCadFeatureCollection } from "./cad-encoding";
 import { featureCollectionFromBatches } from "./duckdb-feature-batches";
 import { ensureGpkgFeatureCount } from "./gpkg-ogr-contents";
-import { isLikelyGeoPackage, loadGeoPackageVectorFile } from "./gpkg-reader";
+import { isLikelyGeoPackage, liftRowIds, loadGeoPackageVectorFile, tagRowIds } from "./gpkg-reader";
 import { prjSidecarCrs } from "./prj-sidecar";
 import { createDuckDbWorker, selectDuckDbBundle } from "./duckdb-wasm-bundles";
 import { getSpatialExtensionPath } from "./spatial-extension-config";
@@ -700,11 +700,12 @@ async function loadGeoPackageVector(
   // Tag the collection with its source CRS and reproject to WGS84 through the
   // shared DuckDB ST_Transform path (the GeoJSON reader it uses is not affected
   // by the GeoPackage threading bug).
+  // Row ids ride along as an attribute, matched by value, not by position.
   const tagged = {
-    ...featureCollection,
+    ...tagRowIds(featureCollection as FeatureCollection),
     crs: { type: "name", properties: { name: `EPSG:${epsgCode}` } },
   } as FeatureCollection;
-  return reprojectFeatureCollectionToWgs84(tagged);
+  return liftRowIds(await reprojectFeatureCollectionToWgs84(tagged));
 }
 
 export async function loadDuckDbVectorFile(

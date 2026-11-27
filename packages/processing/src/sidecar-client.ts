@@ -874,6 +874,13 @@ export interface WriteVectorToSourceRequest {
   geojson: FeatureCollection;
   /** Target table within a multi-layer GeoPackage; omit for single-layer files. */
   layer?: string;
+  /**
+   * SHA-256 (hex) of the file as last read. The sidecar answers 409 and writes
+   * nothing when the file changed since (offline edit sync, #3530).
+   */
+  expected_sha256?: string;
+  /** GeoPackage only: write each feature's integer `id` as its row id. */
+  preserve_fids?: boolean;
 }
 
 export interface WriteVectorToSourceResult {
@@ -885,6 +892,17 @@ export interface WriteVectorToSourceResult {
   feature_count: number;
   /** Human-readable log lines describing what was saved. */
   messages: string[];
+}
+
+/** The sidecar refused a source-file write with an HTTP error; nothing was written. */
+export class VectorWriteRejectedError extends Error {
+  override readonly name = "VectorWriteRejectedError";
+  constructor(
+    message: string,
+    readonly status: number,
+  ) {
+    super(message);
+  }
 }
 
 /**
@@ -909,7 +927,10 @@ export async function writeVectorToSource(
     throw sidecarConnectionError(baseUrl, error);
   }
   if (!res.ok) {
-    throw new Error(await responseErrorMessage(res, "Could not save edits to source"));
+    throw new VectorWriteRejectedError(
+      await responseErrorMessage(res, "Could not save edits to source"),
+      res.status,
+    );
   }
   return (await res.json()) as WriteVectorToSourceResult;
 }

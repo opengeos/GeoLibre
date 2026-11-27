@@ -18,7 +18,18 @@ import {
   setGeoLensSaveHandler,
 } from "@geolibre/plugins/geolens-edit-bridge";
 import i18n from "../../i18n";
+import { writeVectorToSource } from "@geolibre/processing";
+import { readLocalFileBytes } from "../file-io/local-fs";
+import { isTauri } from "../is-tauri";
+import { startGeoLibreSidecar } from "../sidecar";
 import { editSessionToken, registerEditSyncBackend } from "./edit-outbox-runner";
+import {
+  captureGeoPackageBaseline,
+  createGeoPackageSyncAdapter,
+  pruneGeoPackageBaselines,
+  reconcileGeoPackageLayerAfterSync,
+  sha256Hex,
+} from "./geopackage-edit-sync";
 import {
   buildGeoLensChangeSet,
   createGeoLensSyncAdapter,
@@ -50,8 +61,10 @@ export function ensureEditSyncBackends(): void {
   registerEditSyncBackend("arcgis", {
     createAdapter: async (entry) => {
       const session = await arcgisSession(entry.layerId);
+      // Kept only once the adapter exists, so a refused attempt holds no token.
+      const adapter = createArcGISSyncAdapter(entry, session);
       arcgisSessions.set(entry.id, session);
-      return createArcGISSyncAdapter(entry, session);
+      return adapter;
     },
     afterSync: async (entry, outcome) => {
       const session = arcgisSessions.get(entry.id);
@@ -121,5 +134,57 @@ export function ensureEditSyncBackends(): void {
       errors: result.status === "error" ? [result.message] : [],
       message: result.message,
     };
+  });
+
+  registerEditSyncBackend("geopackage", {
+    createAdapter: (entry) =>
+      createGeoPackageSyncAdapter(entry, {
+        readFile: readLocalFileBytes,
+        parse: async (bytes, path, layer) => {
+          const { loadDuckDbVectorFile } = await import("../duckdb-vector-loader");
+          const name = path.split(/[\\/]/).pop() ?? "layer.gpkg";
+          return loadDuckDbVectorFile(
+            { name, extension: "gpkg", data: bytes },
+            layer ? { layer } : {},
+          );
+        },
+        write: async (request) => {
+          if (isTauri()) await startGeoLibreSidecar();
+          return writeVectorToSource(request);
+        },
+        sha256: sha256Hex,
+      }),
+    afterSync: (entry, outcome) => {
+      reconcileGeoPackageLayerAfterSync(entry, outcome, {
+        getLayer: (id) => useAppStore.getState().layers.find((layer) => layer.id === id),
+        updateLayer: (id, patch) => useAppStore.getState().updateLayer(id, patch),
+      });
+    },
+  });
+  // Record each GeoPackage layer's base as it appears, before it is edited.
+  // A layer restored with a project carries the project's copy of its
+  // features, which may hold edits saved into the project (a save drops the
+  // edited flag), so only one re-read from its file (localFileReloadable)
+  // counts; others keep the direct save.
+  const restored = new Set<string>();
+  const markRestored = (layers: ReturnType<typeof useAppStore.getState>["layers"]) => {
+    for (const layer of layers) {
+      if (layer.metadata.localFileReloadable !== true) restored.add(layer.id);
+    }
+  };
+  const captureBases = (layers: ReturnType<typeof useAppStore.getState>["layers"]) => {
+    for (const layer of layers) {
+      if (!restored.has(layer.id)) captureGeoPackageBaseline(layer);
+    }
+    pruneGeoPackageBaselines(layers.map((layer) => layer.id));
+  };
+  markRestored(useAppStore.getState().layers);
+  captureBases(useAppStore.getState().layers);
+  useAppStore.subscribe((state, previous) => {
+    if (state.projectGeneration !== previous.projectGeneration) {
+      restored.clear();
+      markRestored(state.layers);
+    }
+    if (state.layers !== previous.layers) captureBases(state.layers);
   });
 }

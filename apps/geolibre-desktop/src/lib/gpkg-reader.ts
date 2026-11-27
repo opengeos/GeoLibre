@@ -202,7 +202,15 @@ function readLayerFeatures(
           );
         }
       }
-      features.push({ type: "Feature", geometry, properties });
+      // The row id becomes the feature id (not an attribute), so a save can
+      // match features back to their rows (offline edit sync, #3530).
+      const fid = idIndex >= 0 ? row[idIndex] : null;
+      features.push({
+        type: "Feature",
+        ...(typeof fid === "number" && Number.isSafeInteger(fid) ? { id: fid } : {}),
+        geometry,
+        properties,
+      });
     }
   }
   return { type: "FeatureCollection", features };
@@ -370,4 +378,53 @@ export async function loadGeoPackageTableRows(
   limit?: number,
 ): Promise<Record<string, unknown>[]> {
   return readGeoPackageTableRowsSync(await loadSqlJs(), bytes, table, limit);
+}
+
+/** Attribute that carries a row id through reprojection (stripped afterwards). */
+export const GEOPACKAGE_ROW_ID_PROPERTY = "__geolibre_gpkg_rowid";
+
+/**
+ * Copy each feature's row id into an attribute, so it survives reprojection
+ * (which goes through GeoJSON and ST_Read and drops `feature.id`) whatever the
+ * order the features come back in.
+ *
+ * @param collection The collection as read, with row ids.
+ * @returns The collection with the row id also stored as an attribute.
+ */
+export function tagRowIds(collection: FeatureCollection): FeatureCollection {
+  return {
+    ...collection,
+    features: collection.features.map((feature) =>
+      feature.id === undefined
+        ? feature
+        : {
+            ...feature,
+            properties: { ...(feature.properties ?? {}), [GEOPACKAGE_ROW_ID_PROPERTY]: feature.id },
+          },
+    ),
+  };
+}
+
+/**
+ * Move row ids tagged by {@link tagRowIds} back to `feature.id` and drop the
+ * attribute.
+ *
+ * @param collection The reprojected collection.
+ * @returns The collection with row ids as feature ids again.
+ */
+export function liftRowIds(collection: FeatureCollection): FeatureCollection {
+  return {
+    ...collection,
+    features: collection.features.map((feature) => {
+      const properties = { ...(feature.properties ?? {}) };
+      if (!(GEOPACKAGE_ROW_ID_PROPERTY in properties)) return feature;
+      const raw = properties[GEOPACKAGE_ROW_ID_PROPERTY];
+      delete properties[GEOPACKAGE_ROW_ID_PROPERTY];
+      const id = typeof raw === "bigint" ? Number(raw) : raw;
+      const { id: _old, ...rest } = feature;
+      return typeof id === "number" && Number.isSafeInteger(id)
+        ? { ...rest, id, properties }
+        : { ...rest, properties };
+    }),
+  };
 }
