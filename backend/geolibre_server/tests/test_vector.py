@@ -585,3 +585,36 @@ def test_preserve_fids_handles_uri_special_characters_in_the_file_name(tmp_path)
         )
     )
     assert _gpkg_rows(src, "wells", "ogc_fid") == [(1, "a"), (7, "c")]
+
+
+@requires_geopandas
+def test_write_refuses_a_file_changed_while_it_was_being_written(tmp_path, monkeypatch) -> None:
+    import hashlib
+
+    import geopandas as gpd
+
+    from geolibre_server.app import vector as vector_module
+
+    src = tmp_path / "wells.gpkg"
+    gpd.GeoDataFrame.from_features(_points([(None, "a", 0)])["features"], crs="EPSG:4326").to_file(
+        src, layer="wells", driver="GPKG"
+    )
+    read_hash = hashlib.sha256(src.read_bytes()).hexdigest()
+    real_atomic = vector_module._atomic_write
+
+    def racing_atomic(target, write, before_replace=None):
+        def write_then_external_save(tmp):
+            write(tmp)
+            with src.open("ab") as handle:  # another program saves meanwhile
+                handle.write(b"\0")
+
+        real_atomic(target, write_then_external_save, before_replace)
+
+    monkeypatch.setattr(vector_module, "_atomic_write", racing_atomic)
+    with pytest.raises(HTTPException) as exc:
+        vector_write(
+            WriteVectorRequest(
+                path=str(src), geojson=_points([(1, "mine", 0)]), expected_sha256=read_hash
+            )
+        )
+    assert exc.value.status_code == 409

@@ -75,7 +75,7 @@ class FakeFile {
         );
         if (this.loseAnswer) {
           this.loseAnswer = false;
-          throw new Error("Could not connect to the GeoLibre sidecar");
+          throw new Error("The connection was reset before the sidecar answered");
         }
         return {};
       },

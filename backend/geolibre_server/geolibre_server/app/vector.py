@@ -189,7 +189,7 @@ def _build_wgs84_gdf(geojson: dict) -> Any:
     return gpd.GeoDataFrame.from_features(geojson["features"], crs=vector_ops.WGS84)
 
 
-def _atomic_write(target: Path, write: Any) -> None:
+def _atomic_write(target: Path, write: Any, before_replace: Any = None) -> None:
     """Write ``target`` atomically via a temp file beside it, then replace.
 
     ``write`` receives a temp :class:`Path` to write to; on success it is
@@ -202,6 +202,8 @@ def _atomic_write(target: Path, write: Any) -> None:
     Args:
         target: The destination path to replace.
         write: Callable ``(tmp_path) -> None`` that writes the temp file.
+        before_replace: Optional check run right before the replace (it may
+            raise to abort, leaving the target untouched).
     """
     tmpdir = tempfile.mkdtemp(dir=str(target.parent))
     try:
@@ -209,6 +211,8 @@ def _atomic_write(target: Path, write: Any) -> None:
         write(tmp)
         if target.exists():
             shutil.copymode(target, tmp)
+        if before_replace is not None:
+            before_replace()
         os.replace(tmp, target)
     finally:
         shutil.rmtree(tmpdir, ignore_errors=True)
@@ -438,7 +442,11 @@ def _with_feature_fids(gdf: Any, features: list[dict], fid_column: str) -> Any:
 
 
 def _write_geopackage(
-    target: Path, geojson: dict, layer: Optional[str], preserve_fids: bool = False
+    target: Path,
+    geojson: dict,
+    layer: Optional[str],
+    preserve_fids: bool = False,
+    expected_sha256: Optional[str] = None,
 ) -> tuple[int, str]:
     """Overwrite one layer of a GeoPackage in place, preserving the others.
 
@@ -512,7 +520,13 @@ def _write_geopackage(
         shutil.copy2(target, tmp)
         gdf.to_file(tmp, layer=target_layer, driver="GPKG", **write_options)
 
-    _atomic_write(target, _write)
+    # Check again right before replacing: another program may have saved the
+    # file while this one was being written (narrows the window to the replace).
+    _atomic_write(
+        target,
+        _write,
+        (lambda: _check_unchanged(target, expected_sha256)) if expected_sha256 else None,
+    )
     return len(gdf), target_layer
 
 
@@ -598,7 +612,11 @@ def _write_vector_source(request: WriteVectorRequest, target: Path, ext: str) ->
     try:
         if ext == ".gpkg":
             count, layer_name = _write_geopackage(
-                target, request.geojson, request.layer, request.preserve_fids
+                target,
+                request.geojson,
+                request.layer,
+                request.preserve_fids,
+                request.expected_sha256,
             )
         elif ext == ".shp":
             count = _write_shapefile(target, request.geojson)

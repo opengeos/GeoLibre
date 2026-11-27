@@ -420,9 +420,11 @@ export function liftRowIds(collection: FeatureCollection): FeatureCollection {
       if (!(GEOPACKAGE_ROW_ID_PROPERTY in properties)) return feature;
       const raw = properties[GEOPACKAGE_ROW_ID_PROPERTY];
       delete properties[GEOPACKAGE_ROW_ID_PROPERTY];
-      const id = typeof raw === "bigint" ? Number(raw) : Number(raw);
+      const id = typeof raw === "bigint" ? Number(raw) : raw;
       const { id: _old, ...rest } = feature;
-      return Number.isSafeInteger(id) ? { ...rest, id, properties } : { ...rest, properties };
+      return typeof id === "number" && Number.isSafeInteger(id)
+        ? { ...rest, id, properties }
+        : { ...rest, properties };
     }),
   };
 }

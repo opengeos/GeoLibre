@@ -15,13 +15,14 @@ Sources that sync through the outbox:
 | PostGIS tables (Add Data → PostgreSQL, editable mode) | Each row is compared with the row as you loaded it; the write is rejected if a row changes between the check and the write |
 | ArcGIS feature services (writable feature layers) | Each feature's geometry and editable attributes are compared with the version you downloaded. Fields the service maintains (object and global IDs, editor tracking) are ignored, so a save that already landed is never mistaken for someone else's edit. A layer loaded with simplified shapes compares attributes only |
 | GeoLens datasets (edited from the GeoLens panel) | Each feature is read back from the dataset and compared with the version you loaded. GeoLens has no transaction or version token, so a change made in the instant between that read and the write is not caught |
-| GeoPackage files (desktop app) | Each row, matched by its row id, is compared with the row as you loaded it. The file is written only if it is still byte for byte the file that was just checked, so a save from another program (QGIS, a sync client) in between is caught and checked again. The table is rewritten as a whole from the rows as read, so for a layer in a projected CRS untouched rows also go through reprojection, as with a direct save |
+| GeoPackage files (desktop app) | Each row, matched by its row id, is compared with the row as you loaded it. The file is checked again right before it is replaced, so a save from another program (QGIS, a sync client) in between is caught and the sync reads the file again; only a save landing in the instant of the replace itself can slip through. The table is rewritten as a whole from the rows as read, so for a layer in a projected CRS untouched rows also go through reprojection, as with a direct save |
 
 PostGIS layers loaded before the outbox existed keep the direct save for their
 first save, then switch to the outbox from the next one. A GeoPackage layer uses
-the outbox when it was loaded in this session from its file (Add Data or the
-Browser); a layer restored from a project with unsaved edits, or loaded through
-Add Vector Layer, keeps the direct save.
+the outbox when its features were read from its file in this session (Add Data,
+the Browser, or a project that reloads it from the file); a layer whose
+features came from the project itself (saved with its edits), or one loaded
+through Add Vector Layer, keeps the direct save.
 
 Credentials never go into the outbox. A PostGIS change set finds its
 connection among your saved connections when it syncs. An ArcGIS change set

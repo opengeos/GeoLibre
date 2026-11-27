@@ -323,6 +323,10 @@ export function createGeoPackageSyncAdapter(
           if (error.status === 503) throw new EditSyncOfflineError(message);
           throw new EditSyncRejectedError(message);
         }
+        // The sidecar was never reached: nothing was written, retry later.
+        if (/Could not connect to the GeoLibre sidecar/i.test(message)) {
+          throw new EditSyncOfflineError(message);
+        }
         // No answer from the sidecar: the file may or may not have been replaced.
         throw new EditSyncUncertainError(message);
       }
