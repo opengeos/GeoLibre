@@ -44,6 +44,7 @@ export type PickerProvider =
   | "openrouter"
   | "vercel"
   | "trustedrouter"
+  | "llmtr"
   | "bedrock"
   | KeyedDiscoveryProvider;
 
@@ -51,7 +52,7 @@ export type PickerProvider =
  * Whether a provider gets the searchable model picker with live discovery.
  *
  * @param provider The assistant provider id.
- * @returns True for a ChatGPT sign-in, OpenRouter, Vercel AI Gateway, TrustedRouter, Bedrock, and the key-based hosted providers.
+ * @returns True for a ChatGPT sign-in, OpenRouter, Vercel AI Gateway, TrustedRouter, LLMTR, Bedrock, and the key-based hosted providers.
  */
 export function hasModelPicker(provider: AssistantProviderId): provider is PickerProvider {
   return (
@@ -59,6 +60,7 @@ export function hasModelPicker(provider: AssistantProviderId): provider is Picke
     provider === "openrouter" ||
     provider === "vercel" ||
     provider === "trustedrouter" ||
+    provider === "llmtr" ||
     provider === "bedrock" ||
     supportsKeyedModelDiscovery(provider)
   );
