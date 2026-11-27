@@ -34,7 +34,7 @@ import type {
  * - `customLayers`: MapLibre custom layers have no native SDK equivalent.
  *   `deckOverlay` is enabled separately on primary 2D and local scene views.
  * - `terrain` is claimed: the pane renders a `SceneView` over Esri's world
- *   elevation while terrain is on (see {@link arcgisSceneMode}).
+ *   elevation while terrain is on (see `arcgisSceneMode`).
  * - `domControls`: the primary view hosts adapted controls through `view.ui`.
  *   Rendering operations still require an explicit native or deck.gl bridge.
  */
@@ -167,7 +167,7 @@ export function rotationToBearing(rotation: number): number {
   return normalizeBearing(-rotation);
 }
 
-/** Options for {@link ArcgisEngine}. */
+/** Options for `ArcgisEngine`. */
 export type ArcgisEngineOptions = {
   /** Secondary panes do not own the primary shared deck overlay. */
   deckOverlay?: boolean;
@@ -251,7 +251,7 @@ export abstract class ArcgisEngineBase {
    */
   protected companions = new WeakSet<ArcgisLayer>();
 
-  /** Whether {@link settleView} has placed the stored camera. */
+  /** Whether `settleView` has placed the stored camera. */
   protected placed = false;
 
   protected errors = new Map<string, string>();

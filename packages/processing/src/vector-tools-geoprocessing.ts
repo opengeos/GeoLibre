@@ -31,6 +31,7 @@ import {
   overlayFieldOutputNames,
   propertyKeys,
   bboxesOverlap,
+  type LinearUnit,
 } from "./vector-tools-common";
 
 /** Split Polygon/MultiPolygon features into single-part Polygon features. */
@@ -95,9 +96,7 @@ type BufferSide = "outside" | "inside" | "both";
 const BUFFER_SIDES = new Set<BufferSide>(["outside", "inside", "both"]);
 
 /** Distance units {@link bufferTool} accepts, in turf's own vocabulary. */
-type BufferUnits = "kilometers" | "meters" | "miles";
-
-const BUFFER_UNITS = new Set<BufferUnits>(["kilometers", "meters", "miles"]);
+const BUFFER_UNITS = new Set<LinearUnit>(["kilometers", "meters", "miles"]);
 
 /**
  * Python's decimal-float grammar, which `Number()` does not share.
@@ -141,7 +140,7 @@ function bufferOneFeature(
   feature: Feature,
   radius: number,
   side: BufferSide,
-  units: BufferUnits,
+  units: LinearUnit,
 ): Feature | null {
   const options = { units };
   // A feature split at the antimeridian is buffered as one continuous shape,
@@ -259,7 +258,7 @@ export const bufferTool: ProcessingAlgorithm = {
     // parameters at once gets the same first error from both engines, not just
     // the same accept/reject verdict.
     const rawUnits = ctx.parameters.units;
-    const units = (rawUnits == null ? "kilometers" : String(rawUnits)) as BufferUnits;
+    const units = (rawUnits == null ? "kilometers" : String(rawUnits)) as LinearUnit;
     if (!BUFFER_UNITS.has(units)) {
       // turf throws on a unit it does not know, and the per-feature `try`/`catch`
       // below would swallow that into the `Skipped` count — reporting a

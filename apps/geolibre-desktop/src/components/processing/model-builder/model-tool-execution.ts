@@ -113,7 +113,7 @@ export async function executeModelTool({
   signal,
   layers,
   duckdb,
-  log,
+  log: callerLog,
   t,
 }: {
   node: ModelGraphNode;
@@ -125,6 +125,12 @@ export async function executeModelTool({
   log: (message: string) => void;
   t: TFunction;
 }): Promise<Record<string, ModelValue>> {
+  // A run abandoned mid-step (cancelled, or another model loaded) must not
+  // write to the log of the session that replaced it: a Whitebox job or a
+  // vector tool can finish after the abort and still report its messages.
+  const log = (message: string) => {
+    if (!signal?.aborted) callerLog(message);
+  };
   if (descriptor.provider === "vector") {
     const tool = getVectorTool(descriptor.toolId);
     if (!tool)

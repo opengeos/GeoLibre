@@ -167,7 +167,7 @@ describe("COG conversion worker lifecycle", () => {
       installWorker();
       if (mode === "send") {
         globalThis.Worker = class extends FakeWorker {
-          postMessage() {
+          override postMessage() {
             throw new Error("send failed");
           }
         } as unknown as typeof Worker;

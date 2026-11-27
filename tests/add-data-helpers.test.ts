@@ -441,10 +441,10 @@ describe("savedPostgresConnectionLabel", () => {
     // password left in the path.
     const realUrl = globalThis.URL;
     globalThis.URL = class extends realUrl {
-      get host() {
+      override get host() {
         return "";
       }
-      get password() {
+      override get password() {
         return "";
       }
     } as typeof URL;

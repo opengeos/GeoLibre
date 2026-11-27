@@ -133,7 +133,7 @@ export function parseLyrx(document: unknown): LyrxImportResult {
   return result;
 }
 
-/** Merge a parsed layer file over a base style. Mirrors {@link applyQmlImport}. */
+/** Merge a parsed layer file over a base style. Mirrors `applyQmlImport`. */
 export function applyLyrxImport(base: LayerStyle, result: LyrxImportResult): LayerStyle {
   const reset: Partial<LayerStyle> = {};
   if (result.matchedCount > 0) {

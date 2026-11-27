@@ -42,17 +42,17 @@ interface ErrorBoundaryState {
  * in event handlers, asynchronous code, or imperative (non-React) code.
  */
 export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
-  state: ErrorBoundaryState = { error: null };
+  override state: ErrorBoundaryState = { error: null };
 
   static getDerivedStateFromError(error: Error): ErrorBoundaryState {
     return { error };
   }
 
-  componentDidCatch(error: Error, info: React.ErrorInfo): void {
+  override componentDidCatch(error: Error, info: React.ErrorInfo): void {
     this.props.onError?.(error, info);
   }
 
-  componentDidUpdate(prevProps: ErrorBoundaryProps): void {
+  override componentDidUpdate(prevProps: ErrorBoundaryProps): void {
     if (this.state.error === null) return;
     if (!resetKeysChanged(prevProps.resetKeys, this.props.resetKeys)) return;
     this.reset();
@@ -62,7 +62,7 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
     this.setState({ error: null });
   };
 
-  render(): React.ReactNode {
+  override render(): React.ReactNode {
     const { error } = this.state;
     if (error !== null) {
       return this.props.fallback({ error, reset: this.reset });

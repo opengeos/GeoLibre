@@ -47,7 +47,7 @@ const VECTOR_CONTROL_SOURCE_KIND = "maplibre-gl-vector";
  * concentric point ring of opengeos/GeoLibre#1902.
  *
  * The control owns these layers in either window, so route them to the
- * external path throughout. There they take the {@link isExternalCustomLayer}
+ * external path throughout. There they take the `isExternalCustomLayer`
  * branch, which already tolerates an empty id list: it no-ops until the
  * control brings its layers back and the next sync reconciles them normally.
  *
@@ -226,7 +226,7 @@ export function clearExternalNativeExtrusion(
  * Add Vector Layer control (maplibre-gl-vector). The control's VectorLayerStyle
  * carries no marker or data-driven-radius concept, so those Style-panel
  * options would otherwise silently no-op on control-managed layers. Following
- * the synthetic-extrusion pattern in {@link syncExternalNativeLayer}, GeoLibre
+ * the synthetic-extrusion pattern in `syncExternalNativeLayer`, GeoLibre
  * renders them itself on top of the control's own source:
  *
  * - Marker enabled: the control's circle layer is hidden and a GeoLibre-owned

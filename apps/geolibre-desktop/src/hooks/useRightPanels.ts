@@ -59,7 +59,7 @@ const selectReplaceStylePanelId = (): string | null => {
  * Subscribe to the id of the active plugin panel docked in the shared Style rail
  * (`replace-style`) mode, or null when no such panel is active.
  *
- * When non-null, the shell renders the {@link SharedSidebar} in place of the
+ * When non-null, the shell renders the `SharedSidebar` in place of the
  * Style-slot panels so the plugin shares the Style rail instead of docking
  * beside it.
  *
@@ -83,7 +83,7 @@ const selectReplaceLayersPanelId = (): string | null => {
  * Subscribe to the id of the active plugin panel docked in the shared Layers rail
  * (`replace-layers`) mode, or null when no such panel is active.
  *
- * When non-null, the shell renders the {@link SharedSidebar} in place of the
+ * When non-null, the shell renders the `SharedSidebar` in place of the
  * Layers-slot panels so the plugin shares the Layers rail instead of docking
  * beside it.
  *

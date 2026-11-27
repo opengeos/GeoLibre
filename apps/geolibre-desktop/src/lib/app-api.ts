@@ -1,5 +1,5 @@
 /**
- * The host side of the public plugin API: the {@link GeoLibreAppAPI} object
+ * The host side of the public plugin API: the `GeoLibreAppAPI` object
  * handed to every plugin's `activate`/`deactivate`/state hooks.
  *
  * Everything the API reaches through the `@geolibre/plugins` and `@geolibre/map`
@@ -264,7 +264,7 @@ function activeMapTool(
 }
 
 /**
- * Builds the {@link GeoLibreAppAPI} object handed to plugins.
+ * Builds the `GeoLibreAppAPI` object handed to plugins.
  *
  * Each call returns a fresh object; members read the store and the map engine
  * lazily (`mapControllerRef.current` is dereferenced per call), so an API built

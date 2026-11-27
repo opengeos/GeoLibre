@@ -1038,6 +1038,22 @@ def test_add_csv_rejects_non_public_url(m):
         m.add_csv("http://127.0.0.1/points.csv")
 
 
+def test_add_csv_url_uses_project_fetch_security_check(monkeypatch, m):
+    """Patching ``project.fetch._assert_public_url`` reaches the CSV URL path (#3697)."""
+    from geolibre.project import fetch
+
+    checked: list[str] = []
+
+    def reject(url: str) -> None:
+        checked.append(url)
+        raise ValueError("blocked by test")
+
+    monkeypatch.setattr(fetch, "_assert_public_url", reject)
+    with pytest.raises(ValueError, match="blocked by test"):
+        m.add_csv("https://example.com/points.csv")
+    assert checked == ["https://example.com/points.csv"]
+
+
 def test_add_csv_rejects_oversized_file(monkeypatch, tmp_path, m):
     path = tmp_path / "points.csv"
     path.write_text("longitude,latitude\n-100,40\n", encoding="utf-8")

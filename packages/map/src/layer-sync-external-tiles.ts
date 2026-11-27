@@ -160,7 +160,7 @@ const pmtilesDecorationOwners = new WeakMap<maplibregl.Map, Map<string, Set<stri
  * Line decorations (flow-direction arrows and other repeated symbols) for a
  * vector PMTiles archive: one GeoLibre-owned symbol layer per rendered source
  * layer, reading the archive's own source, mirroring
- * {@link applyLineDecorationLayer} on the GeoJSON path. With line placement
+ * `applyLineDecorationLayer` on the GeoJSON path. With line placement
  * MapLibre rotates each icon to follow its line, so an arrow points along the
  * direction the feature was digitized in. Decoration layers for source layers
  * no longer rendered (or every one, when decorations are off, the layer is

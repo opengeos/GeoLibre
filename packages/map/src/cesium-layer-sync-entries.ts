@@ -89,7 +89,7 @@ export class CesiumLayerSyncEntries extends CesiumLayerSyncImagery {
   /** Layer whose fit is waiting for its Cesium object to finish loading. */
   protected pendingZoomLayerId: string | null = null;
 
-  /** Runs a pending {@link zoomToLayer} once `entry` has something to fly to. */
+  /** Runs a pending `zoomToLayer` once `entry` has something to fly to. */
   protected flushPendingZoom(entry: LayerEntry): void {
     if (this.pendingZoomLayerId !== entry.layer.id) return;
     if (this.flyToHandle(entry)) this.pendingZoomLayerId = null;
@@ -767,7 +767,7 @@ export class CesiumLayerSyncEntries extends CesiumLayerSyncImagery {
    * instead of leaving the viewer on a stale interval. Nothing is written while
    * the owner stays the same, so a later CZML load never resets the Time
    * Slider's position, which keeps driving `currentTime` through
-   * {@link setTime}. When the last CZML layer leaves, the clock is left where
+   * `setTime`. When the last CZML layer leaves, the clock is left where
    * that document set it: the Time Slider owns time from then on, and nothing
    * else on the globe expects a particular interval.
    */

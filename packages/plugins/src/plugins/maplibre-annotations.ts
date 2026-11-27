@@ -203,7 +203,7 @@ const WIDTH_VALUES = [2, 3, 5] as const;
  * User-facing strings the toolbar cannot translate itself. Defaults are
  * English; the desktop shell pushes translated values via
  * {@link setAnnotationLabels}, mirroring the other framework-agnostic plugins
- * (e.g. {@link setBasemapControlLabels}) since this package has no direct
+ * (e.g. `setBasemapControlLabels`) since this package has no direct
  * access to react-i18next.
  */
 export interface AnnotationLabels {

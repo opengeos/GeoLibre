@@ -130,7 +130,7 @@ function annotationHidesFeatures(layer: GeoLibreLayer): boolean {
  * correctly.
  *
  * MapLibre clusters at the source, before evaluating style-layer filters.
- * {@link authoredClusterInput} therefore narrows clustered source data by the
+ * `authoredClusterInput` therefore narrows clustered source data by the
  * persisted expression and Quick Filters so hidden features do not contribute
  * to bubbles or counts. Transient time, embed, and rule filters remain
  * per-render-layer filters and cannot change an already-built cluster.
@@ -139,7 +139,7 @@ function annotationHidesFeatures(layer: GeoLibreLayer): boolean {
  * an expression evaluated per feature as each tile decodes, so it needs no local
  * copy of the data and stays correct for tiles loaded later; control-owned
  * PMTiles layers reach the same behavior through
- * {@link applyExternalNativeFeatureFilters}.
+ * `applyExternalNativeFeatureFilters`.
  *
  * @param layer - The store layer being synced.
  * @param geometryFilter - The sub-layer's own geometry-type filter.
@@ -253,7 +253,7 @@ export function stringSource(value: unknown): string | undefined {
  * Everything the vector render-layer builders below share for one sync pass of
  * one store layer: the map, the layer, where its features live, how it
  * renders, and the flags derived once up front in
- * {@link applyVectorDataRenderLayers}.
+ * `applyVectorDataRenderLayers`.
  */
 export interface VectorRenderContext {
   map: maplibregl.Map;
@@ -273,13 +273,13 @@ export interface VectorRenderContext {
   /**
    * Whether a Time Slider window, an embed filter, a layer filter or a
    * rule-based visibility filter is active, which suppresses the derived
-   * companion symbology (see {@link applyVectorDataRenderLayers}).
+   * companion symbology (see `applyVectorDataRenderLayers`).
    */
   hasFeatureFilter: boolean;
   /**
    * The contour-style placement when the layer's line labels cut gaps in
    * their lines: the source already holds its cut lines, and the label layer
-   * draws its label points (see {@link lineGapPlacement}).
+   * draws its label points (see `lineGapPlacement`).
    */
   lineGap?: LineGapLabelResult | null;
 }

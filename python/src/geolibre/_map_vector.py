@@ -18,6 +18,7 @@ from ._map_support import _CSV_RESTKEY as _CSV_RESTKEY
 from ._map_support import _MAX_TABULAR_BYTES as _MAX_TABULAR_BYTES
 from ._map_support import _read_local_vector as _read_local_vector
 from .polyline import polyline_to_geojson
+from .project import fetch as _fetch
 
 
 class _MapVectorMixin:
@@ -386,9 +387,12 @@ class _MapVectorMixin:
                 # non-public hosts up front, re-check every redirect hop through
                 # the shared opener, and bound the response. read(limit + 1)
                 # detects an over-limit body without buffering the whole thing.
-                _project._assert_public_url(source)
+                # Read through project.fetch, the module that defines them, so a
+                # patch of project.fetch reaches this CSV path and
+                # load_featurecollection alike.
+                _fetch._assert_public_url(source)
                 try:
-                    with _project._GEOJSON_OPENER.open(  # noqa: S310 - user URL
+                    with _fetch._GEOJSON_OPENER.open(  # noqa: S310 - user URL
                         source, timeout=30
                     ) as response:
                         raw = response.read(_MAX_TABULAR_BYTES + 1)

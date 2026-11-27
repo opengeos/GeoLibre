@@ -74,7 +74,7 @@ export function externalFeatureFilterExtras(layer: GeoLibreLayer): unknown[] {
  *
  * A control creates its layers asynchronously — the Add Vector Layer restore
  * replays a saved layer well after the sync pass that followed the project
- * load — so {@link syncLayer} finds nothing on the map and skips the filter.
+ * load — so `syncLayer` finds nothing on the map and skips the filter.
  * The store layer it restores into usually matches what was saved, so no
  * further store change arrives to trigger another sync, and a persisted layer
  * filter would stay unapplied with the whole dataset on screen. Callers watch

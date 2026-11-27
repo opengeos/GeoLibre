@@ -58,7 +58,7 @@ import {
 import type { SliceCreator } from "./types";
 
 /**
- * The layer types {@link AppState.addTileLayer} accepts. Each renders through
+ * The layer types `AppState.addTileLayer` accepts. Each renders through
  * the raster tile path, which is why the layer's `source.type` is always
  * `"raster"`.
  */

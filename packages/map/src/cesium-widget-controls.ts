@@ -190,7 +190,7 @@ class CesiumSceneModeControl extends CesiumWidgetControl<SceneModePicker> {
   private stopWatching: (() => void) | null = null;
 
   /** Keep the sideways picker above adjacent map controls. */
-  protected extraClass(): string {
+  protected override extraClass(): string {
     return "geolibre-cesium-ctrl-expands";
   }
 
@@ -210,7 +210,7 @@ class CesiumSceneModeControl extends CesiumWidgetControl<SceneModePicker> {
     return widget;
   }
 
-  onRemove(): void {
+  override onRemove(): void {
     this.stopWatching?.();
     this.stopWatching = null;
     super.onRemove();
@@ -275,7 +275,7 @@ class CesiumFullscreenControl extends CesiumWidgetControl<FullscreenButton> {
     this.stopWatching = () => document.removeEventListener("fullscreenchange", retitle);
   }
 
-  onRemove(): void {
+  override onRemove(): void {
     this.stopWatching?.();
     this.stopWatching = null;
     super.onRemove();
