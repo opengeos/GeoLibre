@@ -4041,7 +4041,6 @@
       "loadedRaster": "Raster carregado: {{width}}×{{height}}, {{bands}} banda(s).",
       "computedInBrowser": "\"{{tool}}\" calculado no navegador.",
       "addedToMap": "\"{{name}}\" adicionado ao mapa.",
-      "largeRasterWarning": "Raster grande ({{mp}} M pixels); o navegador pode não responder durante o cálculo.",
       "mapAddFailed": "Falha ao adicionar ao mapa (o resultado ainda está disponível para download): {{message}}",
       "mapAddError": "Não foi possível adicionar o resultado ao mapa.",
       "runError": "Não foi possível executar a ferramenta raster.",

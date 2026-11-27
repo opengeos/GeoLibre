@@ -342,6 +342,8 @@ export {
   type ClientRasterResult,
   type ClientToolInputs,
   type ClientToolResult,
+  type ClientToolProgress,
+  type ClientToolRunOptions,
   type HillshadeParams,
   type SlopeParams,
   type ClipExtentParams,
@@ -350,6 +352,7 @@ export {
   type FocalParams,
   type FocalStatistic,
 } from "./raster-client";
+export { runRasterToolInBackground, type RasterToolBackgroundOptions } from "./raster-tool-runner";
 export {
   LOCAL_SIDECAR_URL,
   checkSidecarHealth,

@@ -3987,7 +3987,6 @@
       "loadedRaster": "Raster đã tải: {{width}}×{{height}}, {{bands}} băng tần.",
       "computedInBrowser": "Đã tính toán \"{{tool}}\" trong trình duyệt.",
       "addedToMap": "Đã thêm \"{{name}}\" vào bản đồ.",
-      "largeRasterWarning": "Raster lớn ({{mp}} M pixel); trình duyệt có thể không phản hồi trong khi tính toán.",
       "mapAddFailed": "Thêm bản đồ không thành công (kết quả vẫn có sẵn để tải xuống): {{message}}",
       "mapAddError": "Không thể thêm kết quả vào bản đồ."
     },

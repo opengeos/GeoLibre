@@ -3,7 +3,7 @@
  * `proj4` and the bundled `geotiff-geokeys-to-proj4` EPSG tables.
  */
 
-import { normalizeProj4Definition } from "@geolibre/core";
+import { normalizeProj4Definition } from "@geolibre/core/worker-safe";
 import type { Feature, FeatureCollection, Geometry, Position } from "geojson";
 import type proj4Type from "proj4";
 

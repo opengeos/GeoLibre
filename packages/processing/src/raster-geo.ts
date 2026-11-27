@@ -1,4 +1,4 @@
-import { normalizeProj4Definition, withGeoKeysDatumShift } from "@geolibre/core";
+import { normalizeProj4Definition, withGeoKeysDatumShift } from "@geolibre/core/worker-safe";
 import type { FeatureCollection, Geometry, Position } from "geojson";
 import type { RasterData } from "./raster-client";
 

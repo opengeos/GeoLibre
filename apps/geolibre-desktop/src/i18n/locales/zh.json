@@ -3976,7 +3976,6 @@
       "loadedRaster": "已加载栅格：{{width}}×{{height}}，{{bands}} 个波段。",
       "computedInBrowser": "已在浏览器中计算“{{tool}}”。",
       "addedToMap": "已将“{{name}}”添加到地图。",
-      "largeRasterWarning": "大型栅格（{{mp}} 百万像素）；计算期间浏览器可能会暂时无响应。",
       "mapAddFailed": "添加到地图失败（结果仍可下载）：{{message}}",
       "mapAddError": "无法将结果添加到地图。",
       "runError": "无法运行栅格工具。",

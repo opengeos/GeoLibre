@@ -3976,7 +3976,6 @@
       "loadedRaster": "已載入柵格：{{width}}×{{height}}，{{bands}} 個波段。",
       "computedInBrowser": "已在瀏覽器中計算「{{tool}}」。",
       "addedToMap": "已將「{{name}}」新增到地圖。",
-      "largeRasterWarning": "大型柵格（{{mp}} 百萬畫素）；計算期間瀏覽器可能會暫時無回應。",
       "mapAddFailed": "新增到地圖失敗（結果仍可下載）：{{message}}",
       "mapAddError": "無法將結果新增到地圖。",
       "runError": "無法執行柵格工具。",

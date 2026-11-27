@@ -1119,15 +1119,46 @@ function requireSecondary(inputs: ClientToolInputs, key: string, label: string):
 }
 
 /**
+ * Progress of a long client tool run. Only the steps that can take seconds on
+ * their own report it: today the sun positions of the Building shadows day
+ * modes.
+ */
+export interface ClientToolProgress {
+  /** What is being counted. */
+  stage: "sun-positions";
+  /** Steps finished so far. */
+  done: number;
+  /** Steps in the whole run. */
+  total: number;
+}
+
+/** Options for {@link runRasterToolClientAsync}. */
+export interface ClientToolRunOptions {
+  /** Called as a long run advances; see {@link ClientToolProgress}. */
+  onProgress?: (progress: ClientToolProgress) => void;
+}
+
+/**
  * Run any raster tool in the browser and return a raster (with encoded
  * GeoTIFF bytes) or a vector result. Tools that need a CRS resolve it from the
  * raster's GeoKeys; GeoJSON inputs follow the sidecar's convention (a legacy
  * `crs` member, else WGS84).
+ *
+ * This runs on the calling thread; the Raster tools dialog goes through
+ * `runRasterToolInBackground` (raster-tool-runner.ts), which runs it on a Web
+ * Worker.
+ *
+ * @param toolId - The raster tool id.
+ * @param inputs - The decoded rasters and parsed GeoJSON inputs.
+ * @param parameters - The tool parameters.
+ * @param options - Progress reporting.
+ * @returns The raster or vector result.
  */
 export async function runRasterToolClientAsync(
   toolId: string,
   inputs: ClientToolInputs,
   parameters: Record<string, unknown>,
+  options: ClientToolRunOptions = {},
 ): Promise<ClientToolResult> {
   if (SYNC_CLIENT_TOOLS.has(toolId)) {
     const { raster, bytes, messages, detailMessages } = runRasterToolClient(
@@ -1394,7 +1425,12 @@ export async function runRasterToolClientAsync(
       // The shadow grid is built in lon/lat; a projected input is brought there first.
       const wgs84 =
         epsg === 4326 ? collection : await toWgs84(collection, await epsgDefinition(epsg));
-      const out = buildingShadows(wgs84.features, p as BuildingShadowParams);
+      const { onProgress } = options;
+      const out = buildingShadows(wgs84.features, p as BuildingShadowParams, {
+        onProgress: onProgress
+          ? (done, total) => onProgress({ stage: "sun-positions", done, total })
+          : undefined,
+      });
       return rasterResult(out.raster, out.messages);
     }
     default:

@@ -3976,7 +3976,6 @@
       "loadedRaster": "래스터를 불러왔습니다: {{width}}×{{height}}, {{bands}}밴드.",
       "computedInBrowser": "브라우저에서 \"{{tool}}\"을(를) 계산했습니다.",
       "addedToMap": "\"{{name}}\"을(를) 지도에 추가했습니다.",
-      "largeRasterWarning": "대용량 래스터({{mp}} M 픽셀)입니다. 계산하는 동안 브라우저가 응답하지 않을 수 있습니다.",
       "mapAddFailed": "지도 추가에 실패했습니다(결과는 여전히 다운로드할 수 있습니다): {{message}}",
       "mapAddError": "결과를 지도에 추가할 수 없습니다.",
       "runError": "래스터 도구를 실행할 수 없습니다.",

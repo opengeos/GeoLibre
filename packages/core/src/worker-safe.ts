@@ -30,3 +30,5 @@ export type { GeoLibreProject } from "./types";
 export { parseProject } from "./project";
 export { diffProjects, type ProjectDiff } from "./project-diff";
 export * from "./geoarrow";
+// CRS helpers the browser raster tools run in their worker (issue #3701).
+export { normalizeProj4Definition, withGeoKeysDatumShift } from "./datum-shift";

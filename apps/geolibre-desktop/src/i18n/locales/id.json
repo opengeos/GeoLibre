@@ -3976,7 +3976,6 @@
       "loadedRaster": "Raster dimuat: {{width}}×{{height}}, {{bands}} kanal.",
       "computedInBrowser": "Menghitung \"{{tool}}\" di browser.",
       "addedToMap": "Menambahkan \"{{name}}\" ke peta.",
-      "largeRasterWarning": "Raster besar ({{mp}} juta piksel); browser mungkin tidak responsif saat menghitung.",
       "mapAddFailed": "Penambahan ke peta gagal (hasil masih tersedia untuk diunduh): {{message}}",
       "mapAddError": "Tidak dapat menambahkan hasil ke peta.",
       "runError": "Tidak dapat menjalankan alat raster.",
