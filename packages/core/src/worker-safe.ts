@@ -30,3 +30,13 @@ export type { GeoLibreProject } from "./types";
 export { parseProject } from "./project";
 export { diffProjects, type ProjectDiff } from "./project-diff";
 export * from "./geoarrow";
+// The sun ephemeris the Sun control and the Building shadows raster tool
+// share (#3698). It has no store or DOM dependency.
+export {
+  julianDay,
+  solarEphemeris,
+  subsolarPoint,
+  sunPosition,
+  type SolarEphemeris,
+  type SunPosition,
+} from "./solar-position";
