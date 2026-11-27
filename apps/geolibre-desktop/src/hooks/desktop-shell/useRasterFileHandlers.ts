@@ -71,8 +71,9 @@ export function useRasterFileHandlers(
   // layer has i18n and the client-side converter. See opengeos/GeoLibre#789.
   useEffect(() => {
     const conversions = new Set<AbortController>();
-    // `confirmed` skips the prompts: the overview-less notice's "Convert to
-    // COG" button is the user's consent already.
+    // `confirmed` skips the consent prompts: the overview-less notice's
+    // "Convert to COG" button is the user's consent already. The large-raster
+    // memory warning still shows.
     const convertToCog = async (
       { layerId, name, bytesAreRemote, readBytes, dismiss }: NonTiledRasterRequest,
       confirmed: boolean,
