@@ -229,6 +229,9 @@ export function useRasterFileHandlers(
           convertible ? "raster.overviewlessConvertHint" : "raster.overviewlessGdalHint",
         ),
         durationMs: null,
+        // The only explanation for a blank layer, so later toasts must not
+        // evict it past the visible cap.
+        pinned: true,
         dedupeKey: `overviewless-raster-${request.layerId}`,
         action: convertible
           ? {
@@ -249,6 +252,9 @@ export function useRasterFileHandlers(
         for (const unsubscribe of unsubscribers.splice(0)) unsubscribe();
         session.dispose();
         noticeCleanups.delete(cleanup);
+        // On unmount the notice would otherwise outlive the handlers its
+        // button calls into (a no-op when it is already gone).
+        dismissNotification(id);
       };
       const check = () => {
         if (session.signal.aborted || layerGone()) dismissNotification(id);
