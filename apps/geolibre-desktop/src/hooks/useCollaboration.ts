@@ -235,9 +235,12 @@ export function useCollaboration(
       // Before the first sync the store still holds this participant's own
       // project, not the session's; the sync seeds or replaces it.
       if (!docSync?.isSynced) return;
-      lastContentRef.current = content;
-      docSync.pushLocal(project, baseProjectRef.current);
-      baseProjectRef.current = project;
+      // Only a written edit moves the base; an unwritten one is retried with
+      // the next change (or replaced by the session's project on first load).
+      if (docSync.pushLocal(project, baseProjectRef.current)) {
+        lastContentRef.current = content;
+        baseProjectRef.current = project;
+      }
       return;
     }
     lastContentRef.current = content;

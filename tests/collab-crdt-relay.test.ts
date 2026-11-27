@@ -211,6 +211,14 @@ describe("RelayDoc", () => {
     }
   });
 
+  it("accepts comments in the seed of an empty session", () => {
+    const relay = new RelayDoc({ storage: memoryStorage() });
+    const client = new ProjectDoc();
+    const [frame] = clientWrite(client, { ...project(), comments: [{ id: "seeded" }] });
+    relay.receive("host", frame, editor);
+    assert.deepEqual(relay.project.fields.get("comments"), [{ id: "seeded" }]);
+  });
+
   it("undoes a client update to the relay-owned comment list", () => {
     const relay = new RelayDoc({ storage: memoryStorage() });
     relay.setField("comments", [{ id: "c1" }]);
