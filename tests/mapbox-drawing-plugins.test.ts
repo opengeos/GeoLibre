@@ -508,10 +508,12 @@ describe("drawing and environment plugins on a Mapbox-only host", () => {
   it("shades the night side and lights the Mapbox map from the sun", () => {
     const map = makeMapboxMap(canvasContainer, controlContainer);
     const { app, cesiumReads } = makeApp(map);
-    // Just after sunrise at (0, 0), the fake map's center. The light follows
-    // the shared ephemeris (issue #3698), refraction included: NREL SPA puts
-    // the sun at azimuth 90.142°, apparent elevation 1.022° (0.621° geometric).
-    setSunSettings({ dateMs: Date.parse("2026-03-20T06:10:00Z"), playing: false });
+    // Just after sunrise in New York. The light follows the shared ephemeris
+    // (issue #3698), refraction included: NREL SPA puts the sun at azimuth
+    // 61.528°, apparent elevation 3.458° (3.242° geometric). Distinct, nonzero
+    // coordinates also catch a swapped or dropped center.
+    map.getCenter = () => ({ lng: -74.0, lat: 40.7 });
+    setSunSettings({ dateMs: Date.parse("2026-06-21T09:50:00Z"), playing: false });
     openSunPanel(app);
     assert.equal(map.getSource("geolibre-sun-night-source")?.type, "canvas");
     assert.equal(map.getLayer("geolibre-sun-night-layer")?.type, "raster");
@@ -520,8 +522,8 @@ describe("drawing and environment plugins on a Mapbox-only host", () => {
       "setLight drives the flat light",
     );
     const [, lightAzimuth, lightPolar] = map.getLight().position as number[];
-    assert.ok(Math.abs(lightAzimuth - 90.142) <= 0.1, `light azimuth ${lightAzimuth}`);
-    assert.ok(Math.abs(lightPolar - (90 - 1.022)) <= 0.05, `light polar ${lightPolar}`);
+    assert.ok(Math.abs(lightAzimuth - 61.528) <= 0.1, `light azimuth ${lightAzimuth}`);
+    assert.ok(Math.abs(lightPolar - (90 - 3.458)) <= 0.05, `light polar ${lightPolar}`);
     assert.equal(cesiumReads(), 0);
     // Reattaching to the same map is a no-op; to a removed one it must not throw.
     reattachSun(app);
