@@ -140,8 +140,8 @@ export function ProviderModelPicker({
                   : provider === "llmtr"
                     ? await discoverLlmtrModels(controller.signal)
                     : provider === "bedrock"
-                    ? await discoverBedrockModels(bedrockAuthRef.current!, options)
-                    : await discoverProviderModels(provider, key, options);
+                      ? await discoverBedrockModels(bedrockAuthRef.current!, options)
+                      : await discoverProviderModels(provider, key, options);
         if (generation !== requestGeneration.current) return;
         setDiscovered({ provider, key, models });
         // A ChatGPT plan offers only its catalog's models, in the order it
