@@ -31,7 +31,9 @@ import {
   maplibreSunPlugin,
   openSunPanel,
   reattachSun,
+  setSunSettings,
 } from "../packages/plugins/src/plugins/maplibre-sun";
+import { DEFAULT_SUN_SETTINGS } from "../packages/plugins/src/builtin-plugin-defaults";
 import { getStyleMap } from "../packages/plugins/src/plugins/style-map";
 import { registerRightPanel } from "../packages/plugins/src/right-panel-registry";
 import type { GeoLibreAppAPI } from "../packages/plugins/src/types";
@@ -506,6 +508,10 @@ describe("drawing and environment plugins on a Mapbox-only host", () => {
   it("shades the night side and lights the Mapbox map from the sun", () => {
     const map = makeMapboxMap(canvasContainer, controlContainer);
     const { app, cesiumReads } = makeApp(map);
+    // Just after sunrise at (0, 0), the fake map's center. The light follows
+    // the shared ephemeris (issue #3698), refraction included: NREL SPA puts
+    // the sun at azimuth 90.142°, apparent elevation 1.022° (0.621° geometric).
+    setSunSettings({ dateMs: Date.parse("2026-03-20T06:10:00Z"), playing: false });
     openSunPanel(app);
     assert.equal(map.getSource("geolibre-sun-night-source")?.type, "canvas");
     assert.equal(map.getLayer("geolibre-sun-night-layer")?.type, "raster");
@@ -513,10 +519,14 @@ describe("drawing and environment plugins on a Mapbox-only host", () => {
       map.calls.some((call) => call.startsWith("setLight:map")),
       "setLight drives the flat light",
     );
+    const [, lightAzimuth, lightPolar] = map.getLight().position as number[];
+    assert.ok(Math.abs(lightAzimuth - 90.142) <= 0.1, `light azimuth ${lightAzimuth}`);
+    assert.ok(Math.abs(lightPolar - (90 - 1.022)) <= 0.05, `light polar ${lightPolar}`);
     assert.equal(cesiumReads(), 0);
     // Reattaching to the same map is a no-op; to a removed one it must not throw.
     reattachSun(app);
     map.remove();
     assert.doesNotThrow(() => closeSunPanel());
+    setSunSettings(DEFAULT_SUN_SETTINGS);
   });
 });
