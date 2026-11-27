@@ -32,8 +32,19 @@ function RasterHost() {
   return null;
 }
 
+function addStoreLayer(id: string) {
+  if (useAppStore.getState().layers.some((layer) => layer.id === id)) return;
+  act(() =>
+    useAppStore.setState((state) => ({
+      // Only the id matters to the handlers; the cast skips unrelated fields.
+      layers: [...state.layers, { id, name: `${id}.tif`, type: "raster" } as never],
+    })),
+  );
+}
+
 async function startConversion() {
   assert.ok(rasterHandler);
+  addStoreLayer("striped");
   const dismiss = mock.fn();
   const run = rasterHandler({
     layerId: "striped",
@@ -125,6 +136,20 @@ describe("COG convert-and-load lifecycle", () => {
     assert.equal(addedRasters, 1);
   });
 
+  it("adds nothing when the source layer was removed during the conversion", async () => {
+    render(createElement(RasterHost));
+    const { run, dismiss } = await startConversion();
+    act(() =>
+      useAppStore.setState((state) => ({
+        layers: state.layers.filter((layer) => layer.id !== "striped"),
+      })),
+    );
+    conversions[0].result.resolve(Uint8Array.of(1));
+    await run;
+    assert.equal(addedRasters, 0);
+    assert.equal(dismiss.mock.callCount(), 0);
+  });
+
   it("cancels from the notification and preserves the original layer", async () => {
     render(createElement(RasterHost));
     const { run, dismiss } = await startConversion();
@@ -142,17 +167,7 @@ describe("overview-less raster notice", () => {
   function notifyOverviewless(overrides: { bytesAreRemote?: boolean; width?: number } = {}) {
     assert.ok(overviewlessHandler);
     // The notice follows its layer, so the layer has to be in the project.
-    if (!useAppStore.getState().layers.some((layer) => layer.id === "naip")) {
-      act(() =>
-        useAppStore.setState((state) => ({
-          layers: [
-            ...state.layers,
-            // Only the id matters to the notice; the cast skips unrelated fields.
-            { id: "naip", name: "naip.tif", type: "raster", visible: true, opacity: 1 } as never,
-          ],
-        })),
-      );
-    }
+    addStoreLayer("naip");
     const dismiss = mock.fn();
     overviewlessHandler({
       layerId: "naip",

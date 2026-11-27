@@ -74,7 +74,7 @@ export function useRasterFileHandlers(
     // `confirmed` skips the prompts: the overview-less notice's "Convert to
     // COG" button is the user's consent already.
     const convertToCog = async (
-      { name, bytesAreRemote, readBytes, dismiss }: NonTiledRasterRequest,
+      { layerId, name, bytesAreRemote, readBytes, dismiss }: NonTiledRasterRequest,
       confirmed: boolean,
     ) => {
       const controller = new AbortController();
@@ -188,6 +188,9 @@ export function useRasterFileHandlers(
         controller.signal.throwIfAborted();
         if (notice) dismissNotification(notice);
         notice = undefined;
+        // The user may have removed the source layer while it converted; adding
+        // the result would bring back a layer they just deleted.
+        if (!useAppStore.getState().layers.some((layer) => layer.id === layerId)) return;
         // The cast is required: TS types Uint8Array as Uint8Array<ArrayBufferLike>,
         // which is not directly assignable to BlobPart's ArrayBufferView.
         const file = new File([cog as BlobPart], name, {
