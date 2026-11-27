@@ -238,7 +238,6 @@ describe("overview-less raster notice", () => {
   it("unregisters on unmount and withdraws its notice", () => {
     const host = render(createElement(RasterHost));
     notifyOverviewless();
-    assert.equal(useNotificationStore.getState().notifications[0].pinned, true);
     host.unmount();
     assert.equal(overviewlessHandler, null);
     assert.equal(useNotificationStore.getState().notifications.length, 0);

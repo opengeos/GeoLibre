@@ -229,9 +229,8 @@ export function useRasterFileHandlers(
           convertible ? "raster.overviewlessConvertHint" : "raster.overviewlessGdalHint",
         ),
         durationMs: null,
-        // The only explanation for a blank layer, so later toasts must not
-        // evict it past the visible cap.
-        pinned: true,
+        // Not pinned: one notice per overview-less layer could otherwise fill
+        // the capped queue and push out later error toasts.
         dedupeKey: `overviewless-raster-${request.layerId}`,
         action: convertible
           ? {
