@@ -61,8 +61,10 @@ export function ensureEditSyncBackends(): void {
   registerEditSyncBackend("arcgis", {
     createAdapter: async (entry) => {
       const session = await arcgisSession(entry.layerId);
+      // Kept only once the adapter exists, so a refused attempt holds no token.
+      const adapter = createArcGISSyncAdapter(entry, session);
       arcgisSessions.set(entry.id, session);
-      return createArcGISSyncAdapter(entry, session);
+      return adapter;
     },
     afterSync: async (entry, outcome) => {
       const session = arcgisSessions.get(entry.id);
