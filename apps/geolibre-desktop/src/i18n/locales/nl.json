@@ -4041,7 +4041,6 @@
       "loadedRaster": "Raster geladen: {{width}}×{{height}}, {{bands}} band(en).",
       "computedInBrowser": "\"{{tool}}\" berekend in de browser.",
       "addedToMap": "\"{{name}}\" toegevoegd aan de kaart.",
-      "largeRasterWarning": "Groot raster ({{mp}} M pixels); de browser kan traag reageren tijdens de berekening.",
       "mapAddFailed": "Toevoegen aan kaart mislukt (het resultaat is nog steeds beschikbaar om te downloaden): {{message}}",
       "mapAddError": "Het resultaat kon niet aan de kaart worden toegevoegd.",
       "runError": "Het rastergereedschap kon niet worden uitgevoerd.",

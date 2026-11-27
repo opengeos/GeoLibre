@@ -4041,7 +4041,6 @@
       "loadedRaster": "Raster yüklendi: {{width}}×{{height}}, {{bands}} bant.",
       "computedInBrowser": "\"{{tool}}\" tarayıcıda hesaplandı.",
       "addedToMap": "\"{{name}}\" haritaya eklendi.",
-      "largeRasterWarning": "Büyük raster ({{mp}} M piksel); hesaplama sırasında tarayıcı yanıt vermeyebilir.",
       "mapAddFailed": "Haritaya ekleme başarısız oldu (sonuç indirmek için hâlâ kullanılabilir): {{message}}",
       "mapAddError": "Sonuç haritaya eklenemedi.",
       "runError": "Raster aracı çalıştırılamadı.",

@@ -10,8 +10,9 @@ import {
   fetchConversionJob,
   runRasterTool,
   readRasterData,
-  runRasterToolClientAsync,
+  runRasterToolInBackground,
   rasterToolTakesVectorInput,
+  type ClientToolProgress,
   type RasterData,
   convertRasterDataToCog,
   exceedsBrowserCogConversionLimit,
@@ -195,6 +196,10 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
   // Incremented whenever inputs change or the form resets so an in-flight
   // client run cannot write stale result/log/map output after input edits.
   const clientRunIdRef = useRef(0);
+  // The in-flight client run's controller: aborting it terminates the raster
+  // tool worker. Every run-id bump above aborts it too, and Cancel aborts it
+  // without bumping the id.
+  const clientAbortRef = useRef<AbortController | null>(null);
   // Per-letter pick sequence tokens so a superseded secondary file read cannot
   // overwrite a newer selection or a Clear action.
   const secondaryPickTokensRef = useRef<Record<string, number>>({});
@@ -220,6 +225,14 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
   >({});
   const [clientLog, setClientLog] = useState<string[]>([]);
   const [clientRunning, setClientRunning] = useState(false);
+  // True from the start of a client run until its compute returns. Cancel is
+  // offered for this whole window; progress reports the sun positions of a
+  // long compute.
+  const [clientCancellable, setClientCancellable] = useState(false);
+  const [clientProgress, setClientProgress] = useState<ClientToolProgress | null>(null);
+  // False while the inputs are still being read and decoded on this thread,
+  // true once the compute has been handed to the worker.
+  const [clientComputing, setClientComputing] = useState(false);
   // True while fetching a picked layer's bytes for the client engine.
   const [resolvingLayer, setResolvingLayer] = useState(false);
   const [clientResult, setClientResult] = useState<{
@@ -266,6 +279,7 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
   useEffect(() => {
     formSessionRef.current += 1;
     clientRunIdRef.current += 1;
+    clientAbortRef.current?.abort();
     primaryPickTokenRef.current += 1;
     layerFetchAbortRef.current?.abort();
     setResolvingLayer(false);
@@ -374,6 +388,7 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
     const token = `${kind}:${key}`;
     secondaryPickTokensRef.current[token] = (secondaryPickTokensRef.current[token] ?? 0) + 1;
     clientRunIdRef.current += 1;
+    clientAbortRef.current?.abort();
     setClientRunning(false);
     if (kind === "raster") setClientAdditionalInputs((prev) => omitClientSecondaryInput(prev, key));
     else setClientVectorInputs((prev) => omitClientSecondaryInput(prev, key));
@@ -431,6 +446,7 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
             return;
           }
           clientRunIdRef.current += 1;
+          clientAbortRef.current?.abort();
           setClientRunning(false);
           setError(null);
           setClientResult(null);
@@ -533,6 +549,7 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
       if (stale()) return;
       if (picked?.data) {
         clientRunIdRef.current += 1;
+        clientAbortRef.current?.abort();
         setClientRunning(false);
         setClientInput({ name: picked.path, bytes: picked.data });
         // Drop any prior run's result/log so the Download button can't offer a
@@ -607,6 +624,7 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
         const bytes = await response.arrayBuffer();
         if (controller.signal.aborted || stale()) return;
         clientRunIdRef.current += 1;
+        clientAbortRef.current?.abort();
         setClientRunning(false);
         setClientInput({ name: layer.name, bytes });
         setClientResult(null);
@@ -627,6 +645,7 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
       formSessionRef.current += 1;
       primaryPickTokenRef.current += 1;
       clientRunIdRef.current += 1;
+      clientAbortRef.current?.abort();
       layerFetchAbortRef.current?.abort();
     },
     [],
@@ -725,7 +744,13 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
     }
     const runId = ++clientRunIdRef.current;
     const isStale = () => clientRunIdRef.current !== runId;
+    clientAbortRef.current?.abort();
+    const controller = new AbortController();
+    clientAbortRef.current = controller;
     setClientRunning(true);
+    setClientCancellable(true);
+    setClientProgress(null);
+    setClientComputing(false);
     setClientLog([t("toolbar.rasterTool.runningInBrowser", { tool: tool.name })]);
     const tracker = beginProcessingRun(
       {
@@ -765,6 +790,7 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
       } else {
         raster = await readRasterData(clientInput.bytes);
         if (isStale()) return;
+        controller.signal.throwIfAborted();
         const loaded = raster;
         setClientLog((prev) => [
           ...prev,
@@ -774,22 +800,6 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
             bands: loaded.bands.length,
           }),
         ]);
-      }
-      // Compute is a synchronous pixel loop (millions of iterations for a large
-      // DEM). Yield once so React paints the "running" spinner before the main
-      // thread blocks; a Web Worker would be the full fix for very large rasters.
-      await new Promise<void>((resolve) => setTimeout(resolve, 0));
-      if (isStale()) return;
-      const pixelCount = raster ? raster.width * raster.height : 0;
-      if (pixelCount > 2_000_000) {
-        setClientLog((prev) => [
-          ...prev,
-          t("toolbar.rasterTool.largeRasterWarning", {
-            mp: (pixelCount / 1_000_000).toFixed(1),
-          }),
-        ]);
-        await new Promise<void>((resolve) => setTimeout(resolve, 0));
-        if (isStale()) return;
       }
       // The primary is already decoded under readRasterData's size guard.
       // Check its footprint together with output and secondary estimates
@@ -804,12 +814,26 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
           })
         : undefined;
       if (isStale()) return;
-      const run = await runRasterToolClientAsync(
+      controller.signal.throwIfAborted();
+      // The compute runs on a Web Worker (#3701), so the dialog and the map
+      // stay responsive and Cancel can terminate it. The decoded rasters are
+      // transferred to the worker: they were read for this run only.
+      setClientComputing(true);
+      const run = await runRasterToolInBackground(
         tool.id,
         { raster, rasters: additionalInputs, vectors },
         params,
+        {
+          signal: controller.signal,
+          onProgress: (progress) => {
+            if (!isStale()) setClientProgress(progress);
+          },
+        },
       );
       if (isStale()) return;
+      setClientCancellable(false);
+      setClientProgress(null);
+      setClientComputing(false);
       // Tool-specific log lines (a transition matrix, flood pixel counts, ...).
       setClientLog((prev) => [
         ...prev,
@@ -886,6 +910,12 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
       tracker.finish("success");
     } catch (err) {
       if (isStale()) return;
+      if (controller.signal.aborted) {
+        const message = t("toolbar.rasterTool.cancelled");
+        tracker.finish("error", message);
+        setClientLog((prev) => [...prev, message]);
+        return;
+      }
       const message =
         err instanceof ClientRasterInputError && err.code === "VECTOR_TOO_LARGE"
           ? t("toolbar.rasterTool.vectorMemoryLimit", {
@@ -900,10 +930,14 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
       setError(message);
       setClientLog((prev) => [...prev, message]);
     } finally {
+      if (clientAbortRef.current === controller) clientAbortRef.current = null;
       if (isStale()) {
         tracker.finish("error", "Superseded by an input change.");
       } else {
         setClientRunning(false);
+        setClientCancellable(false);
+        setClientProgress(null);
+        setClientComputing(false);
       }
     }
   }, [
@@ -953,6 +987,15 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
   }, [clientResult, tool, t]);
 
   const running = Boolean(job && RUNNING_JOB_STATUSES.has(job.status)) || clientRunning;
+  // One caption for the client progress line and its bar's accessible name.
+  const clientProgressCaption = clientProgress
+    ? t("toolbar.rasterTool.progressSunPositions", {
+        done: clientProgress.done,
+        total: clientProgress.total,
+      })
+    : clientComputing
+      ? t("toolbar.rasterTool.computingInBackground")
+      : t("toolbar.rasterTool.readingInputs");
 
   return (
     <Dialog
@@ -1219,7 +1262,49 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
                 )}
                 Run
               </Button>
+              {engine === "client" && clientRunning && clientCancellable && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="ms-2"
+                  onClick={() => clientAbortRef.current?.abort()}
+                >
+                  {t("common.cancel")}
+                </Button>
+              )}
             </div>
+
+            {/* Client compute progress: it runs on a worker (#3701), so this
+                bar keeps moving and the map stays usable. Determinate when the
+                tool reports steps (the Building shadows sun positions). */}
+            {engine === "client" && clientRunning && clientCancellable && (
+              <div className="grid gap-1.5" data-testid="raster-tool-progress">
+                <p className="text-xs text-muted-foreground">{clientProgressCaption}</p>
+                <div
+                  className="h-1.5 overflow-hidden rounded-full bg-muted"
+                  role="progressbar"
+                  aria-label={clientProgressCaption}
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  aria-valuenow={
+                    clientProgress
+                      ? Math.round((100 * clientProgress.done) / Math.max(clientProgress.total, 1))
+                      : undefined
+                  }
+                >
+                  {clientProgress ? (
+                    <div
+                      className="h-full bg-primary transition-all"
+                      style={{
+                        width: `${(100 * clientProgress.done) / Math.max(clientProgress.total, 1)}%`,
+                      }}
+                    />
+                  ) : (
+                    <div className="h-full w-full animate-pulse bg-primary/60" />
+                  )}
+                </div>
+              </div>
+            )}
 
             {error && (
               <p className="flex items-center gap-2 text-sm text-destructive">

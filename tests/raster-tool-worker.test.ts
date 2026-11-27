@@ -1,0 +1,352 @@
+// The browser raster tools worker (issue #3701): its message protocol, the
+// runner's cancellation, and that a worker run returns exactly what a direct
+// call does.
+import assert from "node:assert/strict";
+import { afterEach, describe, it } from "node:test";
+import type { Feature, FeatureCollection } from "geojson";
+import {
+  runRasterToolClientAsync,
+  type ClientToolProgress,
+  type RasterData,
+} from "../packages/processing/src/raster-client";
+import {
+  handleRasterToolRequest,
+  rasterTransferables,
+  type RasterToolWorkerMessage,
+  type RasterToolWorkerRequest,
+} from "../packages/processing/src/raster-tool-protocol";
+import { runRasterToolInBackground } from "../packages/processing/src/raster-tool-runner";
+
+const originalWorker = globalThis.Worker;
+
+afterEach(() => {
+  if (originalWorker === undefined) delete (globalThis as { Worker?: typeof Worker }).Worker;
+  else globalThis.Worker = originalWorker;
+});
+
+const M = 1 / 111_320; // degrees per metre at the equator
+
+/** A rectangular footprint at the equator, in metres east/north of (0, 0). */
+function box(x0: number, y0: number, x1: number, y1: number, height: number): Feature {
+  return {
+    type: "Feature",
+    properties: { height },
+    geometry: {
+      type: "Polygon",
+      coordinates: [
+        [
+          [x0 * M, y0 * M],
+          [x1 * M, y0 * M],
+          [x1 * M, y1 * M],
+          [x0 * M, y1 * M],
+          [x0 * M, y0 * M],
+        ],
+      ],
+    },
+  };
+}
+
+const buildings: FeatureCollection = {
+  type: "FeatureCollection",
+  features: [box(0, 0, 10, 10, 30), box(25, 5, 35, 20, 12)],
+};
+
+const sunHoursParams = {
+  mode: "sun-hours",
+  date: "2026-06-21",
+  utc_offset: 0,
+  step_minutes: 30,
+  cell_size: 1,
+  margin: 15,
+};
+
+/** A small projected DEM: a tilted plane with a bump, in EPSG:32631. */
+function dem(): RasterData {
+  const width = 24;
+  const height = 18;
+  const band = new Float32Array(width * height);
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      band[y * width + x] = 100 + 2 * x + y + 15 * Math.exp(-((x - 12) ** 2 + (y - 9) ** 2) / 20);
+    }
+  }
+  return {
+    bands: [band],
+    width,
+    height,
+    originX: 500_000,
+    originY: 4_000_000,
+    resX: 10,
+    resY: 10,
+    nodata: -9999,
+    geoKeys: { GTModelTypeGeoKey: 1, ProjectedCSTypeGeoKey: 32631 },
+  };
+}
+
+/**
+ * A Worker that runs the real protocol handler on a later task, with the
+ * structured clone (and transfer) a real postMessage does in both directions.
+ */
+class LoopbackWorker {
+  static instances: LoopbackWorker[] = [];
+  /**
+   * Keep delivering replies after terminate(), the way messages already
+   * queued by a real worker can still arrive, so the runner's own guard is
+   * what keeps them out.
+   */
+  static leaky = false;
+  terminated = false;
+  private listeners = new Map<string, Set<(event: unknown) => void>>();
+
+  constructor() {
+    LoopbackWorker.instances.push(this);
+    // The real worker announces itself once its module has loaded.
+    setTimeout(() => this.emit({ type: "ready" }), 0);
+  }
+
+  private emit(data: unknown) {
+    for (const listener of this.listeners.get("message") ?? []) listener({ data });
+  }
+
+  addEventListener(type: string, listener: (event: unknown) => void) {
+    if (!this.listeners.has(type)) this.listeners.set(type, new Set());
+    this.listeners.get(type)!.add(listener);
+  }
+
+  removeEventListener(type: string, listener: (event: unknown) => void) {
+    this.listeners.get(type)?.delete(listener);
+  }
+
+  postMessage(message: RasterToolWorkerRequest, transfer: Transferable[] = []) {
+    const request = structuredClone(message, { transfer });
+    setTimeout(() => {
+      void handleRasterToolRequest(request, (reply, replyTransfer) => {
+        if (this.terminated && !LoopbackWorker.leaky) return;
+        this.emit(structuredClone(reply, { transfer: replyTransfer }));
+      });
+    }, 0);
+  }
+
+  terminate() {
+    this.terminated = true;
+  }
+}
+
+/** A worker that never answers, so only cancellation can end the run. */
+class HangingWorker {
+  static terminated = 0;
+  static spawned = 0;
+  constructor() {
+    HangingWorker.spawned += 1;
+  }
+  addEventListener() {}
+  removeEventListener() {}
+  postMessage() {}
+  terminate() {
+    HangingWorker.terminated += 1;
+  }
+}
+
+describe("raster tool worker protocol", () => {
+  it("posts one progress message per sun position, then the result with its buffers", async () => {
+    const messages: { message: RasterToolWorkerMessage; transfer: ArrayBuffer[] }[] = [];
+    await handleRasterToolRequest(
+      {
+        toolId: "building-shadows",
+        inputs: { vectors: { input: buildings } },
+        parameters: sunHoursParams,
+      },
+      (message, transfer) => messages.push({ message, transfer }),
+    );
+    const progress = messages
+      .map(({ message }) => message)
+      .filter((message) => message.type === "progress")
+      .map((message) => message.progress);
+    assert.ok(progress.length > 10, `${progress.length} progress messages`);
+    progress.forEach((step, index) => {
+      assert.equal(step.stage, "sun-positions");
+      assert.equal(step.done, index + 1);
+      assert.equal(step.total, progress.length);
+    });
+    const last = messages.at(-1)!;
+    assert.equal(last.message.type, "result");
+    if (last.message.type !== "result" || last.message.result.kind !== "raster") {
+      throw new Error("expected a raster result");
+    }
+    const { raster, bytes } = last.message.result;
+    assert.deepEqual(last.transfer, [raster.bands[0].buffer, bytes]);
+  });
+
+  it("posts an error with the thrown error's name and message", async () => {
+    const messages: RasterToolWorkerMessage[] = [];
+    await handleRasterToolRequest(
+      { toolId: "no-such-tool", inputs: { raster: dem() }, parameters: {} },
+      (message) => messages.push(message),
+    );
+    assert.deepEqual(messages, [
+      {
+        type: "error",
+        name: "Error",
+        message: '"no-such-tool" has no client-side implementation.',
+      },
+    ]);
+  });
+
+  it("lists each band buffer once and skips shared memory", () => {
+    const shared = new ArrayBuffer(32);
+    const a: RasterData = { ...dem(), bands: [new Float32Array(shared, 0, 4)] };
+    const b: RasterData = { ...dem(), bands: [new Float32Array(shared, 16, 4)] };
+    const c: RasterData = {
+      ...dem(),
+      bands: [new Float32Array(new SharedArrayBuffer(16) as unknown as ArrayBuffer)],
+    };
+    assert.deepEqual(rasterTransferables([a, b, c, undefined]), [shared]);
+  });
+});
+
+describe("runRasterToolInBackground", () => {
+  it("runs inline where there is no Worker, with the direct call's result", async () => {
+    delete (globalThis as { Worker?: typeof Worker }).Worker;
+    const direct = await runRasterToolClientAsync("hillshade", { raster: dem() }, {});
+    const background = await runRasterToolInBackground("hillshade", { raster: dem() }, {});
+    assert.deepEqual(background, direct);
+  });
+
+  for (const [toolId, inputs, parameters] of [
+    ["hillshade", () => ({ raster: dem() }), { azimuth: 300, altitude: 40 }],
+    ["slope", () => ({ raster: dem() }), { units: "percent" }],
+    ["contour", () => ({ raster: dem() }), { interval: 5 }],
+    ["building-shadows", () => ({ vectors: { input: buildings } }), sunHoursParams],
+  ] as const) {
+    it(`returns what a direct call does on a worker (${toolId})`, async () => {
+      globalThis.Worker = LoopbackWorker as unknown as typeof Worker;
+      LoopbackWorker.instances = [];
+      const direct = await runRasterToolClientAsync(toolId, inputs(), { ...parameters });
+      const progress: ClientToolProgress[] = [];
+      const sent = inputs();
+      const background = await runRasterToolInBackground(
+        toolId,
+        sent,
+        { ...parameters },
+        {
+          onProgress: (step) => progress.push(step),
+        },
+      );
+      assert.deepEqual(background, direct);
+      assert.equal(LoopbackWorker.instances.length, 1);
+      assert.equal(LoopbackWorker.instances[0].terminated, true, "the worker ends with the run");
+      if ("raster" in sent && sent.raster) {
+        // The input bands moved to the worker rather than being copied.
+        assert.equal(sent.raster.bands[0].buffer.byteLength, 0);
+      }
+      if (toolId === "building-shadows") {
+        assert.ok(progress.length > 10);
+        assert.equal(progress.at(-1)!.done, progress.at(-1)!.total);
+      } else {
+        assert.equal(progress.length, 0);
+      }
+    });
+  }
+
+  it("runs inline with intact inputs when the worker module fails to load", async () => {
+    // A worker whose script never loads (a CSP without worker-src): it fires
+    // `error` and never posts `ready`, so the request is never posted.
+    const posted: unknown[] = [];
+    class UnloadableWorker {
+      listeners = new Map<string, (event: unknown) => void>();
+      terminated = false;
+      constructor() {
+        setTimeout(() => this.listeners.get("error")?.({ message: "blocked" }), 0);
+      }
+      addEventListener(type: string, listener: (event: unknown) => void) {
+        this.listeners.set(type, listener);
+      }
+      removeEventListener() {}
+      postMessage(message: unknown) {
+        posted.push(message);
+      }
+      terminate() {
+        this.terminated = true;
+      }
+    }
+    globalThis.Worker = UnloadableWorker as unknown as typeof Worker;
+    const direct = await runRasterToolClientAsync("hillshade", { raster: dem() }, {});
+    const sent = { raster: dem() };
+    const background = await runRasterToolInBackground("hillshade", sent, {});
+    assert.deepEqual(background, direct);
+    assert.equal(posted.length, 0, "nothing was posted to the dead worker");
+    assert.ok(sent.raster.bands[0].byteLength > 0, "the inputs were not transferred away");
+  });
+
+  it("rejects with the worker's error", async () => {
+    globalThis.Worker = LoopbackWorker as unknown as typeof Worker;
+    await assert.rejects(
+      runRasterToolInBackground("no-such-tool", { raster: dem() }, {}),
+      /no client-side implementation/,
+    );
+  });
+
+  it("terminates the worker and rejects with an AbortError when cancelled", async () => {
+    globalThis.Worker = HangingWorker as unknown as typeof Worker;
+    HangingWorker.terminated = 0;
+    const controller = new AbortController();
+    const run = runRasterToolInBackground(
+      "hillshade",
+      { raster: dem() },
+      {},
+      {
+        signal: controller.signal,
+      },
+    );
+    controller.abort();
+    await assert.rejects(run, (error: Error) => error.name === "AbortError");
+    assert.equal(HangingWorker.terminated, 1);
+  });
+
+  it("stops a long shadow run mid-way: no result and no progress after Cancel", async () => {
+    globalThis.Worker = LoopbackWorker as unknown as typeof Worker;
+    LoopbackWorker.instances = [];
+    LoopbackWorker.leaky = true;
+    try {
+      const controller = new AbortController();
+      const progress: ClientToolProgress[] = [];
+      const run = runRasterToolInBackground(
+        "building-shadows",
+        { vectors: { input: buildings } },
+        { ...sunHoursParams },
+        {
+          signal: controller.signal,
+          onProgress: (step) => {
+            progress.push(step);
+            // Cancel mid-run, after the third sun position.
+            if (step.done === 3) controller.abort();
+          },
+        },
+      );
+      await assert.rejects(run, (error: Error) => error.name === "AbortError");
+      assert.equal(LoopbackWorker.instances[0].terminated, true);
+      // The leaky loopback keeps posting the rest of the run (and its result)
+      // after Cancel; none of it may surface.
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      assert.deepEqual(
+        progress.map((step) => step.done),
+        [1, 2, 3],
+      );
+      assert.ok(progress[0].total > 3, "the run had more positions to go");
+    } finally {
+      LoopbackWorker.leaky = false;
+    }
+  });
+
+  it("does not start a run whose signal is already aborted", async () => {
+    globalThis.Worker = HangingWorker as unknown as typeof Worker;
+    HangingWorker.spawned = 0;
+    const controller = new AbortController();
+    controller.abort();
+    await assert.rejects(
+      runRasterToolInBackground("hillshade", { raster: dem() }, {}, { signal: controller.signal }),
+      (error: Error) => error.name === "AbortError",
+    );
+    assert.equal(HangingWorker.spawned, 0);
+  });
+});

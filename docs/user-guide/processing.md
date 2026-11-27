@@ -187,7 +187,7 @@ See the [Vector Analysis tutorial](../tutorials/vector-analysis.md).
 
 ![The Raster tools dialog, with the tool list at the top and the engine picker above the parameters](https://assets.geolibre.app/images/geolibre-raster-tools.webp)
 
-Every raster tool also offers a **Client (browser)** engine that computes on the loaded raster with no sidecar at all. These computations are supported by the web and mobile runtimes. The engine picker in the dialog shows which engines a tool accepts, and the line beneath it says what the selected one will do. The browser engine follows the sidecar's algorithms (GDAL's warp kernels and output grid for Reproject and Resample, GDAL's rasterization rules for Clip by mask layer and Zonal statistics, ContourPy's marching squares for Contour, the same IDW and kriging pipeline for Interpolation), and a parity test replays sidecar outputs against it. A few inputs stay sidecar-only, and the browser engine says so when it meets them: a Reproject target that is not an EPSG code, Mosaic inputs on different pixel grids, zonal statistics over line zones, and a kriging system that is singular (for example, duplicate sample locations). The 3D terrain analysis, Change detection and SAR tools run in the browser only.
+Every raster tool also offers a **Client (browser)** engine that computes on the loaded raster with no sidecar at all. These computations are supported by the web and mobile runtimes. The engine picker in the dialog shows which engines a tool accepts, and the line beneath it says what the selected one will do. The browser engine follows the sidecar's algorithms (GDAL's warp kernels and output grid for Reproject and Resample, GDAL's rasterization rules for Clip by mask layer and Zonal statistics, ContourPy's marching squares for Contour, the same IDW and kriging pipeline for Interpolation), and a parity test replays sidecar outputs against it. A few inputs stay sidecar-only, and the browser engine says so when it meets them: a Reproject target that is not an EPSG code, Mosaic inputs on different pixel grids, zonal statistics over line zones, and a kriging system that is singular (for example, duplicate sample locations). The 3D terrain analysis, Change detection and SAR tools run in the browser only. The browser engine computes on a background thread, so the map stays usable during a long run: the dialog shows a progress bar (counting sun positions for the Building shadows day modes) and a **Cancel** button that stops the run. Reading the inputs before the run and encoding a raster result for the map afterwards still happen on the page.
 
 Browser interpolation also enforces a 200-million-operation work estimate,
 including point/grid comparisons and the kriging dense solve. This can limit a
@@ -206,10 +206,12 @@ Warp and mosaic buffers have a 256 MiB allocation budget that includes
 all bands, warp scanline scratch, and mosaic validity flags. Contouring accepts at most 8 million
 pixels, 10,000 levels, 50 million level/pixel visits, and 250,000 output segments.
 Increase the interval or crop the raster when these limits are reached.
-Warp, polygonization, and contour computation currently run synchronously in
-the browser. Large jobs can pause the interface until computation returns;
-use a smaller input or the sidecar engine for these jobs. Worker execution
-and interruption within the compute loops remain follow-up work.
+Warp, polygonization, and contour computation run on a background thread like
+the other browser tools, so a large job keeps the interface responsive and
+Cancel stops it. Where Web Workers are unavailable the browser engine falls
+back to running inline on the page, which pauses the interface until the
+computation returns and cannot be cancelled mid-run; use a smaller input or the
+sidecar engine there.
 
 Browser polygonization accepts at most 8 million pixels and 250,000 directed
 boundary edges. Noisy classified rasters can reach the edge budget well below

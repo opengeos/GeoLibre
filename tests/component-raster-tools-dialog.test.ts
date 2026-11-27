@@ -218,4 +218,117 @@ describe("Raster tools browser inputs", () => {
     );
     assert.equal((screen.getByRole("button", { name: "Run" }) as HTMLButtonElement).disabled, true);
   });
+
+  it("runs the compute on a worker with progress and a Cancel button", async () => {
+    // A worker the test drives: it records the posted run and answers only
+    // when told to, so the dialog's in-flight state can be inspected.
+    const workers: ControlledWorker[] = [];
+    class ControlledWorker {
+      listeners = new Map<string, (event: { data: unknown }) => void>();
+      posted: unknown[] = [];
+      terminated = false;
+      constructor() {
+        workers.push(this);
+      }
+      addEventListener(type: string, listener: (event: { data: unknown }) => void) {
+        this.listeners.set(type, listener);
+      }
+      removeEventListener() {}
+      postMessage(message: unknown) {
+        this.posted.push(message);
+      }
+      terminate() {
+        this.terminated = true;
+      }
+      emit(data: unknown) {
+        this.listeners.get("message")?.({ data });
+      }
+    }
+    const originalWorker = globalThis.Worker;
+    globalThis.Worker = ControlledWorker as unknown as typeof Worker;
+    const footprint = new TextEncoder().encode(
+      JSON.stringify({
+        type: "FeatureCollection",
+        features: [
+          {
+            type: "Feature",
+            properties: { height: 20 },
+            geometry: {
+              type: "Polygon",
+              coordinates: [
+                [
+                  [0, 0],
+                  [0.0001, 0],
+                  [0.0001, 0.0001],
+                  [0, 0.0001],
+                  [0, 0],
+                ],
+              ],
+            },
+          },
+        ],
+      }),
+    );
+    mock.method(HTMLInputElement.prototype, "click", function (this: HTMLInputElement) {
+      Object.defineProperty(this, "files", {
+        configurable: true,
+        value: [
+          {
+            name: "buildings.geojson",
+            size: footprint.byteLength,
+            arrayBuffer: async () => footprint.slice().buffer,
+          },
+        ],
+      });
+      this.dispatchEvent(new Event("change"));
+    });
+    try {
+      useAppStore.getState().setRasterToolOpen("building-shadows");
+      render(createElement(RasterToolsDialog, { mapControllerRef: { current: null } }));
+      fireEvent.click(screen.getByTitle(i18n.t("processing.filePicker.chooseInputFile")));
+      await waitFor(() =>
+        assert.equal(
+          (document.getElementById("raster-input") as HTMLInputElement).value,
+          "buildings.geojson",
+        ),
+      );
+      fireEvent.click(screen.getByRole("button", { name: "Run" }));
+      await waitFor(() => assert.equal(workers.length, 1));
+      // The run is posted once the worker reports its module loaded.
+      await act(async () => workers[0].emit({ type: "ready" }));
+      assert.equal((workers[0].posted[0] as { toolId: string }).toolId, "building-shadows");
+      assert.ok(await screen.findByText(i18n.t("toolbar.rasterTool.computingInBackground")));
+
+      await act(async () =>
+        workers[0].emit({
+          type: "progress",
+          progress: { stage: "sun-positions", done: 3, total: 12 },
+        }),
+      );
+      assert.ok(
+        screen.getByText(i18n.t("toolbar.rasterTool.progressSunPositions", { done: 3, total: 12 })),
+      );
+      const bar = screen.getByRole("progressbar");
+      assert.equal(bar.getAttribute("aria-valuenow"), "25");
+      assert.equal(
+        bar.getAttribute("aria-label"),
+        i18n.t("toolbar.rasterTool.progressSunPositions", { done: 3, total: 12 }),
+      );
+
+      fireEvent.click(screen.getByRole("button", { name: i18n.t("common.cancel") }));
+      assert.ok(await screen.findByText(i18n.t("toolbar.rasterTool.cancelled")));
+      assert.equal(workers[0].terminated, true);
+      assert.equal(screen.queryByRole("progressbar"), null);
+      assert.equal(screen.queryByRole("button", { name: i18n.t("common.cancel") }), null);
+      assert.equal(
+        (screen.getByRole("button", { name: "Run" }) as HTMLButtonElement).disabled,
+        false,
+      );
+    } finally {
+      cleanup();
+      mock.restoreAll();
+      if (originalWorker === undefined) delete (globalThis as { Worker?: typeof Worker }).Worker;
+      else globalThis.Worker = originalWorker;
+    }
+  });
 });

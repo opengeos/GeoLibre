@@ -4041,7 +4041,6 @@
       "loadedRaster": "Raster geladen: {{width}}×{{height}}, {{bands}} Band/Bänder.",
       "computedInBrowser": "„{{tool}}“ im Browser berechnet.",
       "addedToMap": "„{{name}}“ zur Karte hinzugefügt.",
-      "largeRasterWarning": "Großes Raster ({{mp}} Mio. Pixel); der Browser reagiert während der Berechnung möglicherweise nicht.",
       "mapAddFailed": "Hinzufügen zur Karte fehlgeschlagen (das Ergebnis kann weiterhin heruntergeladen werden): {{message}}",
       "mapAddError": "Das Ergebnis konnte nicht zur Karte hinzugefügt werden.",
       "runError": "Rasterwerkzeug konnte nicht ausgeführt werden.",

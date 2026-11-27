@@ -52,8 +52,10 @@ export const MAX_SHADOW_CELLS = 4_000_000;
 
 /**
  * Most cell-by-sun-position evaluations a day simulation may run (cells times
- * daylight samples), since it runs on the browser's main thread. A Midtown
- * Manhattan block of 400,000 cells at 15-minute steps is about 24 million.
+ * daylight samples), so a run stays within seconds. It runs on a Web Worker
+ * from the Raster tools dialog (#3701), where Cancel can stop it, but inline
+ * callers still block their thread. A Midtown Manhattan block of 400,000
+ * cells at 15-minute steps is about 24 million.
  */
 export const MAX_SHADOW_WORK = 100_000_000;
 
@@ -66,7 +68,7 @@ export const MAX_SHADOW_WORK = 100_000_000;
  * single sun position cannot run away. The Midtown Manhattan example makes
  * about 620 million over a solstice day at 15-minute steps (roughly 6 s), so
  * the cap leaves it about 2x headroom while bounding a runaway run to
- * roughly 12 s of main-thread work.
+ * roughly 12 s of work.
  */
 export const MAX_SHADOW_VISITS = 1_200_000_000;
 
@@ -461,6 +463,16 @@ export interface BuildingShadowResult {
   messages: string[];
 }
 
+/** Options for {@link buildingShadows}. */
+export interface BuildingShadowOptions {
+  /**
+   * Called after each daylight sun position of a day mode (`sun-hours`,
+   * `insolation`) with the positions done and the total, so a long run can
+   * show progress. Not called in `shadow` mode, which casts once.
+   */
+  onProgress?: (done: number, total: number) => void;
+}
+
 /**
  * Run the building shadow tool on WGS84 footprints.
  *
@@ -470,11 +482,13 @@ export interface BuildingShadowResult {
  *
  * @param features - Footprints in lon/lat.
  * @param params - Mode, heights, grid and time settings.
+ * @param options - Progress reporting for the day modes.
  * @returns A single-band EPSG:4326 raster and log lines.
  */
 export function buildingShadows(
   features: Feature[],
   params: BuildingShadowParams,
+  options: BuildingShadowOptions = {},
 ): BuildingShadowResult {
   const mode = String(params.mode ?? "shadow") as ShadowMode;
   if (!["shadow", "sun-hours", "insolation"].includes(mode)) {
@@ -565,6 +579,7 @@ export function buildingShadows(
             60 /
             1000;
       for (let i = 0; i < cells; i += 1) if (!mask[i]) band[i] += weight;
+      options.onProgress?.(positions, daylight);
     }
     const hhmm = (m: number) =>
       `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(Math.floor(m % 60)).padStart(2, "0")}`;

@@ -40,3 +40,5 @@ export {
   type SolarEphemeris,
   type SunPosition,
 } from "./solar-position";
+// CRS helpers the browser raster tools run in their worker (issue #3701).
+export { normalizeProj4Definition, withGeoKeysDatumShift } from "./datum-shift";

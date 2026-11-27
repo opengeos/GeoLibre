@@ -4041,7 +4041,6 @@
       "loadedRaster": "Rastr yükləndi: {{width}}×{{height}}, {{bands}} zolaq(lar).",
       "computedInBrowser": "\"{{tool}}\" brauzerdə hesablandı.",
       "addedToMap": "\"{{name}}\" xəritəyə əlavə edildi.",
-      "largeRasterWarning": "Böyük rastr ({{mp}} M piksel); hesablama zamanı brauzer cavab verməyə bilər.",
       "mapAddFailed": "Xəritəyə əlavə etmək alınmadı (nəticəni yenə də endirmək olar): {{message}}",
       "mapAddError": "Nəticəni xəritəyə əlavə etmək mümkün olmadı.",
       "runError": "Rastr alətini işə salmaq mümkün olmadı.",
