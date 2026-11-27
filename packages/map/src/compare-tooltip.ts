@@ -31,8 +31,7 @@ export interface CompareTooltipLabels {
 
 /** English fallbacks; the app passes translated labels. */
 export const DEFAULT_COMPARE_TOOLTIP_LABELS: CompareTooltipLabels = {
-  comparedWith: (title) =>
-    title ? `Compared with ${title}` : "Compared with the pinned feature",
+  comparedWith: (title) => (title ? `Compared with ${title}` : "Compared with the pinned feature"),
   pinnedValue: (value) => `pinned: ${value}`,
   noValue: "(none)",
   identical: "Same as the pinned feature in every field",
@@ -71,7 +70,8 @@ export function createCompareTooltipElement(
   });
 
   const root = document.createElement("div");
-  root.className = "geolibre-hover-tooltip-root geolibre-compare-tooltip flex flex-col gap-0.5 text-xs";
+  root.className =
+    "geolibre-hover-tooltip-root geolibre-compare-tooltip flex flex-col gap-0.5 text-xs";
   const width = Math.max(resolvePopupMaxWidth(popup) ?? 256, 256);
   root.style.width = `min(${width}px, calc(100vw - 48px))`;
   root.style.maxWidth = "100%";

@@ -58,9 +58,13 @@ describe("compareFeatureProperties", () => {
   });
 
   it("never compares a field the author hid", () => {
-    const result = compareFeatureProperties({ ...pinned, owner: "B" }, { ...pinned, owner: "A" }, {
-      fieldVisibility: { owner: "hidden" },
-    });
+    const result = compareFeatureProperties(
+      { ...pinned, owner: "B" },
+      { ...pinned, owner: "A" },
+      {
+        fieldVisibility: { owner: "hidden" },
+      },
+    );
     assert.deepEqual(result.rows, []);
   });
 
@@ -86,7 +90,10 @@ describe("compareFeatureProperties", () => {
   });
 
   it("shows a field only one of the two features has", () => {
-    const result = compareFeatureProperties({ lot: "12", note: "corner" }, { lot: "12", year: 1987 });
+    const result = compareFeatureProperties(
+      { lot: "12", note: "corner" },
+      { lot: "12", year: 1987 },
+    );
     assert.deepEqual(
       result.rows.map((row) => [row.field, row.text, row.pinnedText, row.delta]),
       [
@@ -97,7 +104,11 @@ describe("compareFeatureProperties", () => {
   });
 
   it("drops the sign from a difference that rounds to zero", () => {
-    const result = compareFeatureProperties({ ratio: 0.1 + 0.2 }, { ratio: 0.3 }, { locale: "en-US" });
+    const result = compareFeatureProperties(
+      { ratio: 0.1 + 0.2 },
+      { ratio: 0.3 },
+      { locale: "en-US" },
+    );
     assert.equal(result.rows[0].delta, "0");
   });
 
@@ -123,13 +134,19 @@ describe("wantsHoverTooltip", () => {
 
   it("follows the author's hover switch and the viewer's tooltip toggle", () => {
     assert.equal(wantsHoverTooltip(tipped, { hoverTooltipsEnabled: true, comparePin: null }), true);
-    assert.equal(wantsHoverTooltip(tipped, { hoverTooltipsEnabled: false, comparePin: null }), false);
+    assert.equal(
+      wantsHoverTooltip(tipped, { hoverTooltipsEnabled: false, comparePin: null }),
+      false,
+    );
     assert.equal(wantsHoverTooltip(plain, { hoverTooltipsEnabled: true, comparePin: null }), false);
   });
 
   it("turns on for the pinned feature's layer, even with tooltips off", () => {
     assert.equal(wantsHoverTooltip(plain, { hoverTooltipsEnabled: false, comparePin: pin }), true);
-    assert.equal(wantsHoverTooltip(tipped, { hoverTooltipsEnabled: false, comparePin: pin }), false);
+    assert.equal(
+      wantsHoverTooltip(tipped, { hoverTooltipsEnabled: false, comparePin: pin }),
+      false,
+    );
   });
 
   it("gives the pin only to its own layer", () => {

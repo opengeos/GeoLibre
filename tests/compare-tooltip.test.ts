@@ -64,12 +64,21 @@ describe("the compare hover tooltip", () => {
 
   it("shows a comparison even where the layer has no hover fields", () => {
     // Without the pin, a layer with no hover fields shows no tip at all.
-    assert.equal(createHoverTooltipElement("Parcels", { lot: "13" }, { popup: { hover: true } }), null);
-    assert.ok(createHoverTooltipElement("Parcels", { lot: "13" }, { popup: { hover: true }, compare }));
+    assert.equal(
+      createHoverTooltipElement("Parcels", { lot: "13" }, { popup: { hover: true } }),
+      null,
+    );
+    assert.ok(
+      createHoverTooltipElement("Parcels", { lot: "13" }, { popup: { hover: true }, compare }),
+    );
   });
 
   it("marks a value one side lacks", () => {
-    const root = createHoverTooltipElement("Parcels", { ...pin.properties, note: "corner" }, { compare })!;
+    const root = createHoverTooltipElement(
+      "Parcels",
+      { ...pin.properties, note: "corner" },
+      { compare },
+    )!;
     assert.deepEqual(lines(root), [["note", "corner", "pinned: (none)"]]);
   });
 });
