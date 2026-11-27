@@ -8,6 +8,7 @@ import {
   addedRasters,
   conversions,
   heldRasterAdds,
+  overviewlessHandler,
   rasterAdds,
   rasterHandler,
   resetCogHarness,
@@ -133,5 +134,62 @@ describe("COG convert-and-load lifecycle", () => {
     assert.equal(addedRasters, 0);
     assert.equal(dismiss.mock.callCount(), 0);
     assert.equal(useNotificationStore.getState().notifications.length, 0);
+  });
+});
+
+describe("overview-less raster notice", () => {
+  function notifyOverviewless(overrides: { bytesAreRemote?: boolean; width?: number } = {}) {
+    assert.ok(overviewlessHandler);
+    const dismiss = mock.fn();
+    overviewlessHandler({
+      layerId: "naip",
+      name: "naip.tif",
+      bytesAreRemote: overrides.bytesAreRemote ?? false,
+      readBytes: async () => Uint8Array.of(0x49, 0x49, 42, 0),
+      dismiss,
+      width: overrides.width ?? 3000,
+      height: 3000,
+      bands: 3,
+    });
+    return { dismiss };
+  }
+
+  it("offers a conversion that replaces the layer without another prompt", async () => {
+    window.confirm = () => {
+      throw new Error("the notice's button is the consent; no confirm expected");
+    };
+    render(createElement(RasterHost));
+    const { dismiss } = notifyOverviewless();
+    const [notice] = useNotificationStore.getState().notifications;
+    assert.equal(notice.kind, "warning");
+    assert.match(notice.message, /naip\.tif.*no overviews/);
+    assert.ok(notice.action);
+
+    notice.action.onClick();
+    await waitFor(() => assert.equal(conversions.length, 1));
+    conversions[0].result.resolve(Uint8Array.of(1));
+    await waitFor(() => assert.equal(dismiss.mock.callCount(), 1));
+    assert.equal(addedRasters, 1);
+  });
+
+  it("points at GDAL instead when the browser cannot convert it", () => {
+    render(createElement(RasterHost));
+    // 40000 x 3000 x 3 bands = 360M samples, past the in-browser cap.
+    notifyOverviewless({ width: 40000 });
+    const [tooLarge] = useNotificationStore.getState().notifications;
+    assert.equal(tooLarge.action, undefined);
+    assert.match(tooLarge.description ?? "", /gdaladdo/);
+
+    clearNotifications();
+    notifyOverviewless({ bytesAreRemote: true });
+    const [remote] = useNotificationStore.getState().notifications;
+    assert.equal(remote.action, undefined);
+  });
+
+  it("unregisters on unmount", () => {
+    const host = render(createElement(RasterHost));
+    assert.ok(overviewlessHandler);
+    host.unmount();
+    assert.equal(overviewlessHandler, null);
   });
 });

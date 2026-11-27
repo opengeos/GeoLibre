@@ -48,6 +48,7 @@ import {
 } from "./raster-symbology-texture";
 import { disposeAllPaletteLegends, disposePaletteLegend } from "./raster-palette";
 import { isNonTiledRasterError } from "./non-tiled-raster-error";
+import { needsOverviewsToDrawZoomedOut, readRasterPyramidShape } from "./overviewless-raster";
 import { readableStacLayerHref } from "./stac-signing";
 import { configureMapboxRasterEngine } from "./raster-mapbox-compat";
 import { focusPanel, restorePanelFocus } from "./panel-focus";
@@ -288,6 +289,61 @@ const NON_TILED_FETCH_TIMEOUT_MS = 60_000;
  */
 export function setNonTiledRasterHandler(handler: NonTiledRasterHandler | null): void {
   nonTiledRasterHandler = handler;
+}
+
+/**
+ * Details of a tiled GeoTIFF with no overviews that is too large for the WASM
+ * tiler to draw zoomed out, so it stays blank until the user zooms well in.
+ * Passed to a host handler registered via {@link setOverviewlessRasterHandler},
+ * which explains the blank map and can offer to convert the file to a COG.
+ * Unlike {@link NonTiledRasterRequest} the layer has loaded fine, so the host
+ * should leave it in place unless a conversion replaces it.
+ */
+export interface OverviewlessRasterRequest extends NonTiledRasterRequest {
+  /** Full-resolution width in pixels. */
+  width: number;
+  /** Full-resolution height in pixels. */
+  height: number;
+  /** Samples per pixel. */
+  bands: number;
+}
+
+type OverviewlessRasterHandler = (request: OverviewlessRasterRequest) => void | Promise<void>;
+
+let overviewlessRasterHandler: OverviewlessRasterHandler | null = null;
+
+/**
+ * Register (or clear, with `null`) a handler invoked when a raster added to the
+ * WASM tiler engine is a tiled GeoTIFF with no overviews, too large to draw at
+ * its full extent. Only one handler is active at a time.
+ *
+ * @param handler - The handler, or `null` to unregister.
+ */
+export function setOverviewlessRasterHandler(handler: OverviewlessRasterHandler | null): void {
+  overviewlessRasterHandler = handler;
+}
+
+/**
+ * Build the whole-file reader handed to the non-tiled and overview-less host
+ * handlers: a local file from its blob URL, a remote URL fetched whole.
+ *
+ * @param bytesUrl - The raster's blob URL or remote URL.
+ * @param bytesAreRemote - Whether the read is a network download.
+ * @returns A function resolving to a fresh copy of the file's bytes.
+ */
+function rasterBytesReader(bytesUrl: string, bytesAreRemote: boolean): () => Promise<Uint8Array> {
+  return async () => {
+    // Only bound the remote download; a local blob URL resolves from memory
+    // in microseconds, so a timeout timer there is pure overhead.
+    const response = await fetch(
+      bytesUrl,
+      bytesAreRemote ? { signal: AbortSignal.timeout(NON_TILED_FETCH_TIMEOUT_MS) } : undefined,
+    );
+    if (!response.ok) {
+      throw new Error(`Failed to read raster bytes: ${response.status}`);
+    }
+    return new Uint8Array(await response.arrayBuffer());
+  };
 }
 
 /**
@@ -1265,6 +1321,52 @@ function createRasterControl(
     disposePaletteLegend(event.layerId);
     rememberLocalRasterPath(event.layerId, undefined);
   });
+  // A tiled GeoTIFF with no overviews loads fine but the WASM tiler can only
+  // read it at full resolution, and refuses a read that large, so it stays
+  // blank until the user zooms well in. Read its directories (headers only)
+  // and tell the host, which explains the blank map and can offer to convert.
+  control.on("rasteradd", (event) => {
+    if (!event.layerId || !overviewlessRasterHandler) return;
+    if (control.getEngine() !== "cog-tiler-wasm") return;
+    const layerId = event.layerId;
+    const info = control.getRaster(layerId);
+    if (!info || info.memberUrls) return;
+    const bytesUrl =
+      info.source.kind === "file"
+        ? info.source.objectUrl
+        : info.source.kind === "url"
+          ? info.source.url
+          : undefined;
+    if (!bytesUrl) return;
+    const bytesAreRemote = info.source.kind === "url";
+    void (async () => {
+      const { fromBlob, fromUrl } = await import("geotiff");
+      const tiff = bytesAreRemote
+        ? await fromUrl(bytesUrl)
+        : await fromBlob(await (await fetch(bytesUrl)).blob());
+      const shape = await readRasterPyramidShape(tiff);
+      if (!needsOverviewsToDrawZoomedOut(shape)) return;
+      // Same guards as the non-tiled path: the layer may have been removed, or
+      // its project replaced, while the header was read.
+      const handler = overviewlessRasterHandler;
+      if (!handler || !control.getRaster(layerId)) return;
+      if (!useAppStore.getState().layers.some((layer) => layer.id === layerId)) return;
+      await handler({
+        layerId,
+        name: info.name,
+        bytesAreRemote,
+        readBytes: rasterBytesReader(bytesUrl, bytesAreRemote),
+        dismiss: () => control.removeRaster(layerId),
+        width: shape.width,
+        height: shape.height,
+        bands: shape.bands,
+      });
+    })().catch((error: unknown) =>
+      // A header the probe cannot parse is not worth a notice: the layer's own
+      // load reports real failures.
+      console.debug("[GeoLibre] Overview check skipped for raster", error),
+    );
+  });
   // A striped (non-tiled) GeoTIFF cannot be streamed as tiles, so the upstream
   // fails the layer with a "not tiled" error. Offer the registered host handler
   // a chance to convert it to a COG instead of leaving the user with a blank,
@@ -1313,20 +1415,7 @@ function createRasterControl(
           layerId,
           name: info.name,
           bytesAreRemote,
-          readBytes: async () => {
-            // Only bound the remote download; a local blob URL resolves from
-            // memory in microseconds, so a timeout timer there is pure overhead.
-            const response = await fetch(
-              bytesUrl,
-              bytesAreRemote
-                ? { signal: AbortSignal.timeout(NON_TILED_FETCH_TIMEOUT_MS) }
-                : undefined,
-            );
-            if (!response.ok) {
-              throw new Error(`Failed to read raster bytes: ${response.status}`);
-            }
-            return new Uint8Array(await response.arrayBuffer());
-          },
+          readBytes: rasterBytesReader(bytesUrl, bytesAreRemote),
           dismiss: () => {
             // removeRaster emits 'rasterremove', which syncs the removal into
             // the store and revokes any retained blob URL.

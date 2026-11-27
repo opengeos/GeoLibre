@@ -317,11 +317,13 @@ export {
   setLocalRasterFileReader,
   setLocalRasterPicker,
   setNonTiledRasterHandler,
+  setOverviewlessRasterHandler,
   setRasterPixelInspect,
   setUnrestorableRasterHandler,
   type LocalRasterFileReader,
   type LocalRasterPicker,
   type NonTiledRasterRequest,
+  type OverviewlessRasterRequest,
   type PickedLocalRaster,
   type UnrestorableRasterHandler,
 } from "./plugins/maplibre-raster";

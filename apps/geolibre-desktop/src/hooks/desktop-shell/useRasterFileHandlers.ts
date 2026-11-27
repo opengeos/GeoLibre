@@ -4,7 +4,9 @@ import {
   setLocalRasterFileReader,
   setLocalRasterPicker,
   setNonTiledRasterHandler,
+  setOverviewlessRasterHandler,
   setUnrestorableRasterHandler,
+  type NonTiledRasterRequest,
 } from "@geolibre/plugins/maplibre-raster";
 import {
   convertGeoTiffToCog,
@@ -24,7 +26,8 @@ import { createAppAPI } from "../usePlugins";
 
 /**
  * Wires the raster plugin to the local filesystem (desktop) and to the in-browser
- * GeoTIFF-to-COG conversion offered when a striped GeoTIFF fails to load.
+ * GeoTIFF-to-COG conversion offered when a striped GeoTIFF fails to load, or
+ * when a tiled one without overviews is too large to draw zoomed out.
  *
  * @param mapControllerRef - The primary map engine.
  * @param t - The shell's translation function.
@@ -67,7 +70,12 @@ export function useRasterFileHandlers(
   // layer has i18n and the client-side converter. See opengeos/GeoLibre#789.
   useEffect(() => {
     const conversions = new Set<AbortController>();
-    setNonTiledRasterHandler(async ({ name, bytesAreRemote, readBytes, dismiss }) => {
+    // `confirmed` skips the prompts: the overview-less notice's "Convert to
+    // COG" button is the user's consent already.
+    const convertToCog = async (
+      { name, bytesAreRemote, readBytes, dismiss }: NonTiledRasterRequest,
+      confirmed: boolean,
+    ) => {
       const controller = new AbortController();
       conversions.add(controller);
       // The converted raster belongs to the project it came from: opening
@@ -86,6 +94,7 @@ export function useRasterFileHandlers(
         // so it defers to the post-read prompt below, which can pick the
         // large-raster warning now that the dimensions are cheap to read. See #916.
         if (
+          !confirmed &&
           bytesAreRemote &&
           !window.confirm(translateRef.current("raster.cogConvertRemoteConfirm", { name }))
         ) {
@@ -139,7 +148,7 @@ export function useRasterFileHandlers(
           notify.warning(translateRef.current("raster.cogConvertTooLarge", { name }));
           return;
         }
-        if (!bytesAreRemote) {
+        if (!confirmed && !bytesAreRemote) {
           // Local file: pick the prompt by size now that the header is cheap to
           // read, then confirm once. (A remote source already confirmed above.)
           const message =
@@ -199,9 +208,33 @@ export function useRasterFileHandlers(
         if (notice) dismissNotification(notice);
         conversions.delete(controller);
       }
+    };
+    setNonTiledRasterHandler((request) => convertToCog(request, false));
+    // A tiled GeoTIFF without overviews loads, but the tiler can only read it
+    // at full resolution and refuses a read that large, so it is blank until
+    // zoomed well in. Say why, and offer the conversion when the browser can
+    // hold it; otherwise point at the desktop GDAL tools.
+    setOverviewlessRasterHandler((request) => {
+      const t = translateRef.current;
+      const convertible =
+        !request.bytesAreRemote && !exceedsBrowserCogConversionLimit(geoTiffSampleCount(request));
+      notify.warning(t("raster.overviewlessNotice", { name: request.name }), {
+        description: t(
+          convertible ? "raster.overviewlessConvertHint" : "raster.overviewlessGdalHint",
+        ),
+        durationMs: null,
+        dedupeKey: `overviewless-raster-${request.layerId}`,
+        action: convertible
+          ? {
+              label: t("raster.overviewlessConvertAction"),
+              onClick: () => void convertToCog(request, true),
+            }
+          : undefined,
+      });
     });
     return () => {
       setNonTiledRasterHandler(null);
+      setOverviewlessRasterHandler(null);
       for (const controller of conversions) controller.abort();
     };
   }, [mapControllerRef]);
