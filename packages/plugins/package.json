@@ -137,7 +137,7 @@
     "@turf/buffer": "^7.4.0",
     "@turf/union": "^7.4.0",
     "a5-js": "^1.0.0",
-    "cog-tiler-wasm": "^0.6.0",
+    "cog-tiler-wasm": "^0.6.1",
     "dggal": "^0.0.7",
     "fflate": "^0.8.3",
     "geotiff": "^3.0.5",

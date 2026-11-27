@@ -4,6 +4,7 @@ import path from "node:path";
 import { describe, it } from "node:test";
 import { isolateMaplibreRegistry } from "../apps/geolibre-desktop/vite-plugins/isolate-maplibre-registry";
 import { MAX_VECTOR_BYTES } from "../packages/plugins/src/plugins/remote-file-formats";
+import { TILER_WINDOW_SAMPLES } from "../packages/plugins/src/plugins/overviewless-raster";
 import {
   citedSections,
   contractMessage,
@@ -393,6 +394,31 @@ describe("maplibre-gl-components", () => {
         ),
       );
     }
+  });
+});
+
+describe("cog-tiler-wasm", () => {
+  const section = "`cog-tiler-wasm` — read ceiling for overview-less rasters";
+
+  it("still refuses reads over TILER_WINDOW_SAMPLES", () => {
+    // Read as text: importing the tiler initializes its wasm.
+    const source = readPackageFile("cog-tiler-wasm", "cog-tiler.js", "packages/plugins");
+    const match = /const MAX_WINDOW_SAMPLES = (?:(\d+)\s*<<\s*(\d+)|([\d_]+));/.exec(source);
+    const upstream = !match
+      ? NaN
+      : match[3] !== undefined
+        ? Number(match[3].replaceAll("_", ""))
+        : Number(match[1]) * 2 ** Number(match[2]);
+    assert.equal(
+      upstream,
+      TILER_WINDOW_SAMPLES,
+      contractMessage(
+        "cog-tiler-wasm",
+        section,
+        `MAX_WINDOW_SAMPLES is ${match?.[0] ?? "missing"}, TILER_WINDOW_SAMPLES is ${TILER_WINDOW_SAMPLES}`,
+        "packages/plugins",
+      ),
+    );
   });
 });
 

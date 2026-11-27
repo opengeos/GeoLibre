@@ -781,6 +781,18 @@ imports that way.
 the package export, so a colormap added or renamed upstream fails
 `npm run test:frontend`. Regenerate the copy from the package when it does.
 
+### `cog-tiler-wasm` — read ceiling for overview-less rasters
+
+`TILER_WINDOW_SAMPLES` in `packages/plugins/src/plugins/overviewless-raster.ts`
+copies the tiler's unexported `MAX_WINDOW_SAMPLES` (`1 << 24`), the largest
+source read it will make for one tile. A tiled GeoTIFF with no overviews that
+needs more than that at its full extent draws nothing zoomed out, and the
+raster plugin uses the copy to decide when to tell the user so (and offer a COG
+conversion). If upstream raises or lowers the ceiling, the notice fires for the
+wrong rasters; nothing errors. `tests/upstream-contracts.test.ts` checks the
+installed `cog-tiler.js` for the constant. When it fails, update the copy and
+re-check that a raster just over the new ceiling still stays blank zoomed out.
+
 ### Datum shifts (`geotiff-geokeys-to-proj4`, `cog-tiler-wasm`, `maplibre-gl-raster`)
 
 The EPSG tables in `geotiff-geokeys-to-proj4` leave the datum shift
