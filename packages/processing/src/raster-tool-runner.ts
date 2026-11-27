@@ -59,8 +59,11 @@ async function runInline(
  *
  * The input rasters' band buffers are transferred to the worker, so they are
  * detached (empty) on the caller's side once the run starts: pass rasters
- * decoded for this run. Where Workers are unavailable, or the request cannot be
- * posted, the tool runs inline on the calling thread instead.
+ * decoded for this run. Where Workers are unavailable (node, tests), or the
+ * request cannot be posted, the tool runs inline on the calling thread instead.
+ * That compute is synchronous, so an abort cannot interrupt it: the signal is
+ * checked before and after, and an aborted run still rejects with an
+ * `AbortError` (its result discarded) once the compute returns.
  *
  * @param toolId - The raster tool id.
  * @param inputs - The decoded rasters and parsed GeoJSON inputs.

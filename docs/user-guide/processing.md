@@ -206,10 +206,12 @@ Warp and mosaic buffers have a 256 MiB allocation budget that includes
 all bands, warp scanline scratch, and mosaic validity flags. Contouring accepts at most 8 million
 pixels, 10,000 levels, 50 million level/pixel visits, and 250,000 output segments.
 Increase the interval or crop the raster when these limits are reached.
-Warp, polygonization, and contour computation currently run synchronously in
-the browser. Large jobs can pause the interface until computation returns;
-use a smaller input or the sidecar engine for these jobs. Worker execution
-and interruption within the compute loops remain follow-up work.
+Warp, polygonization, and contour computation run on a background thread like
+the other browser tools, so a large job keeps the interface responsive and
+Cancel stops it. Where Web Workers are unavailable the browser engine falls
+back to running inline on the page, which pauses the interface until the
+computation returns and cannot be cancelled mid-run; use a smaller input or the
+sidecar engine there.
 
 Browser polygonization accepts at most 8 million pixels and 250,000 directed
 boundary edges. Noisy classified rasters can reach the edge budget well below

@@ -225,8 +225,9 @@ export function RasterToolsDialog({ mapControllerRef }: RasterToolsDialogProps):
   >({});
   const [clientLog, setClientLog] = useState<string[]>([]);
   const [clientRunning, setClientRunning] = useState(false);
-  // True from the start of a client run until its compute returns: the phase
-  // Cancel can stop. The progress of a long compute (sun positions).
+  // True from the start of a client run until its compute returns. Cancel is
+  // offered for this whole window; progress reports the sun positions of a
+  // long compute.
   const [clientCancellable, setClientCancellable] = useState(false);
   const [clientProgress, setClientProgress] = useState<ClientToolProgress | null>(null);
   // True while fetching a picked layer's bytes for the client engine.
