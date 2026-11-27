@@ -4,6 +4,7 @@ export { SUN_PLUGIN_ID } from "../plugin-ids";
 import { builtInPluginProperties } from "../builtin-plugin-metadata";
 import { DEFAULT_SUN_SETTINGS } from "../builtin-plugin-defaults";
 export { DEFAULT_SUN_SETTINGS } from "../builtin-plugin-defaults";
+import { subsolarPoint, sunPosition } from "@geolibre/core";
 import type { CesiumSceneHandle } from "@geolibre/map";
 import type { CanvasSource, LightSpecification, Map as MapLibreMap } from "maplibre-gl";
 import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
@@ -44,7 +45,6 @@ const NIGHT_CANVAS_SOUTH = -85;
 const NIGHT_TWILIGHT_DEPTH = 24;
 
 const D2R = Math.PI / 180;
-const R2D = 180 / Math.PI;
 const NIGHT_TWILIGHT_SIN_DEPTH = Math.sin(NIGHT_TWILIGHT_DEPTH * D2R);
 const MS_PER_DAY = 86_400_000;
 const MS_PER_MINUTE = 60_000;
@@ -108,92 +108,6 @@ function sunSettingsEqual(a: SunSettings, b: SunSettings): boolean {
     a.loop === b.loop &&
     a.shadeOpacity === b.shadeOpacity
   );
-}
-
-// ---------------------------------------------------------------------------
-// Solar position (low-precision NOAA equations).
-// ---------------------------------------------------------------------------
-
-function julianDay(dateMs: number): number {
-  return dateMs / MS_PER_DAY + 2440587.5;
-}
-
-/** Greenwich Mean Sidereal Time, in hours. */
-function greenwichMeanSiderealTime(jd: number): number {
-  const d = jd - 2451545.0;
-  return (18.697374558 + 24.06570982441908 * d) % 24;
-}
-
-interface SunEquatorial {
-  /** Right ascension, degrees. */
-  alpha: number;
-  /** Declination, degrees. */
-  delta: number;
-}
-
-/** Sun's apparent right ascension and declination for the given instant. */
-export function sunEquatorialPosition(dateMs: number): SunEquatorial {
-  const jd = julianDay(dateMs);
-  const n = jd - 2451545.0;
-  const meanLng = (280.46 + 0.9856474 * n) % 360;
-  const meanAnomaly = ((357.528 + 0.9856003 * n) % 360) * D2R;
-  const eclipticLng = meanLng + 1.915 * Math.sin(meanAnomaly) + 0.02 * Math.sin(2 * meanAnomaly);
-  const obliquity = 23.439 - 0.0000004 * n;
-  const lngRad = eclipticLng * D2R;
-  const obRad = obliquity * D2R;
-
-  let alpha = Math.atan2(Math.cos(obRad) * Math.sin(lngRad), Math.cos(lngRad)) * R2D;
-  alpha = ((alpha % 360) + 360) % 360;
-  const delta = Math.asin(Math.sin(obRad) * Math.sin(lngRad)) * R2D;
-  return { alpha, delta };
-}
-
-/**
- * Subsolar point: the lat/long where the sun is directly overhead. Latitude is
- * the solar declination; longitude is derived from sidereal time so it walks
- * ~15°/hour westward through the day.
- */
-export function subsolarPoint(dateMs: number): { lat: number; lng: number } {
-  const jd = julianDay(dateMs);
-  const gst = greenwichMeanSiderealTime(jd);
-  const { alpha, delta } = sunEquatorialPosition(dateMs);
-  // Longitude where the local hour angle is zero (sun on the meridian).
-  let lng = alpha - gst * 15;
-  lng = ((((lng + 180) % 360) + 360) % 360) - 180;
-  return { lat: delta, lng };
-}
-
-/**
- * Solar altitude (degrees above the horizon; negative below) and azimuth
- * (degrees clockwise from true north) as seen from `lat`/`lng` at `dateMs`.
- */
-export function sunPositionAt(
-  dateMs: number,
-  lat: number,
-  lng: number,
-): { altitude: number; azimuth: number } {
-  const jd = julianDay(dateMs);
-  const gst = greenwichMeanSiderealTime(jd);
-  const { alpha, delta } = sunEquatorialPosition(dateMs);
-  // Local hour angle, degrees, normalized to [-180, 180].
-  let ha = gst * 15 + lng - alpha;
-  ha = ((((ha + 180) % 360) + 360) % 360) - 180;
-  const haR = ha * D2R;
-  const latR = lat * D2R;
-  const decR = delta * D2R;
-  // Clamp before asin: the bracketed term is mathematically within [-1, 1] but
-  // floating-point rounding can push it fractionally past 1 (e.g. sun at zenith
-  // for the current center at local noon), which would make asin return NaN.
-  const sinAltitude =
-    Math.sin(latR) * Math.sin(decR) + Math.cos(latR) * Math.cos(decR) * Math.cos(haR);
-  const altitude = Math.asin(Math.min(1, Math.max(-1, sinAltitude))) * R2D;
-  // Azimuth measured clockwise from north.
-  const azimuth =
-    (Math.atan2(Math.sin(haR), Math.cos(haR) * Math.sin(latR) - Math.tan(decR) * Math.cos(latR)) *
-      R2D +
-      180) %
-    360;
-  return { altitude, azimuth };
 }
 
 // ---------------------------------------------------------------------------
@@ -422,7 +336,13 @@ class SunEngine {
     } catch {
       return;
     }
-    const { altitude, azimuth } = sunPositionAt(this.settings.dateMs, center.lat, center.lng);
+    // The shared ephemeris (issue #3698): the same apparent position, with
+    // refraction and the equation of time, that the Building shadows tool uses.
+    const { elevation: altitude, azimuth } = sunPosition(
+      this.settings.dateMs,
+      center.lat,
+      center.lng,
+    );
     // Polar angle: 0 = light straight overhead, 90 = at the horizon. Below the
     // horizon we keep it grazing and dim the intensity to read as night.
     const polar = Math.min(90, Math.max(0, 90 - altitude));

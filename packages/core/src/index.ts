@@ -16,6 +16,13 @@ export * from "./hyperlink";
 export * from "./photo";
 export * from "./ellipsoids";
 export * from "./geodesic";
+export {
+  solarEphemeris,
+  subsolarPoint,
+  sunPosition,
+  type SolarEphemeris,
+  type SunPosition,
+} from "./solar-position";
 export * from "./regional-basemaps";
 export * from "./cesium-imagery";
 export * from "./arcgis-projection";

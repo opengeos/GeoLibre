@@ -128,7 +128,9 @@ export function buildGeoLensChangeSet(
     // GeoLens cannot store a feature without geometry; like the plugin's own
     // diff, such a drawing is not sent.
     features: collection.features.filter(
-      (feature) => feature.geometry || featureGid(feature) !== null,
+      (feature) =>
+        feature.geometry ||
+        (featureGid(feature) !== null && baseline.has(String(featureGid(feature)))),
     ),
     keyOf: gidKey,
     rawKeyOf: (feature) => featureGid(feature) ?? undefined,

@@ -477,3 +477,144 @@ def test_write_respects_conversion_allowlist(tmp_path, monkeypatch: pytest.Monke
     with pytest.raises(HTTPException) as exc:
         vector_write(WriteVectorRequest(path=str(src), geojson=_edited("b")))
     assert exc.value.status_code == 403
+
+
+def _points(rows: list[tuple[int | None, str, float]]) -> dict:
+    features = []
+    for fid, name, x in rows:
+        feature = {
+            "type": "Feature",
+            "properties": {"name": name},
+            "geometry": {"type": "Point", "coordinates": [x, 1.0]},
+        }
+        if fid is not None:
+            feature["id"] = fid
+        features.append(feature)
+    return {"type": "FeatureCollection", "features": features}
+
+
+def _gpkg_rows(path, table: str, fid_column: str = "fid") -> list[tuple]:
+    import sqlite3
+
+    with sqlite3.connect(path) as conn:
+        return conn.execute(f'SELECT "{fid_column}", name FROM "{table}" ORDER BY 1').fetchall()
+
+
+@requires_geopandas
+def test_write_geopackage_preserves_feature_ids_as_row_ids(tmp_path) -> None:
+    """The offline edit outbox keeps row identities across saves."""
+    import geopandas as gpd
+
+    src = tmp_path / "wells.gpkg"
+    gpd.GeoDataFrame.from_features(
+        _points([(None, "a", 0), (None, "b", 1), (None, "c", 2)])["features"], crs="EPSG:4326"
+    ).to_file(src, layer="wells", driver="GPKG", FID="ogc_fid")
+
+    # Row 2 deleted, row 3 renamed, a new row with a client-assigned id.
+    edited = _points([(1, "a", 0), (3, "c2", 2), (9, "new", 5)])
+    result = vector_write(WriteVectorRequest(path=str(src), geojson=edited, preserve_fids=True))
+    assert result["feature_count"] == 3
+    assert _gpkg_rows(src, "wells", "ogc_fid") == [(1, "a"), (3, "c2"), (9, "new")]
+
+
+@requires_geopandas
+def test_write_preserve_fids_needs_integer_ids_and_a_geopackage(tmp_path) -> None:
+    import geopandas as gpd
+
+    src = tmp_path / "wells.gpkg"
+    gpd.GeoDataFrame.from_features(_points([(None, "a", 0)])["features"], crs="EPSG:4326").to_file(
+        src, layer="wells", driver="GPKG"
+    )
+    for bad in ([(None, "a", 0)], [(1, "a", 0), (1, "b", 1)]):
+        with pytest.raises(HTTPException) as exc:
+            vector_write(
+                WriteVectorRequest(path=str(src), geojson=_points(bad), preserve_fids=True)
+            )
+        assert exc.value.status_code == 400
+    geojson_src = tmp_path / "wells.geojson"
+    geojson_src.write_text('{"type":"FeatureCollection","features":[]}')
+    with pytest.raises(HTTPException) as exc:
+        vector_write(
+            WriteVectorRequest(
+                path=str(geojson_src), geojson=_points([(1, "a", 0)]), preserve_fids=True
+            )
+        )
+    assert exc.value.status_code == 400
+
+
+@requires_geopandas
+def test_write_refuses_when_the_file_changed_since_it_was_read(tmp_path) -> None:
+    import hashlib
+
+    import geopandas as gpd
+
+    src = tmp_path / "wells.gpkg"
+    gpd.GeoDataFrame.from_features(_points([(None, "a", 0)])["features"], crs="EPSG:4326").to_file(
+        src, layer="wells", driver="GPKG"
+    )
+    read_hash = hashlib.sha256(src.read_bytes()).hexdigest()
+    ok = vector_write(
+        WriteVectorRequest(
+            path=str(src), geojson=_points([(1, "mine", 0)]), expected_sha256=read_hash
+        )
+    )
+    assert ok["feature_count"] == 1
+    # The file now differs from what that client read: a second save with the
+    # stale hash must not overwrite it.
+    with pytest.raises(HTTPException) as exc:
+        vector_write(
+            WriteVectorRequest(
+                path=str(src), geojson=_points([(1, "stale", 0)]), expected_sha256=read_hash
+            )
+        )
+    assert exc.value.status_code == 409
+    assert _gpkg_rows(src, "wells") == [(1, "mine")]
+
+
+@requires_geopandas
+def test_preserve_fids_handles_uri_special_characters_in_the_file_name(tmp_path) -> None:
+    import geopandas as gpd
+
+    src = tmp_path / "wells?v2 %20#a.gpkg"
+    gpd.GeoDataFrame.from_features(
+        _points([(None, "a", 0), (None, "b", 1)])["features"], crs="EPSG:4326"
+    ).to_file(src, layer="wells", driver="GPKG", FID="ogc_fid")
+    vector_write(
+        WriteVectorRequest(
+            path=str(src), geojson=_points([(1, "a", 0), (7, "c", 2)]), preserve_fids=True
+        )
+    )
+    assert _gpkg_rows(src, "wells", "ogc_fid") == [(1, "a"), (7, "c")]
+
+
+@requires_geopandas
+def test_write_refuses_a_file_changed_while_it_was_being_written(tmp_path, monkeypatch) -> None:
+    import hashlib
+
+    import geopandas as gpd
+
+    from geolibre_server.app import vector as vector_module
+
+    src = tmp_path / "wells.gpkg"
+    gpd.GeoDataFrame.from_features(_points([(None, "a", 0)])["features"], crs="EPSG:4326").to_file(
+        src, layer="wells", driver="GPKG"
+    )
+    read_hash = hashlib.sha256(src.read_bytes()).hexdigest()
+    real_atomic = vector_module._atomic_write
+
+    def racing_atomic(target, write, before_replace=None):
+        def write_then_external_save(tmp):
+            write(tmp)
+            with src.open("ab") as handle:  # another program saves meanwhile
+                handle.write(b"\0")
+
+        real_atomic(target, write_then_external_save, before_replace)
+
+    monkeypatch.setattr(vector_module, "_atomic_write", racing_atomic)
+    with pytest.raises(HTTPException) as exc:
+        vector_write(
+            WriteVectorRequest(
+                path=str(src), geojson=_points([(1, "mine", 0)]), expected_sha256=read_hash
+            )
+        )
+    assert exc.value.status_code == 409

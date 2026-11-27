@@ -31,7 +31,9 @@ import {
   maplibreSunPlugin,
   openSunPanel,
   reattachSun,
+  setSunSettings,
 } from "../packages/plugins/src/plugins/maplibre-sun";
+import { DEFAULT_SUN_SETTINGS } from "../packages/plugins/src/builtin-plugin-defaults";
 import { getStyleMap } from "../packages/plugins/src/plugins/style-map";
 import { registerRightPanel } from "../packages/plugins/src/right-panel-registry";
 import type { GeoLibreAppAPI } from "../packages/plugins/src/types";
@@ -506,17 +508,30 @@ describe("drawing and environment plugins on a Mapbox-only host", () => {
   it("shades the night side and lights the Mapbox map from the sun", () => {
     const map = makeMapboxMap(canvasContainer, controlContainer);
     const { app, cesiumReads } = makeApp(map);
-    openSunPanel(app);
-    assert.equal(map.getSource("geolibre-sun-night-source")?.type, "canvas");
-    assert.equal(map.getLayer("geolibre-sun-night-layer")?.type, "raster");
-    assert.ok(
-      map.calls.some((call) => call.startsWith("setLight:map")),
-      "setLight drives the flat light",
-    );
-    assert.equal(cesiumReads(), 0);
-    // Reattaching to the same map is a no-op; to a removed one it must not throw.
-    reattachSun(app);
-    map.remove();
-    assert.doesNotThrow(() => closeSunPanel());
+    // Just after sunrise in New York. The light follows the shared ephemeris
+    // (issue #3698), refraction included: NREL SPA puts the sun at azimuth
+    // 61.528°, apparent elevation 3.458° (3.242° geometric). Distinct, nonzero
+    // coordinates also catch a swapped or dropped center.
+    map.getCenter = () => ({ lng: -74.0, lat: 40.7 });
+    setSunSettings({ dateMs: Date.parse("2026-06-21T09:50:00Z"), playing: false });
+    try {
+      openSunPanel(app);
+      assert.equal(map.getSource("geolibre-sun-night-source")?.type, "canvas");
+      assert.equal(map.getLayer("geolibre-sun-night-layer")?.type, "raster");
+      assert.ok(
+        map.calls.some((call) => call.startsWith("setLight:map")),
+        "setLight drives the flat light",
+      );
+      const [, lightAzimuth, lightPolar] = map.getLight().position as number[];
+      assert.ok(Math.abs(lightAzimuth - 61.528) <= 0.1, `light azimuth ${lightAzimuth}`);
+      assert.ok(Math.abs(lightPolar - (90 - 3.458)) <= 0.05, `light polar ${lightPolar}`);
+      assert.equal(cesiumReads(), 0);
+      // Reattaching to the same map is a no-op; to a removed one it must not throw.
+      reattachSun(app);
+      map.remove();
+      assert.doesNotThrow(() => closeSunPanel());
+    } finally {
+      setSunSettings(DEFAULT_SUN_SETTINGS);
+    }
   });
 });
