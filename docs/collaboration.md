@@ -11,8 +11,11 @@ small teams.
 
 ## What syncs
 
-- **Project state** — layers, layer groups, styles, basemap, and the map view
-  (camera). Broadcast as whole-project snapshots.
+- **Project state** — layers, layer groups, styles, basemap, and the rest of
+  the project. Synced op by op over a shared Yjs document (#3530), so
+  simultaneous edits merge; each participant keeps their own camera, plugin
+  activation and selection. Clients and relays without op-level support fall
+  back to whole-project snapshots.
 - **Presence** — each participant's live cursor position and viewport rectangle,
   plus a name + color. Presence is ephemeral and never persisted.
 - **Chat** — short text messages with an optional attached map coordinate (#754).
@@ -34,35 +37,31 @@ small teams.
                                └──────────────────────────┘
 ```
 
-There is **one centralized relay** (a Cloudflare Durable Object), not a P2P
-mesh. The DO holds the latest project snapshot so a late joiner is bootstrapped
-immediately, and fans every message out to the other connected sockets.
+There is **one centralized relay** (a Cloudflare Durable Object, or the
+self-hosted Node relay), not a P2P mesh. The relay holds the session's
+authoritative document so a late joiner is bootstrapped immediately, and fans
+every message out to the other connected sockets.
 
-### Why a Durable Object relay (and not CRDT/WebRTC)
+### Why a central relay with a CRDT document
 
-The MVP deliberately picks the simplest thing that works:
-
-- The store is already the single source of truth, and
-  `serializeProject`/`parseProject` already produce a validated, normalized wire
-  format. `useEmbedBridge` already broadcasts exactly this over `postMessage`.
-  The collaboration adapter is that same pattern over a WebSocket.
-- A **whole-snapshot, last-write-wins** model is trivially consistent: the last
-  snapshot the relay sees wins, full stop. Mutation-level merging would need
-  per-field clocks; a CRDT (Yjs/Automerge) would add a sizeable client bundle
-  and a second source of truth alongside Zustand.
-- The relay builds directly on the existing `workers/viewer` Cloudflare setup.
-
-CRDT / per-action mutation transport is the documented **v2** path (see
-Limitations).
+The first version broadcast whole-project snapshots and kept whichever arrived
+last, the simplest thing that works: the store is the single source of truth,
+and `serializeProject`/`parseProject` already produce a validated wire format.
+Its costs were that two people editing at once overwrote each other, that a
+collaborator's edit cleared your undo history, and that every edit re-sent the
+whole project under a 10 MB cap. Op-level sync over a Yjs document (#3530)
+removes all three while keeping the relay: it enforces permissions and layer
+locks, persists the session, and bootstraps late joiners, which a P2P mesh
+could not. The store stays the source of truth for the UI; the document is the
+merge layer between participants. Yjs loads lazily with the collaboration code,
+so it costs nothing when collaboration is off.
 
 ## Op-level document model (#3530)
 
 Project state is synced op by op over a [Yjs](https://docs.yjs.dev/)
 document, so simultaneous edits merge instead of overwriting each other. The
 shared model is `ProjectDoc` in `packages/collab-core/src/crdt.ts`
-(`@geolibre/collab-core/crdt`). Both relays keep each session in it (see
-*Op-level sync over the relays*); the app adopts it in a follow-up and until
-then sends snapshots, which the relays write into the document. The model:
+(`@geolibre/collab-core/crdt`), used by the relays and the app alike:
 
 | Root | Type | Holds |
 | --- | --- | --- |
@@ -194,6 +193,35 @@ Server → client:
 | `comment-mutation` | `action` | fan-out of a peer's comment change |
 | `error` | `code, message` | `forbidden`, `too-large`, `bad-message`, `not-found`, `identity-required`, `identity-unavailable`, `layer-locked`, or `resync` |
 
+### Client side of op-level sync
+
+`lib/collab-doc-sync.ts` (`CollabDocSync`) holds this participant's copy of
+the document. `useCollaboration` joins with `features: ["crdt-v1"]` once the
+model has loaded (it is fetched when the hook mounts); when the relay's
+`welcome` lists the feature too, the session runs op by op, otherwise it uses
+snapshots as before.
+
+- **Local edits.** The debounced store subscription builds the same egress
+  snapshot as before and calls `pushLocal(project, base)`, which runs
+  `ProjectDoc.writeChanges`: only what changed between `base` (the project as
+  the store last took it from the session) and the new snapshot is written.
+  A peer's edit that arrived after `base` is therefore never reverted, a layer
+  a peer deleted is not brought back by an edit to it, and a peer's new layer
+  is kept. Camera, plugin activation and selection are never written, and
+  comments are left to the relay's `comment-mutation` handling.
+- **Remote edits.** Inbound updates are applied to the document and, after a
+  short coalescing delay, the document's project is applied to the store
+  through the same path a peer's snapshot used to take. If a local edit is
+  still waiting behind the debounce, the apply waits for it, so replacing the
+  store cannot drop an edit before it reached the document.
+- **Joining.** Nothing is written before the first `doc-synced`. A host whose
+  session document is empty seeds it with their project (comments included);
+  everyone else takes the session's project.
+- **Errors.** `resync` (and an unreadable frame) reruns `doc-sync`;
+  `forbidden` discards the local document and syncs a fresh one, since an
+  update the relay refused would block every later one; `too-large` pauses
+  outbound sync as before.
+
 ### Echo / feedback-loop prevention
 
 The adapter caches `lastAppliedContent` (the serialized project string). Before
@@ -206,10 +234,19 @@ is suppressed, so a remote apply is never re-broadcast — the exact trick
 
 ### Undo interaction
 
-Remote snapshots are applied through `loadProject`, which ends with
-`clearHistory()`. This keeps remote edits out of the local undo stack — but it
-also means **a collaborator's edit clears your undo history**. That is an
-accepted MVP limitation; a coalesced-history option is a v2 item.
+In an op-level session each participant has their own undo history: a
+`Y.UndoManager` (`createLocalUndoManager`) that records only that
+participant's transactions. `useCollaboration` installs it as the store's
+`HistoryDelegate` (`setHistoryDelegate` in `@geolibre/core`), so Ctrl/Cmd+Z,
+the Edit menu, and their enabled states all go to it, and the store records no
+snapshot history of its own while the session lasts. Undo reverts your last
+edit for everyone and leaves collaborators' edits, and their histories, alone;
+a collaborator's edit no longer clears yours. Leaving the session removes the
+delegate.
+
+On the snapshot fallback, remote snapshots are still applied through
+`loadProject`, which ends with `clearHistory()`, so there a collaborator's edit
+clears your undo history.
 
 ## Durable Object (`workers/collab`)
 
@@ -244,6 +281,9 @@ of the database.
 ## Frontend
 
 - `lib/collab-protocol.ts` — the frontend copy of the message types.
+- `lib/collab-doc-sync.ts` — op-level sync: the participant's document,
+  three-way local pushes, remote applies and per-user undo (see *Client side of
+  op-level sync*).
 - `lib/collab-client.ts` — WebSocket transport, `resolveCollabBaseUrl()` (wss/loopback
   validation, returns `null` when unset), exponential-backoff reconnect.
 - `hooks/useCollaboration.ts` — orchestration: subscribes to the store
@@ -512,29 +552,35 @@ environment. Until that env var is set, the feature stays dark.
 
 ## Limitations / v2
 
-- **Last-write-wins**: simultaneous co-edits race; the last debounced snapshot
-  wins and the slower edit is overwritten. Presence helps users avoid colliding.
-- **Payload size**: layers can embed `FeatureCollection`s. `projectFromStore`
-  already strips redundant `geojson` for URL-backed layers, but a large
-  in-memory/local-file layer can exceed the snapshot cap
-  (`COLLAB_MAX_SNAPSHOT_BYTES`: 10 MB by default for the hosted relay, the
-  Node relay, and the Docker Compose setup) and is rejected with
-  `error: too-large` (share via URL instead). v2: diff / chunked layer sync.
-- **Undo**: a remote apply clears local undo (see above).
-- v2 directions: per-action mutation or CRDT transport, coalesced remote-apply
-  history, richer permission/identity (tie to share.geolibre.app accounts).
+- **Conflict granularity**: concurrent edits merge per property and per
+  feature. Two people changing the *same* property (or the same feature) at
+  once still resolve to one of the two values, and arrays other than a
+  layer's features (layer groups, bookmarks, widgets) are single values.
+- **Payload size**: op-level sessions are bounded by `COLLAB_MAX_DOC_BYTES`
+  (32 MiB by default) rather than the 10 MB frame cap. Clients on the
+  snapshot fallback are still bound by `COLLAB_MAX_SNAPSHOT_BYTES` and stop
+  receiving the project once it outgrows that.
+- **Snapshot fallback**: older clients, and sessions on an older relay, keep
+  last-write-wins and the undo behaviour described above.
 
 ## Testing
 
 Automated:
 
 - `npm run test:worker` typechecks both relays and runs the Node relay's socket
-  integration suite.
+  integration suites, including `workers/collab-node/test/crdt.test.ts`
+  (op-level convergence of two clients, view-only and layer-lock enforcement,
+  snapshot-client bridging, migration, persistence across a restart with log
+  compaction, and a project over 12 MB).
 - `npm run test:frontend` runs `tests/collab-protocol.test.ts` (protocol
   round-trip including the `set-participant-mode` / `chat` frames,
   `resolveCollabBaseUrl` validation, echo-suppression logic, and the
-  `participantCanEdit` effective-permission helper), plus the shared relay
-  conformance suite.
+  `participantCanEdit` effective-permission helper), the shared relay
+  conformance suite, and the op-level suites: `tests/collab-crdt.test.ts`
+  (document model, three-way writes, undo isolation, framing),
+  `tests/collab-crdt-relay.test.ts` (`RelayDoc`) and
+  `tests/collab-doc-sync.test.ts` (two clients through a relay document,
+  per-user undo, offline edits, the history delegate).
 
 ### Testing the full feature locally
 

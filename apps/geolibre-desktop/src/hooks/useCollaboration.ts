@@ -3,6 +3,8 @@ import {
   assertImportedDocumentCopiesAvailable,
   clearHistory,
   DEFAULT_BASEMAP,
+  notifyHistoryDelegateChanged,
+  setHistoryDelegate,
   gateRegionalBasemap,
   rebaseImportedDocumentLayer,
   serializeProject,
@@ -30,14 +32,32 @@ import {
   sessionWsUrl,
 } from "../lib/collab-client";
 import {
+  CRDT_FEATURE,
   type CommentMutationAction,
   type ServerMessage,
   participantCanEditLayer,
 } from "../lib/collab-protocol";
+import { CollabDocSync, type CrdtModule } from "../lib/collab-doc-sync";
 import { mergeInboundCollaborationProject } from "../lib/collaboration-project";
 import { createViewOnlyNotice, notifyLayerLockedRejection } from "../lib/collab-local-edits";
 
 const SNAPSHOT_DEBOUNCE_MS = 250;
+
+/**
+ * Load the CRDT model on demand: collaboration is dark unless a relay is
+ * configured, so Yjs stays off the boot path. A failed load falls back to the
+ * whole-snapshot protocol.
+ *
+ * @returns The model, or null when it could not be loaded.
+ */
+async function loadCrdt(): Promise<CrdtModule | null> {
+  try {
+    return await import("@geolibre/collab-core/crdt");
+  } catch (error) {
+    console.warn("[GeoLibre] Op-level collaboration is unavailable; using snapshots.", error);
+    return null;
+  }
+}
 const CURSOR_THROTTLE_MS = 40;
 
 export interface CollaborationApi {
@@ -91,6 +111,20 @@ export function useCollaboration(
   // Set while a peer's snapshot is written, so it is not taken for a local edit.
   const applyingRemoteRef = useRef(false);
   const viewOnlyNoticeRef = useRef(createViewOnlyNotice());
+  // Op-level sync (#3530): the loaded Yjs model, this session's document
+  // sync, and whether the relay agreed to use it (else whole snapshots).
+  const crdtRef = useRef<CrdtModule | null>(null);
+  const docSyncRef = useRef<CollabDocSync | null>(null);
+  const crdtActiveRef = useRef(false);
+  const delegateInstalledRef = useRef(false);
+  // A local edit not yet written to the document: one scheduled behind the
+  // debounce, or a snapshot still being built. Remote applies wait for it, or
+  // replacing the store would drop the edit before it reached the document.
+  const localPendingRef = useRef({ scheduled: false, running: 0 });
+  // The project as the store last took it from the session (or last sent
+  // it), in the same egress form as a push. Op-level pushes write only what
+  // changed since this, so they never revert a peer's newer edit.
+  const baseProjectRef = useRef<GeoLibreProject | null>(null);
   const restoreTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const joinGenerationRef = useRef(0);
   // The join can wait on the identity lookup; frames sent before it would be
@@ -115,8 +149,24 @@ export function useCollaboration(
       disconnect();
       useAppStore.getState().resetCollaboration();
     },
+    // Unmount only; disconnect reads refs, so a stale closure is fine.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [],
   );
+
+  // Fetch the CRDT model as soon as collaboration is available, so it is
+  // ready by the time a session starts. A session that starts before it
+  // arrives (or after it failed to load) uses whole snapshots.
+  useEffect(() => {
+    if (!enabled || crdtRef.current) return;
+    let cancelled = false;
+    void loadCrdt().then((crdt) => {
+      if (!cancelled) crdtRef.current = crdt;
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [enabled]);
 
   // A welcome snapshot can swap the renderer after the socket connects. Bind
   // presence after that commit, and rebind whenever a live session changes
@@ -180,9 +230,84 @@ export function useCollaboration(
     project = basemapEgressRef.current.apply(project);
     const content = serializeProject(project);
     if (content === lastContentRef.current) return;
+    if (crdtActiveRef.current) {
+      const docSync = docSyncRef.current;
+      // Before the first sync the store still holds this participant's own
+      // project, not the session's; the sync seeds or replaces it.
+      if (!docSync?.isSynced) return;
+      // Only a written edit moves the base; an unwritten one is retried with
+      // the next change (or replaced by the session's project on first load).
+      if (docSync.pushLocal(project, baseProjectRef.current)) {
+        lastContentRef.current = content;
+        baseProjectRef.current = project;
+      }
+      return;
+    }
     lastContentRef.current = content;
     revRef.current += 1;
     connRef.current?.send({ type: "snapshot", project, rev: revRef.current });
+  };
+
+  /** Hand undo back to the store if this session had taken it over. */
+  const releaseHistoryDelegate = (): void => {
+    if (!delegateInstalledRef.current) return;
+    delegateInstalledRef.current = false;
+    setHistoryDelegate(null);
+  };
+
+  /** Stop the session after a project from a peer could not be applied. */
+  const failSession = (error: unknown): void => {
+    // Failed welcome/snapshot application must stop outbound sync. Preserve
+    // the actual error and settle a pending join before the unchanged local
+    // workspace can replace the peer's project.
+    const pending = pendingConnectRef.current;
+    pendingConnectRef.current = null;
+    disconnect();
+    const failure = error instanceof Error ? error : new Error(String(error), { cause: error });
+    useAppStore
+      .getState()
+      .setCollaboration({ isActive: false, connecting: false, error: failure.message });
+    pending?.reject(failure);
+    notify.error(failure.message, { error: failure });
+  };
+
+  /** Create this session's document sync and hand undo/redo to it. */
+  const createDocSync = (crdt: CrdtModule): CollabDocSync => {
+    const docSync = new CollabDocSync(crdt, {
+      send: (message) => connRef.current?.send(message) ?? false,
+      applyProject: (project, initial) => {
+        if (docSyncRef.current !== docSync) return;
+        try {
+          assertImportedDocumentCopiesAvailable(
+            project.layers,
+            useAppStore.getState().nativeDocumentCopyError,
+          );
+          applyRemoteSnapshot(project, initial);
+        } catch (error) {
+          failSession(error);
+        }
+      },
+      seedProject: async () => {
+        try {
+          const built = await buildCollaborationSnapshot(mapControllerRef);
+          // The session may have been left (or replaced) while building.
+          if (docSyncRef.current !== docSync) return null;
+          const project = basemapEgressRef.current.apply(built);
+          lastContentRef.current = serializeProject(project);
+          baseProjectRef.current = project;
+          return project;
+        } catch {
+          useAppStore.getState().setCollaboration({ error: i18n.t("collaborate.shareFailed") });
+          return null;
+        }
+      },
+      canEdit,
+      isHost: () => useAppStore.getState().collaboration.role === "host",
+      isLocalPending: () =>
+        localPendingRef.current.scheduled || localPendingRef.current.running > 0,
+      onHistoryChange: () => notifyHistoryDelegateChanged(),
+    });
+    return docSync;
   };
 
   const scheduleRestore = (): void => {
@@ -248,9 +373,9 @@ export function useCollaboration(
       scheduleRestore();
     }
     basemapEgressRef.current.noteInbound(merged.basemapStyleUrl);
-    lastContentRef.current = serializeProject(
-      basemapEgressRef.current.apply(buildProjectEgressSnapshot(mapControllerRef)),
-    );
+    const egress = basemapEgressRef.current.apply(buildProjectEgressSnapshot(mapControllerRef));
+    lastContentRef.current = serializeProject(egress);
+    baseProjectRef.current = egress;
   };
 
   const handleMessage = (message: ServerMessage): void => {
@@ -283,10 +408,25 @@ export function useCollaboration(
             view: entry.view,
           });
         }
-        if (message.snapshot) {
-          applyRemoteSnapshot(message.snapshot, true);
-        } else if (message.role === "host") {
-          void sendSnapshot();
+        const docSync = docSyncRef.current;
+        crdtActiveRef.current = !!docSync && (message.features ?? []).includes(CRDT_FEATURE);
+        if (crdtActiveRef.current && docSync) {
+          // Per-user undo: the store's snapshot history would revert peers'
+          // edits too, so undo/redo go to this participant's CRDT history.
+          delegateInstalledRef.current = true;
+          setHistoryDelegate({
+            undo: () => docSync.undo(),
+            redo: () => docSync.redo(),
+            canUndo: () => docSync.canUndo(),
+            canRedo: () => docSync.canRedo(),
+          });
+          docSync.start();
+        } else {
+          // Snapshot fallback (e.g. a reconnect landed on an older relay):
+          // the store's own history applies again.
+          releaseHistoryDelegate();
+          if (message.snapshot) applyRemoteSnapshot(message.snapshot, true);
+          else if (message.role === "host") void sendSnapshot();
         }
         if (message.role === "guest" && useAppStore.getState().collaboration.followHost) {
           const host = message.participants.find((participant) => participant.role === "host");
@@ -409,10 +549,17 @@ export function useCollaboration(
 
     let debounce: ReturnType<typeof setTimeout> | null = null;
     const scheduleSnapshot = () => {
+      // A store change made by applying a peer's project is not a local edit.
+      if (!applyingRemoteRef.current) localPendingRef.current.scheduled = true;
       if (debounce) clearTimeout(debounce);
       debounce = setTimeout(() => {
         debounce = null;
-        void sendSnapshot();
+        const pending = localPendingRef.current;
+        pending.scheduled = false;
+        pending.running += 1;
+        void sendSnapshot().finally(() => {
+          pending.running -= 1;
+        });
       }, SNAPSHOT_DEBOUNCE_MS);
     };
 
@@ -442,6 +589,7 @@ export function useCollaboration(
         hostToken,
         inviteToken,
         ...(identity ? { identityToken: identity } : {}),
+        ...(docSyncRef.current ? { features: [CRDT_FEATURE] } : {}),
       });
       joinSentRef.current = true;
     };
@@ -481,6 +629,7 @@ export function useCollaboration(
       identityRetryRef.current = null;
       welcomedRef.current = false;
       if (debounce) clearTimeout(debounce);
+      localPendingRef.current = { scheduled: false, running: 0 };
       unsubscribe();
     };
   };
@@ -533,10 +682,12 @@ export function useCollaboration(
     options?: { inviteToken?: string; identityToken?: string },
   ): Promise<void> => {
     disconnect();
+    if (crdtRef.current) docSyncRef.current = createDocSync(crdtRef.current);
     syncPausedRef.current = false;
     viewOnlyNoticeRef.current.reset();
     selfIdRef.current = crypto.randomUUID();
     lastContentRef.current = null;
+    baseProjectRef.current = null;
     basemapEgressRef.current.reset();
     revRef.current = 0;
 
@@ -586,6 +737,7 @@ export function useCollaboration(
             });
             return;
           }
+          if (crdtActiveRef.current && docSyncRef.current?.handle(msg)) return;
           if (msg.type !== "welcome" && msg.type !== "snapshot") {
             handleMessage(msg);
             return;
@@ -605,20 +757,7 @@ export function useCollaboration(
             }
             handleMessage(msg);
           } catch (error) {
-            // Failed welcome/snapshot application must stop outbound sync.
-            // Preserve the actual error and settle a pending join before the
-            // unchanged local workspace can replace the peer's project.
-            const pending = pendingConnectRef.current;
-            pendingConnectRef.current = null;
-            disconnect();
-            const failure =
-              error instanceof Error ? error : new Error(String(error), { cause: error });
-            const message = failure.message;
-            useAppStore
-              .getState()
-              .setCollaboration({ isActive: false, connecting: false, error: message });
-            pending?.reject(failure);
-            notify.error(message, { error: failure });
+            failSession(error);
           }
         },
         onClose: (reconnecting) => {
@@ -644,6 +783,12 @@ export function useCollaboration(
 
   const disconnect = (): void => {
     snapshotRequestRef.current += 1;
+    if (docSyncRef.current) {
+      docSyncRef.current.destroy();
+      docSyncRef.current = null;
+    }
+    crdtActiveRef.current = false;
+    releaseHistoryDelegate();
     presenceTeardownRef.current?.();
     presenceTeardownRef.current = null;
     teardownRef.current?.();
@@ -693,6 +838,8 @@ export function useCollaboration(
   const leave = useCallback(() => {
     disconnect();
     useAppStore.getState().resetCollaboration();
+    // disconnect reads refs only, so the first closure stays correct.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const setMode = useCallback((mode: CollaborationMode) => {

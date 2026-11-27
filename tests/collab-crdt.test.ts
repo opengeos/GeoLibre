@@ -498,6 +498,174 @@ describe("untrusted keys", () => {
   });
 });
 
+describe("ProjectDoc.writeChanges (three-way)", () => {
+  it("writes only the writer's change and keeps a peer's newer edit", () => {
+    const { a, b, sync } = pair();
+    a.write(project(), "local");
+    sync();
+    const base = a.read();
+    // B recolours roads; A has not applied that to its store yet.
+    b.write(
+      withLayer(b.read(), "roads", (l) => ({ ...l, style: { ...l.style, fillColor: "#0f0" } })),
+      "local",
+    );
+    sync();
+    // A's store still holds the old colour, plus A's own opacity change.
+    a.writeChanges(
+      withLayer(base, "roads", (l) => ({ ...l, opacity: 0.4 })),
+      base,
+      "local",
+    );
+    sync();
+    for (const doc of [a, b]) {
+      const roads = layers(doc.read())[0];
+      assert.equal(roads.opacity, 0.4);
+      assert.equal(roads.style!.fillColor, "#0f0");
+    }
+  });
+
+  it("neither resurrects a layer a peer deleted nor drops one a peer added", () => {
+    const { a, b, sync } = pair();
+    a.write(project(), "local");
+    sync();
+    const base = a.read();
+    b.write(
+      {
+        ...b.read(),
+        layers: [...layers(b.read()).filter((l) => l.id !== "parcels"), { id: "new" }],
+      },
+      "local",
+    );
+    sync();
+    a.writeChanges(
+      withLayer(base, "parcels", (l) => ({ ...l, name: "Edited" })),
+      base,
+      "local",
+    );
+    assert.deepEqual(
+      layers(a.read()).map((l) => l.id),
+      ["roads", "new"],
+    );
+    // A's own new layer lands after the layer before it in A's list.
+    a.writeChanges(
+      { ...base, layers: [layers(base)[0], { id: "mine" }, layers(base)[1]] },
+      base,
+      "local",
+    );
+    assert.deepEqual(
+      layers(a.read()).map((l) => l.id),
+      ["roads", "mine", "new"],
+    );
+  });
+
+  it("keeps a peer's move unless the writer moved layers itself", () => {
+    const { a, b, sync } = pair();
+    a.write(project({ layers: [{ id: "x" }, { id: "y" }, { id: "z" }] }), "local");
+    sync();
+    const base = a.read();
+    b.write(project({ layers: [{ id: "z" }, { id: "x" }, { id: "y" }] }), "local");
+    sync();
+    a.writeChanges({ ...base, projectName: "Renamed" }, base, "local");
+    assert.deepEqual(
+      layers(a.read()).map((l) => l.id),
+      ["z", "x", "y"],
+    );
+    a.writeChanges({ ...base, layers: [{ id: "y" }, { id: "x" }, { id: "z" }] }, base, "local");
+    assert.deepEqual(
+      layers(a.read()).map((l) => l.id),
+      ["y", "x", "z"],
+    );
+  });
+
+  it("merges feature edits against a stale base", () => {
+    const { a, b, sync } = pair();
+    a.write(project(), "local");
+    sync();
+    const base = a.read();
+    const edit = (p: ProjectRecord, fn: (features: Feature[]) => Feature[]) =>
+      withLayer(p, "roads", (layer) => ({
+        ...layer,
+        geojson: { type: "FeatureCollection", features: fn(layer.geojson!.features) },
+      }));
+    b.write(
+      edit(b.read(), (fs) => [
+        ...fs.map((f, i) => (i === 1 ? feature(1, { b: 1 }) : f)),
+        feature(9),
+      ]),
+      "local",
+    );
+    sync();
+    a.writeChanges(
+      edit(base, (fs) => [fs[0], feature(5), fs[1], fs[3]]),
+      base,
+      "local",
+    );
+    sync();
+    const features = layers(a.read())[0].geojson!.features;
+    assert.deepEqual(features, [
+      feature(0),
+      feature(5),
+      feature(1, { b: 1 }),
+      feature(3),
+      feature(9),
+    ]);
+    assert.ok(deepEqual(a.read(), b.read()));
+  });
+});
+
+describe("writeChanges feature edge cases", () => {
+  const fc = (fs: unknown[]) =>
+    project({ layers: [{ id: "x", geojson: { type: "FeatureCollection", features: fs } }] });
+  const ids = (p: ProjectRecord) =>
+    (layers(p)[0].geojson!.features as unknown as { id: string }[]).map((f) => f.id);
+  const f = (id: string) => ({ type: "Feature", id, geometry: null, properties: {} });
+
+  it("anchors an insertion on the nearest surviving predecessor", () => {
+    const { a, b, sync } = pair();
+    a.write(fc([f("A"), f("B"), f("C")]), "local");
+    sync();
+    const base = a.read();
+    b.write(fc([f("A"), f("C")]), "local");
+    sync();
+    a.writeChanges(fc([f("A"), f("B"), f("X"), f("C")]), base, "local");
+    assert.deepEqual(ids(a.read()), ["A", "X", "C"]);
+  });
+
+  it("does not bring back a feature a peer deleted when the writer moves it", () => {
+    const { a, b, sync } = pair();
+    a.write(fc([f("A"), f("B")]), "local");
+    sync();
+    const base = a.read();
+    b.write(fc([f("B")]), "local");
+    sync();
+    a.writeChanges(fc([f("B"), f("A")]), base, "local");
+    assert.deepEqual(ids(a.read()), ["B"]);
+  });
+
+  it("recreates missing collection metadata when patching", () => {
+    const doc = new ProjectDoc();
+    doc.write(fc([f("A")]), "local");
+    const base = doc.read();
+    const roads = doc.layers.get("x")!;
+    (roads.get("geojson") as Y.Map<unknown>).delete("meta");
+    const named = {
+      ...base,
+      layers: [{ ...layers(base)[0], geojson: { ...layers(base)[0].geojson!, name: "n" } }],
+    };
+    doc.writeChanges(named, base, "local");
+    assert.equal((layers(doc.read())[0].geojson as { name?: string }).name, "n");
+  });
+
+  it("clears a large collection in one pass", () => {
+    const doc = new ProjectDoc();
+    const many = Array.from({ length: 20_000 }, (_, i) => f(`f${i}`));
+    doc.write(fc(many), "local");
+    const base = doc.read();
+    doc.writeChanges(fc([]), base, "local");
+    assert.equal(ids(doc.read()).length, 0);
+  });
+});
+
 describe("per-user undo", () => {
   it("refuses a null local origin", () => {
     assert.throws(() => createLocalUndoManager(new ProjectDoc(), null), TypeError);

@@ -211,6 +211,32 @@ describe("RelayDoc", () => {
     }
   });
 
+  it("accepts comments in the seed of an empty session", () => {
+    const relay = new RelayDoc({ storage: memoryStorage() });
+    const client = new ProjectDoc();
+    const [frame] = clientWrite(client, { ...project(), comments: [{ id: "seeded" }] });
+    // A guest writing first may not plant comments...
+    const guestRelay = new RelayDoc({ storage: memoryStorage() });
+    guestRelay.receive("guest", frame, editor);
+    assert.equal(guestRelay.project.fields.get("comments"), undefined);
+    // ...but the host's seed carries them.
+    relay.receive("host", frame, { ...editor, isHost: true });
+    assert.deepEqual(relay.project.fields.get("comments"), [{ id: "seeded" }]);
+  });
+
+  it("undoes a client update to the relay-owned comment list", () => {
+    const relay = new RelayDoc({ storage: memoryStorage() });
+    relay.setField("comments", [{ id: "c1" }]);
+    const client = new ProjectDoc();
+    Y.applyUpdate(client.doc, Y.encodeStateAsUpdate(relay.project.doc));
+    const updates: Uint8Array[] = [];
+    client.doc.on("update", (u: Uint8Array) => updates.push(u));
+    client.doc.transact(() => client.fields.set("comments", [{ id: "forged" }]));
+    const [frame] = splitUpdate(updates[0], () => "id");
+    relay.receive("c", frame, editor);
+    assert.deepEqual(relay.project.fields.get("comments"), [{ id: "c1" }]);
+  });
+
   it("compacts the log into a base state once it grows", () => {
     const storage = memoryStorage();
     const relay = new RelayDoc({ storage });
