@@ -62,32 +62,49 @@ interface PyramidImage {
 
 /** The slice of a geotiff.js `GeoTIFF` this module reads. */
 interface PyramidTiff {
-  getImageCount(): Promise<number>;
   getImage(index: number): Promise<PyramidImage>;
 }
 
+/** Most directories to look through for an overview before giving up. */
+const MAX_DIRECTORIES = 64;
+
 /**
- * Read a GeoTIFF's pyramid structure from its directories.
+ * Read a GeoTIFF's pyramid structure, stopping as soon as the answer is known.
  *
- * Any later image narrower than the first counts as an overview; a GDAL
- * internal mask has the full size, so it does not.
+ * The full-resolution image decides most files on its own: a striped one, or
+ * one small enough for the tiler, needs no notice, so no further directory is
+ * read. Otherwise the later directories are walked one at a time until an
+ * overview turns up (usually the very next one). `getImageCount()` is avoided
+ * because it reads every directory in the file before returning. Any later
+ * image narrower than the first counts as an overview; a GDAL internal mask
+ * has the full size, so it does not.
  *
  * @param tiff - An opened geotiff.js GeoTIFF (only its headers are read).
- * @returns The raster's structure.
+ * @returns The raster's structure. `hasOverviews` is only meaningful when the
+ *   first image alone does not rule the raster out (see
+ *   {@link needsOverviewsToDrawZoomedOut}); it is reported `false` unchecked.
  */
 export async function readRasterPyramidShape(tiff: PyramidTiff): Promise<RasterPyramidShape> {
   const first = await tiff.getImage(0);
-  const width = first.getWidth();
-  const count = await tiff.getImageCount();
-  let hasOverviews = false;
-  for (let i = 1; i < count && !hasOverviews; i++) {
-    hasOverviews = (await tiff.getImage(i)).getWidth() < width;
-  }
-  return {
-    width,
+  const shape: RasterPyramidShape = {
+    width: first.getWidth(),
     height: first.getHeight(),
     bands: first.getSamplesPerPixel(),
     tiled: first.isTiled,
-    hasOverviews,
+    hasOverviews: false,
   };
+  if (!needsOverviewsToDrawZoomedOut(shape)) return shape;
+  for (let i = 1; i < MAX_DIRECTORIES; i++) {
+    let image: PyramidImage;
+    try {
+      image = await tiff.getImage(i);
+    } catch {
+      break; // past the last directory
+    }
+    if (image.getWidth() < shape.width) {
+      shape.hasOverviews = true;
+      break;
+    }
+  }
+  return shape;
 }

@@ -33,8 +33,11 @@ export function convertGeoTiffToCog(bytes: Uint8Array, options: ConvertGeoTiffTo
   return result.promise;
 }
 
+/** Dimensions `readGeoTiffInfo` reports; tests may enlarge them. */
+export const harnessInfo = { width: 32, height: 32, bands: 1 };
+
 export async function readGeoTiffInfo() {
-  return { ok: true, width: 32, height: 32, bands: 1, tiled: false };
+  return { ok: true, ...harnessInfo, tiled: false };
 }
 
 /** Options each `addRasterToMap` call received, in call order. */
@@ -63,6 +66,7 @@ export function saveBinaryFileWithFallback() {
 }
 
 export function resetCogHarness() {
+  Object.assign(harnessInfo, { width: 32, height: 32, bands: 1 });
   conversions.length = 0;
   saves.length = 0;
   addedRasters = 0;

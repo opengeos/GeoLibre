@@ -7,6 +7,7 @@ import { createEmptyProject } from "@geolibre/core";
 import {
   addedRasters,
   conversions,
+  harnessInfo,
   heldRasterAdds,
   overviewlessHandler,
   rasterAdds,
@@ -140,6 +141,18 @@ describe("COG convert-and-load lifecycle", () => {
 describe("overview-less raster notice", () => {
   function notifyOverviewless(overrides: { bytesAreRemote?: boolean; width?: number } = {}) {
     assert.ok(overviewlessHandler);
+    // The notice follows its layer, so the layer has to be in the project.
+    if (!useAppStore.getState().layers.some((layer) => layer.id === "naip")) {
+      act(() =>
+        useAppStore.setState((state) => ({
+          layers: [
+            ...state.layers,
+            // Only the id matters to the notice; the cast skips unrelated fields.
+            { id: "naip", name: "naip.tif", type: "raster", visible: true, opacity: 1 } as never,
+          ],
+        })),
+      );
+    }
     const dismiss = mock.fn();
     overviewlessHandler({
       layerId: "naip",
@@ -184,6 +197,42 @@ describe("overview-less raster notice", () => {
     notifyOverviewless({ bytesAreRemote: true });
     const [remote] = useNotificationStore.getState().notifications;
     assert.equal(remote.action, undefined);
+  });
+
+  it("withdraws the notice when its layer leaves the project", () => {
+    render(createElement(RasterHost));
+    notifyOverviewless();
+    assert.equal(useNotificationStore.getState().notifications.length, 1);
+    act(() =>
+      useAppStore.setState((state) => ({
+        layers: state.layers.filter((layer) => layer.id !== "naip"),
+      })),
+    );
+    assert.equal(useNotificationStore.getState().notifications.length, 0);
+  });
+
+  it("withdraws the notice when another project opens", () => {
+    render(createElement(RasterHost));
+    notifyOverviewless();
+    act(() => useAppStore.getState().loadProject({ ...createEmptyProject(), name: "Opened" }));
+    assert.equal(useNotificationStore.getState().notifications.length, 0);
+  });
+
+  it("still warns about memory for a large raster, and keeps the layer if declined", async () => {
+    const prompts: string[] = [];
+    window.confirm = (message?: string) => {
+      prompts.push(String(message));
+      return false;
+    };
+    harnessInfo.width = 8000;
+    harnessInfo.height = 8000;
+    render(createElement(RasterHost));
+    const { dismiss } = notifyOverviewless();
+    useNotificationStore.getState().notifications[0].action?.onClick();
+    await waitFor(() => assert.equal(prompts.length, 1));
+    assert.match(prompts[0], /8000×8000/);
+    assert.equal(conversions.length, 0);
+    assert.equal(dismiss.mock.callCount(), 0);
   });
 
   it("unregisters on unmount", () => {

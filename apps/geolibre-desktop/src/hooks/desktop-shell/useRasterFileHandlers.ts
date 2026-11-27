@@ -1,3 +1,4 @@
+import { useAppStore } from "@geolibre/core";
 import type { MapEngine } from "@geolibre/map";
 import {
   addRasterToMap,
@@ -18,7 +19,7 @@ import {
 } from "@geolibre/processing";
 import type { TFunction } from "i18next";
 import { useEffect, useRef, type RefObject } from "react";
-import { dismissNotification, notify } from "../../lib/notify";
+import { dismissNotification, notify, useNotificationStore } from "../../lib/notify";
 import { notifyUnrestorableRasters } from "../../lib/local-raster-notices";
 import { startProjectImportSession } from "../../lib/project-import-session";
 import { isTauri, pickLocalRasterFiles, readRasterFileAtPath } from "../../lib/tauri-io";
@@ -148,19 +149,23 @@ export function useRasterFileHandlers(
           notify.warning(translateRef.current("raster.cogConvertTooLarge", { name }));
           return;
         }
-        if (!confirmed && !bytesAreRemote) {
+        const large = samples > LARGE_BROWSER_COG_CONVERSION_SAMPLES;
+        // A button press is consent to convert, not to the memory cost of a
+        // large raster, so that warning still shows on the confirmed path.
+        if (!bytesAreRemote && (!confirmed || large)) {
           // Local file: pick the prompt by size now that the header is cheap to
           // read, then confirm once. (A remote source already confirmed above.)
-          const message =
-            samples > LARGE_BROWSER_COG_CONVERSION_SAMPLES
-              ? translateRef.current("raster.cogConvertLargeConfirm", {
-                  name,
-                  width: info.width,
-                  height: info.height,
-                })
-              : translateRef.current("raster.cogConvertConfirm", { name });
+          const message = large
+            ? translateRef.current("raster.cogConvertLargeConfirm", {
+                name,
+                width: info.width,
+                height: info.height,
+              })
+            : translateRef.current("raster.cogConvertConfirm", { name });
           if (!window.confirm(message)) {
-            dismiss();
+            // A striped layer can never draw, so declining drops it. A
+            // confirmed (overview-less) one still draws zoomed in: keep it.
+            if (!confirmed) dismiss();
             return;
           }
         }
@@ -214,11 +219,12 @@ export function useRasterFileHandlers(
     // at full resolution and refuses a read that large, so it is blank until
     // zoomed well in. Say why, and offer the conversion when the browser can
     // hold it; otherwise point at the desktop GDAL tools.
+    const noticeCleanups = new Set<() => void>();
     setOverviewlessRasterHandler((request) => {
       const t = translateRef.current;
       const convertible =
         !request.bytesAreRemote && !exceedsBrowserCogConversionLimit(geoTiffSampleCount(request));
-      notify.warning(t("raster.overviewlessNotice", { name: request.name }), {
+      const id = notify.warning(t("raster.overviewlessNotice", { name: request.name }), {
         description: t(
           convertible ? "raster.overviewlessConvertHint" : "raster.overviewlessGdalHint",
         ),
@@ -231,10 +237,32 @@ export function useRasterFileHandlers(
             }
           : undefined,
       });
+      // The notice stays until dismissed, so tie it to its layer: once the
+      // layer leaves the project, or another project opens (which may reuse
+      // the id), its button would act on a revoked blob URL or the wrong layer.
+      const session = startProjectImportSession();
+      const layerGone = () => !useAppStore.getState().layers.some((l) => l.id === request.layerId);
+      const noticeGone = () =>
+        !useNotificationStore.getState().notifications.some((n) => n.id === id);
+      const unsubscribers: Array<() => void> = [];
+      const cleanup = () => {
+        for (const unsubscribe of unsubscribers.splice(0)) unsubscribe();
+        session.dispose();
+        noticeCleanups.delete(cleanup);
+      };
+      const check = () => {
+        if (session.signal.aborted || layerGone()) dismissNotification(id);
+        if (noticeGone()) cleanup();
+      };
+      unsubscribers.push(useAppStore.subscribe(check), useNotificationStore.subscribe(check));
+      session.signal.addEventListener("abort", check, { once: true });
+      noticeCleanups.add(cleanup);
+      check();
     });
     return () => {
       setNonTiledRasterHandler(null);
       setOverviewlessRasterHandler(null);
+      for (const cleanup of noticeCleanups) cleanup();
       for (const controller of conversions) controller.abort();
     };
   }, [mapControllerRef]);

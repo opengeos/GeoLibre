@@ -313,9 +313,9 @@ type OverviewlessRasterHandler = (request: OverviewlessRasterRequest) => void | 
 let overviewlessRasterHandler: OverviewlessRasterHandler | null = null;
 
 /**
- * Register (or clear, with `null`) a handler invoked when a raster added to the
- * WASM tiler engine is a tiled GeoTIFF with no overviews, too large to draw at
- * its full extent. Only one handler is active at a time.
+ * Register (or clear, with `null`) a handler invoked when a local raster file
+ * added to the WASM tiler engine is a tiled GeoTIFF with no overviews, too
+ * large to draw at its full extent. Only one handler is active at a time.
  *
  * @param handler - The handler, or `null` to unregister.
  */
@@ -1323,39 +1323,37 @@ function createRasterControl(
   });
   // A tiled GeoTIFF with no overviews loads fine but the WASM tiler can only
   // read it at full resolution, and refuses a read that large, so it stays
-  // blank until the user zooms well in. Read its directories (headers only)
-  // and tell the host, which explains the blank map and can offer to convert.
+  // blank until the user zooms well in. Read a local file's directories
+  // (headers only, from memory) and tell the host, which explains the blank
+  // map and can offer to convert. Remote URLs are left alone: probing them
+  // would add header requests to every remote add, with no timeout, and the
+  // Tauri build reads remote headers through its own commands.
   control.on("rasteradd", (event) => {
     if (!event.layerId || !overviewlessRasterHandler) return;
     if (control.getEngine() !== "cog-tiler-wasm") return;
     const layerId = event.layerId;
     const info = control.getRaster(layerId);
-    if (!info || info.memberUrls) return;
-    const bytesUrl =
-      info.source.kind === "file"
-        ? info.source.objectUrl
-        : info.source.kind === "url"
-          ? info.source.url
-          : undefined;
-    if (!bytesUrl) return;
-    const bytesAreRemote = info.source.kind === "url";
+    if (!info || info.memberUrls || info.source.kind !== "file") return;
+    const bytesUrl = info.source.objectUrl;
     void (async () => {
-      const { fromBlob, fromUrl } = await import("geotiff");
-      const tiff = bytesAreRemote
-        ? await fromUrl(bytesUrl)
-        : await fromBlob(await (await fetch(bytesUrl)).blob());
+      const { fromBlob } = await import("geotiff");
+      const tiff = await fromBlob(await (await fetch(bytesUrl)).blob());
       const shape = await readRasterPyramidShape(tiff);
       if (!needsOverviewsToDrawZoomedOut(shape)) return;
-      // Same guards as the non-tiled path: the layer may have been removed, or
-      // its project replaced, while the header was read.
+      // The layer may have been removed, or its project replaced by one that
+      // reuses the id, while the header was read. The blob URL is unique to
+      // this raster, so a match means it is still the same one.
       const handler = overviewlessRasterHandler;
-      if (!handler || !control.getRaster(layerId)) return;
+      const current = control.getRaster(layerId);
+      if (!handler || current?.source.kind !== "file" || current.source.objectUrl !== bytesUrl) {
+        return;
+      }
       if (!useAppStore.getState().layers.some((layer) => layer.id === layerId)) return;
       await handler({
         layerId,
         name: info.name,
-        bytesAreRemote,
-        readBytes: rasterBytesReader(bytesUrl, bytesAreRemote),
+        bytesAreRemote: false,
+        readBytes: rasterBytesReader(bytesUrl, false),
         dismiss: () => control.removeRaster(layerId),
         width: shape.width,
         height: shape.height,

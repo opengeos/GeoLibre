@@ -10,10 +10,13 @@ import {
 function fakeTiff(
   images: Array<{ width: number; height: number; bands?: number; tiled?: boolean }>,
 ) {
+  const reads: number[] = [];
   return {
-    getImageCount: async () => images.length,
+    reads,
     getImage: async (index: number) => {
+      reads.push(index);
       const image = images[index];
+      if (!image) throw new Error(`No image at index ${index}`);
       return {
         getWidth: () => image.width,
         getHeight: () => image.height,
@@ -38,14 +41,28 @@ describe("overview-less raster detection", () => {
   });
 
   it("does not flag a COG whose later images are overviews", async () => {
-    const shape = await readRasterPyramidShape(
-      fakeTiff([
-        { width: 4350, height: 6170, bands: 4 },
-        { width: 2175, height: 3085, bands: 4 },
-      ]),
-    );
+    const tiff = fakeTiff([
+      { width: 4350, height: 6170, bands: 4 },
+      { width: 2175, height: 3085, bands: 4 },
+      { width: 1088, height: 1543, bands: 4 },
+    ]);
+    const shape = await readRasterPyramidShape(tiff);
     assert.equal(shape.hasOverviews, true);
     assert.equal(needsOverviewsToDrawZoomedOut(shape), false);
+    // Stops at the first overview instead of reading every directory.
+    assert.deepEqual(tiff.reads, [0, 1]);
+  });
+
+  it("reads only the first directory when it alone rules the raster out", async () => {
+    const small = fakeTiff([
+      { width: 512, height: 512, bands: 3 },
+      { width: 512, height: 512 },
+    ]);
+    await readRasterPyramidShape(small);
+    assert.deepEqual(small.reads, [0]);
+    const striped = fakeTiff([{ width: 9000, height: 9000, bands: 3, tiled: false }]);
+    await readRasterPyramidShape(striped);
+    assert.deepEqual(striped.reads, [0]);
   });
 
   it("treats a full-size internal mask as no overview", async () => {
