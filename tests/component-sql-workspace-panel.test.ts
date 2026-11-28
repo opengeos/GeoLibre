@@ -239,9 +239,9 @@ describe("SqlWorkspacePanel", () => {
     const services = fakeServices().services;
     let failQueries = false;
     const runQuery = services.runSqlQuery;
-    services.runSqlQuery = async (sql) => {
+    services.runSqlQuery = async (...args) => {
       if (failQueries) throw new Error("boom");
-      return runQuery(sql);
+      return runQuery(...args);
     };
     let rejectSave: (err: Error) => void = () => {};
     services.saveBinaryFile = () =>
