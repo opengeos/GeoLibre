@@ -21,6 +21,23 @@ import geolibre.geolibre as gmod
 from geolibre.geolibre import Feature, Layer, Map
 from geolibre.project import redact_credentials
 
+_CHROME_ENV = (
+    "GEOLIBRE_TOOLBAR",
+    "GEOLIBRE_LAYER_PANEL",
+    "GEOLIBRE_STYLE_PANEL",
+    "GEOLIBRE_STATUS_BAR",
+    "GEOLIBRE_APP_LAYOUT",
+    "GEOLIBRE_THEME",
+    "GEOLIBRE_RENDERER",
+)
+
+
+@pytest.fixture(autouse=True)
+def _no_geolibre_env(monkeypatch):
+    """Keep GEOLIBRE_* defaults in the developer's shell out of every test."""
+    for name in _CHROME_ENV:
+        monkeypatch.delenv(name, raising=False)
+
 
 @pytest.fixture
 def m(monkeypatch):
@@ -1175,6 +1192,7 @@ def test_layout_is_the_ipywidgets_layout_not_the_app_chrome(stub_app_server):
 
 def test_frontend_reads_the_renamed_app_layout_trait():
     source = (pathlib.Path(gmod.__file__).parent / "_frontend.js").read_text(encoding="utf-8")
+    assert "appQuery((name) => model.get(name))" in source
     assert 'get("app_layout")' in source
     assert 'get("layout")' not in source
 
@@ -1255,21 +1273,8 @@ def test_rejected_constructor_does_not_leave_a_layout_widget():
     assert set(ipywidgets.widgets.widget._instances) == before
 
 
-_CHROME_ENV = (
-    "GEOLIBRE_TOOLBAR",
-    "GEOLIBRE_LAYER_PANEL",
-    "GEOLIBRE_STYLE_PANEL",
-    "GEOLIBRE_STATUS_BAR",
-    "GEOLIBRE_APP_LAYOUT",
-    "GEOLIBRE_THEME",
-    "GEOLIBRE_RENDERER",
-)
-
-
 @pytest.fixture
 def clean_chrome_env(monkeypatch):
-    for name in _CHROME_ENV:
-        monkeypatch.delenv(name, raising=False)
     return monkeypatch
 
 
@@ -1355,3 +1360,24 @@ def test_invalid_renderer_environment_variable_is_named(stub_app_server, clean_c
     clean_chrome_env.setenv("GEOLIBRE_RENDERER", "leaflet")
     with pytest.raises(ValueError, match="GEOLIBRE_RENDERER"):
         Map()
+
+
+def test_chrome_toggle_lists_agree_across_python_js_and_the_app():
+    # The same toggle list lives in three files; adding one in only some of
+    # them would fail silently, so pin them together here.
+    import re
+
+    from geolibre._map_support import CHROME_TOGGLES
+
+    frontend = (pathlib.Path(gmod.__file__).parent / "_frontend.js").read_text(encoding="utf-8")
+    block = re.search(r"export const CHROME_TOGGLES = \{(.*?)\};", frontend, re.S).group(1)
+    js = dict(re.findall(r"(\w+): \"(\w+)\"", block))
+    assert js == {key: param for key, (param, _env) in CHROME_TOGGLES.items()}
+
+    app = pathlib.Path(gmod.__file__).parents[3] / "apps/geolibre-desktop/src/lib/layout-params.ts"
+    if not app.exists():
+        pytest.skip("app sources are not next to this checkout")
+    match = re.search(r"CHROME_TOGGLE_PARAMS = \[(.*?)\]", app.read_text(encoding="utf-8"), re.S)
+    app_params = set(re.findall(r'"(\w+)"', match.group(1)))
+    # The toolbar predates the per-element toggles and has its own param.
+    assert app_params == {param for param, _env in CHROME_TOGGLES.values()} - {"toolbar"}

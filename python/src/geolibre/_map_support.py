@@ -65,7 +65,8 @@ def _env_flag(name: str) -> bool | None:
     warnings.warn(
         f"Ignoring {name}={os.environ[name]!r}: expected a value such as true/false, "
         "1/0, on/off, or show/hide",
-        stacklevel=3,
+        # _env_flag -> _resolve_chrome -> Map.__init__ -> the caller.
+        stacklevel=4,
     )
     return None
 

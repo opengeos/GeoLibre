@@ -384,6 +384,10 @@ async function render({ model, el }) {
       pushUiState({ identify: false });
       flushCommands();
     } else if (data.type === "geolibre:state") {
+      // A chrome change reloads the iframe and clears `ready`. Until the new
+      // document says ready, a snapshot can only come from the departing one,
+      // and writing it could overwrite a project Python set during the reload.
+      if (!ready) return;
       // Record the project object that came from the app, then write it back to
       // Python. onProjectChange skips pushing whatever value is still identical
       // to this reference, so the app's own state is never echoed back.

@@ -337,6 +337,13 @@ describe("widget control replay (GeoLibre#3241)", () => {
     // Not ready until the reloaded app says so: nothing is posted yet.
     model.update("project", { layers: [{ id: "a" }] });
     assert.equal(posted.length, 0);
+    // A late snapshot from the departing document must not clobber it.
+    onMessage?.({
+      source: contentWindow,
+      origin: new URL(appUrl).origin,
+      data: { type: "geolibre:state", project: { layers: [] } },
+    });
+    assert.deepEqual(model.get("project"), { layers: [{ id: "a" }] });
     ready();
     assert.ok(posted.some((message) => message.type === "geolibre:load-project"));
   });
