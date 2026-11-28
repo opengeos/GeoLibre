@@ -239,6 +239,10 @@ the new chrome and replays the project into it:
 m.toolbar = False
 ```
 
+A reload starts the app fresh, so change these between interactions rather than
+mid-edit: a UI edit from the last moment before the change may not have synced
+back to Python yet, and a `get_*` query still waiting on the old app times out.
+
 `app_layout="maponly"` hides all chrome no matter what these say. Exports from
 `to_html()` carry the same settings.
 

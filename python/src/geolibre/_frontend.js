@@ -454,10 +454,8 @@ async function render({ model, el }) {
   // change reloads the iframe. The reloaded app signals geolibre:ready again,
   // which re-sends the project and UI state; commands wait in the queue.
   const onChromeChange = () => {
-    const src = appSrc();
-    if (iframe.src === src) return;
     ready = false;
-    iframe.src = src;
+    iframe.src = appSrc();
   };
   // One registration per event: hosts other than Jupyter (e.g. marimo) do not
   // split Backbone-style space-separated event names.
