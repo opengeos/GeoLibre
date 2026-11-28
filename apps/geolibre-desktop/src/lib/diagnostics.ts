@@ -100,6 +100,24 @@ function isBenignConsoleWarning(args: unknown[]): boolean {
   );
 }
 
+// MapLibre warns once for each image a style asks for that neither its sprite
+// nor the image resolver provides: OpenFreeMap Liberty, the default basemap,
+// names POI icons its sprite lacks ("office", "bicycle_parking"), so every
+// street-level view adds a few. The map draws those labels without an icon, and
+// the warning also fires when a `styleimagemissing` listener adds the image right
+// after it. Neither is something the user can act on, so it is recorded as info:
+// listed in the panel, not counted in the status bar. The text mirrors
+// MapLibre's `ImageManager` warning (src/render/image_manager.ts); if upstream
+// rewords it, these entries fall back to counting as warnings. The `s` flag lets
+// a data-driven image name contain a line break.
+const MISSING_STYLE_IMAGE_WARNING =
+  /^Image ".*" could not be loaded\. Please make sure you have added the image/s;
+
+/** Whether a console.warn message is recorded as info rather than a warning. */
+function isInformationalConsoleWarning(args: unknown[]): boolean {
+  return typeof args[0] === "string" && MISSING_STYLE_IMAGE_WARNING.test(args[0]);
+}
+
 // Client-only header that marks a non-ok response as an expected status rather
 // than an error. The diagnostics wrapper strips it before forwarding.
 export const OPTIONAL_RESOURCE_HEADER = "x-geolibre-optional-resource";
@@ -606,7 +624,7 @@ export function installDiagnosticsCapture(): () => void {
     try {
       appendDiagnostic({
         category: "console",
-        level: "warning",
+        level: isInformationalConsoleWarning(args) ? "info" : "warning",
         message: formatConsoleArgs(args) || "console.warn",
       });
     } finally {
