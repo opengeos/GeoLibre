@@ -64,9 +64,16 @@ export function assistantRunsEngine(engine: SqlPromptEngine): boolean {
   return engine === "duckdb";
 }
 
+/**
+ * Cut text to at most `limit` UTF-16 code units and append the marker. Backs
+ * off one unit when the cut would split a surrogate pair, so the quoted block
+ * never ends in a lone high surrogate.
+ */
 function clip(value: string, limit: number, marker: string): string {
   if (value.length <= limit) return value;
-  return `${value.slice(0, limit).trimEnd()}\n${marker}`;
+  const last = value.charCodeAt(limit - 1);
+  const end = last >= 0xd800 && last <= 0xdbff ? limit - 1 : limit;
+  return `${value.slice(0, end).trimEnd()}\n${marker}`;
 }
 
 /**

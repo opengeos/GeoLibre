@@ -470,17 +470,32 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
       const pending = consumePendingAssistantPrompt();
       if (pending === null) return;
       // The prompt replaces the composer's content, so park a draft in progress
-      // in the prompt history first: Arrow Up brings it back.
-      const draft = inputValueRef.current.trim();
+      // in the prompt history first: Arrow Up brings it back. While Arrow Up is
+      // showing a recalled entry, the typed draft is held in promptDraftRef and
+      // the composer may hold an edited copy of the entry; park both.
       const history = promptHistoryRef.current;
-      if (draft && draft !== pending.trim() && history.at(-1) !== draft) history.push(draft);
+      const recallIndex = promptHistoryIndexRef.current;
+      const visible = inputValueRef.current.trim();
+      const candidates =
+        recallIndex === null
+          ? [visible]
+          : [
+              promptDraftRef.current.trim(),
+              visible === history[recallIndex]?.trim() ? "" : visible,
+            ];
+      for (const draft of candidates) {
+        if (draft && draft !== pending.trim() && history.at(-1) !== draft) history.push(draft);
+      }
       promptHistoryIndexRef.current = null;
       promptDraftRef.current = pending;
-      revealDraftRef.current = true;
+      // A repeat request for the text already in the composer changes no state,
+      // so the reveal effect would not run and a set flag would fire on the
+      // next keystroke instead. Arm it only when the text changes, or while the
+      // code-approval dialog holds focus (the effect re-runs when it closes).
+      const awaitingApproval = codeQueueRef.current.length > 0;
+      revealDraftRef.current = awaitingApproval || pending !== inputValueRef.current;
       setInput(pending);
-      // Covers a repeat request for the draft already in the composer, which
-      // changes no state and so never reaches the reveal effect.
-      inputRef.current?.focus();
+      if (!awaitingApproval) inputRef.current?.focus();
     };
     applyPending();
     window.addEventListener(ASSISTANT_PROMPT_EVENT, applyPending);
@@ -831,14 +846,17 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
   // Focusing a textarea scrolls to the caret at the end, which would leave only
   // the closing lines of the quoted query in the two visible rows; the opening
   // instruction is what tells the user what they are about to send.
+  // Deferred while the code-approval dialog is open, so focus stays in its
+  // trap; re-checked when the queue empties.
   useEffect(() => {
     if (!revealDraftRef.current) return;
+    if (codeQueue.length > 0) return;
     const el = inputRef.current;
     if (!el) return;
     revealDraftRef.current = false;
     el.focus();
     el.scrollTop = 0;
-  }, [input, showSetup]);
+  }, [input, showSetup, codeQueue.length]);
 
   return (
     <section

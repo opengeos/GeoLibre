@@ -108,6 +108,15 @@ describe("buildSqlFixPrompt", () => {
     assert.ok(prompt.endsWith("e\n(cut short here)\n```"));
   });
 
+  it("does not split a surrogate pair at the cut", () => {
+    // "SELECT '" is 8 units, so the limit lands between the halves of an emoji.
+    const sql = `SELECT '${"x".repeat(MAX_PROMPT_SQL_CHARS - 9)}\u{1F30D}'`;
+    const prompt = buildSqlExplainPrompt({ sql }, TEXT);
+    assert.ok(prompt);
+    assert.ok(prompt.includes("x\n(cut short here)"));
+    assert.ok(!/[\uD800-\uDBFF](?![\uDC00-\uDFFF])/.test(prompt));
+  });
+
   it("does not mark text that fits exactly", () => {
     const sql = "x".repeat(MAX_PROMPT_SQL_CHARS);
     const prompt = buildSqlFixPrompt({ sql, error: "boom" }, TEXT);

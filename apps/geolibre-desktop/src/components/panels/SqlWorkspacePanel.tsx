@@ -336,8 +336,8 @@ export function SqlWorkspacePanel({
   // The statement (and engine) behind the query error on screen, captured at
   // run time for the same reason as `lastRun`: "Fix" must send the SQL that
   // actually failed, not whatever the editor holds by the time it is clicked.
-  // Only runQuery sets it, and an export error can never appear beside a stale
-  // one: exports need a result, and the run that produced it cleared this.
+  // Only runQuery sets it; an export that fails clears it, since a query may
+  // have run and failed while the export was in flight.
   const [failedRun, setFailedRun] = useState<{
     sql: string;
     engine: SqlEngine;
@@ -594,6 +594,9 @@ export function SqlWorkspacePanel({
         "CSV",
       );
     } catch (err) {
+      // A query can run and fail while the export is in flight; the export
+      // error replaces it, so drop its context or Fix would send that query.
+      setFailedRun(null);
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       exportingRef.current = false;
@@ -616,6 +619,9 @@ export function SqlWorkspacePanel({
       // exportBinaryVectorLayer already sets the GeoParquet mimeType.
       await saveBinary(exported, "GeoParquet");
     } catch (err) {
+      // A query can run and fail while the export is in flight; the export
+      // error replaces it, so drop its context or Fix would send that query.
+      setFailedRun(null);
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       exportingRef.current = false;

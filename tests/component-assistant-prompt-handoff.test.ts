@@ -79,6 +79,36 @@ describe("assistant prompt hand-off", () => {
     assert.equal(composer().value, "Fix this query.");
   });
 
+  it("parks the typed draft and an edited recalled entry while Arrow Up is active", () => {
+    configureProvider();
+    renderPanel();
+    fireEvent.change(composer(), { target: { value: "half a thought" } });
+    act(() => requestAssistantPrompt("Fix this query."));
+    // Recall "half a thought", then edit the recalled entry.
+    composer().setSelectionRange(0, 0);
+    fireEvent.keyDown(composer(), { key: "ArrowUp" });
+    assert.equal(composer().value, "half a thought");
+    fireEvent.change(composer(), { target: { value: "half a thought, edited" } });
+    act(() => requestAssistantPrompt("Explain this query."));
+    assert.equal(composer().value, "Explain this query.");
+    composer().setSelectionRange(0, 0);
+    fireEvent.keyDown(composer(), { key: "ArrowUp" });
+    assert.equal(composer().value, "half a thought, edited");
+    composer().setSelectionRange(0, 0);
+    fireEvent.keyDown(composer(), { key: "ArrowUp" });
+    assert.equal(composer().value, "Fix this query.");
+  });
+
+  it("does not jump the composer to the top on typing after a repeat request", () => {
+    configureProvider();
+    renderPanel();
+    act(() => requestAssistantPrompt("Explain this query."));
+    act(() => requestAssistantPrompt("Explain this query."));
+    composer().scrollTop = 40;
+    fireEvent.change(composer(), { target: { value: "Explain this query. More" } });
+    assert.equal(composer().scrollTop, 40);
+  });
+
   it("holds the draft behind the setup card until a provider is configured", async () => {
     requestAssistantPrompt("Fix this query.");
     renderPanel();

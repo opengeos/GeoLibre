@@ -235,6 +235,31 @@ describe("SqlWorkspacePanel", () => {
     assert.equal(screen.queryByRole("button", { name: "Fix" }), null);
   });
 
+  it("does not offer Fix for an export that fails after a query failed mid-export", async () => {
+    const services = fakeServices().services;
+    let failQueries = false;
+    const runQuery = services.runSqlQuery;
+    services.runSqlQuery = async (sql) => {
+      if (failQueries) throw new Error("boom");
+      return runQuery(sql);
+    };
+    let rejectSave: (err: Error) => void = () => {};
+    services.saveBinaryFile = () =>
+      new Promise((_resolve, reject) => {
+        rejectSave = reject;
+      });
+    renderPanel(services);
+    runSql("SELECT * FROM cities");
+    await waitFor(() => assert.ok(text().includes("2 rows")));
+    fireEvent.click(screen.getByRole("button", { name: "Export CSV" }));
+    failQueries = true;
+    runSql("SELECT * FROM nowhere");
+    await screen.findByRole("button", { name: "Fix" });
+    act(() => rejectSave(new Error("Disk is full")));
+    await waitFor(() => assert.ok(text().includes("Disk is full")));
+    assert.equal(screen.queryByRole("button", { name: "Fix" }), null);
+  });
+
   it("hands the editor's query to the assistant from Explain", () => {
     const { services, runs } = fakeServices();
     renderPanel(services);
