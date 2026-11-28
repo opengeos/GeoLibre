@@ -216,6 +216,36 @@ async function appReachable(base, signal) {
   }
 }
 
+// Chrome toggles synced from Python (trait name -> app query param). `true`
+// shows and `false` hides that piece of chrome; `null` leaves the app's default.
+// Mirrors CHROME_TOGGLES in _map_support.py.
+export const CHROME_TOGGLES = {
+  toolbar: "toolbar",
+  layer_panel: "layerPanel",
+  style_panel: "stylePanel",
+  status_bar: "statusBar",
+};
+
+// The app's query string for this model: embed mode, theme, layout preset, and
+// the chrome toggles. `get` reads a trait (model.get).
+export function appQuery(get) {
+  const layout = get("app_layout") || "embed";
+  const params = new URLSearchParams({ embed: "1", theme: get("theme") || "light" });
+  if (layout === "maponly") {
+    params.set("maponly", "1");
+  } else if (layout !== "full") {
+    params.set("layout", "embed");
+  }
+  for (const [trait, param] of Object.entries(CHROME_TOGGLES)) {
+    const value = get(trait);
+    if (value === null || value === undefined) continue;
+    // The app has no "force visible" toolbar value; it is visible by default.
+    if (trait === "toolbar" && value) continue;
+    params.set(param, value ? "visible" : "hidden");
+  }
+  return params.toString();
+}
+
 async function render({ model, el }) {
   const iframe = document.createElement("iframe");
   iframe.style.width = "100%";
@@ -245,14 +275,8 @@ async function render({ model, el }) {
     return;
   }
 
-  const layout = model.get("app_layout") || "embed";
-  const params = new URLSearchParams({ embed: "1", theme: model.get("theme") || "light" });
-  if (layout === "maponly") {
-    params.set("maponly", "1");
-  } else if (layout !== "full") {
-    params.set("layout", "embed");
-  }
-  iframe.src = `${base}index.html?${params.toString()}`;
+  const appSrc = () => `${base}index.html?${appQuery((name) => model.get(name))}`;
+  iframe.src = appSrc();
   // replaceChildren clears any placeholder text set above before mounting.
   el.replaceChildren(iframe);
 
@@ -422,9 +446,22 @@ async function render({ model, el }) {
     iframe.style.height = model.get("height") || "800px";
   };
   const onUiChange = () => pushUiState();
+  // The chrome toggles are URL params the app reads once at startup, so a
+  // change reloads the iframe. The reloaded app signals geolibre:ready again,
+  // which re-sends the project and UI state; commands wait in the queue.
+  const onChromeChange = () => {
+    const src = appSrc();
+    if (iframe.src === src) return;
+    ready = false;
+    iframe.src = src;
+  };
+  // One registration per event: hosts other than Jupyter (e.g. marimo) do not
+  // split Backbone-style space-separated event names.
+  const chromeEvents = Object.keys(CHROME_TOGGLES).map((trait) => `change:${trait}`);
   model.on("change:project", onProjectChange);
   model.on("change:height", onHeight);
   model.on("change:_ui", onUiChange);
+  for (const event of chromeEvents) model.on(event, onChromeChange);
 
   return () => {
     window.removeEventListener("message", onMessage);
@@ -432,6 +469,7 @@ async function render({ model, el }) {
     model.off("change:project", onProjectChange);
     model.off("change:height", onHeight);
     model.off("change:_ui", onUiChange);
+    for (const event of chromeEvents) model.off(event, onChromeChange);
   };
 }
 

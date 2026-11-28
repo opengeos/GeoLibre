@@ -43,6 +43,39 @@ export function arePanelsHidden(params: URLSearchParams): boolean {
   );
 }
 
+const SHOWN_VALUES = new Set(["visible", "show", "shown", "on", "true", "1", "yes"]);
+const HIDDEN_VALUES = new Set(["hidden", "hide", "none", "off", "false", "0", "no"]);
+
+/**
+ * Query params that show or hide one piece of chrome each, so an embed (such
+ * as the `geolibre` Jupyter widget) can drop the Layers panel but keep the
+ * toolbar. Keys are the URL param names.
+ */
+export const CHROME_TOGGLE_PARAMS = ["layerPanel", "stylePanel", "statusBar"] as const;
+
+export type ChromeToggleParam = (typeof CHROME_TOGGLE_PARAMS)[number];
+
+/**
+ * Read a per-element chrome toggle (`?layerPanel=hidden`, `?statusBar=visible`).
+ *
+ * Args:
+ *   params: The page's query params.
+ *   name: The toggle's param name.
+ *
+ * Returns:
+ *   `false` for a hidden value, `true` for a shown value, and `undefined` when
+ *   the param is absent or unrecognized, so the caller keeps its default.
+ */
+export function chromeToggle(
+  params: URLSearchParams,
+  name: ChromeToggleParam,
+): boolean | undefined {
+  const value = normalizedParam(params.get(name));
+  if (HIDDEN_VALUES.has(value)) return false;
+  if (SHOWN_VALUES.has(value)) return true;
+  return undefined;
+}
+
 /**
  * Whether the query opts a `layout=viewer` embed into drawing (`?draw`,
  * `?draw=true`). Only a flag: the caller decides whether the layout and the

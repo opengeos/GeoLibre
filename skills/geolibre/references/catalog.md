@@ -106,6 +106,7 @@ client-side.
 | `draw` | `?layout=viewer&draw` | With `layout=viewer`, let the geometry editor run (open it with `&plugin=geo-editor`) |
 | `maponly` | `?maponly` | Map only — no toolbar, panels, or status bar |
 | `toolbar` / `panels` | `?toolbar=none&panels=collapsed` | Trim individual chrome |
+| `layerPanel` / `stylePanel` / `statusBar` | `?layerPanel=hidden&statusBar=hidden` | Show (`visible`) or hide (`hidden`) one panel or the status bar |
 | `theme` | `?theme=dark` | Force a color theme |
 | `locale` / `lang` | `?lang=zh` | Set the UI language |
 

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { afterEach, describe, it } from "node:test";
 
 import widget, {
+  appQuery,
   canProxyLocalFiles,
   rewriteProxiedLocalFileUrls,
 } from "../python/src/geolibre/_frontend.js";
@@ -138,6 +139,44 @@ describe("rewriteProxiedLocalFileUrls", () => {
   });
 });
 
+describe("appQuery", () => {
+  const query = (values: Record<string, unknown>) =>
+    Object.fromEntries(new URLSearchParams(appQuery((key: string) => values[key])));
+
+  it("leaves the app's chrome defaults alone when no toggle is set", () => {
+    assert.deepEqual(query({ app_layout: "embed", theme: "dark", toolbar: null }), {
+      embed: "1",
+      theme: "dark",
+      layout: "embed",
+    });
+  });
+
+  it("maps the chrome toggles to the app's query params", () => {
+    assert.deepEqual(
+      query({
+        app_layout: "full",
+        theme: "light",
+        toolbar: false,
+        layer_panel: false,
+        style_panel: true,
+        status_bar: false,
+      }),
+      {
+        embed: "1",
+        theme: "light",
+        toolbar: "hidden",
+        layerPanel: "hidden",
+        stylePanel: "visible",
+        statusBar: "hidden",
+      },
+    );
+  });
+
+  it("adds nothing for a shown toolbar, which is the app default", () => {
+    assert.equal(query({ app_layout: "full", toolbar: true }).toolbar, undefined);
+  });
+});
+
 describe("canProxyLocalFiles", () => {
   const setWindow = (extras: Record<string, unknown> = {}) => {
     (globalThis as Record<string, unknown>).window = {
@@ -263,5 +302,42 @@ describe("widget control replay (GeoLibre#3241)", () => {
     assert.deepEqual(controlCommands(), [
       { control: "measure", visible: true, options: { collapsed: false } },
     ]);
+  });
+
+  it("reloads the app with new chrome params and replays state on ready", async () => {
+    (globalThis as Record<string, unknown>).window = {
+      location: { href: "http://localhost:8888/lab" },
+      addEventListener: (_type: string, handler: (event: unknown) => void) => {
+        onMessage = handler;
+      },
+      removeEventListener: () => {},
+    };
+    const iframe: { style: object; contentWindow: typeof contentWindow; src?: string } = {
+      style: {},
+      contentWindow,
+    };
+    (globalThis as Record<string, unknown>).document = {
+      createElement: () => iframe,
+      getElementById: () => null,
+    };
+    const model = fakeModel({
+      _app_url: appUrl,
+      app_layout: "full",
+      project: { layers: [] },
+      _ui: {},
+      layer_panel: null,
+    });
+    await widget.render({ model, el: { replaceChildren: () => {} } } as never);
+    assert.ok(!iframe.src?.includes("layerPanel"));
+    ready();
+    posted.length = 0;
+
+    model.update("layer_panel", false);
+    assert.match(iframe.src ?? "", /layerPanel=hidden/);
+    // Not ready until the reloaded app says so: nothing is posted yet.
+    model.update("project", { layers: [{ id: "a" }] });
+    assert.equal(posted.length, 0);
+    ready();
+    assert.ok(posted.some((message) => message.type === "geolibre:load-project"));
   });
 });
