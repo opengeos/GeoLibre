@@ -423,6 +423,33 @@ describe("diagnostics startup transient suppression", () => {
     assert.equal(getDiagnosticsSnapshot().totalCount, 0);
   });
 
+  it("records a missing style image as info, listed but not counted as a warning", () => {
+    const echoed: unknown[][] = [];
+    console.warn = (...args: unknown[]) => {
+      echoed.push(args);
+    };
+    install();
+    // MapLibre 6 wording, then the one older MapLibre and Mapbox GL use.
+    const messages = [
+      'Image "office" could not be loaded. Please make sure you have added the image before it is needed with map.addImage(), resolved it with map.setMissingStyleImageResolver(), or included it in a "sprite" property in your style.',
+      'Image "toll_booth" could not be loaded. Please make sure you have added the image with map.addImage() or a "sprite" property in your style. You can provide missing images by listening for the "styleimagemissing" map event.',
+    ];
+    for (const message of messages) console.warn(message);
+    console.warn("a normal warning");
+    assert.deepEqual(echoed, [...messages.map((message) => [message]), ["a normal warning"]]);
+    const snapshot = getDiagnosticsSnapshot();
+    assert.equal(snapshot.totalCount, 3);
+    assert.equal(snapshot.warningCount, 1);
+    assert.deepEqual(
+      snapshot.records.map((record) => [record.category, record.level]),
+      [
+        ["console", "warning"],
+        ["console", "info"],
+        ["console", "info"],
+      ],
+    );
+  });
+
   it("passes every completed response to network observers, logged or not", async () => {
     const { observeNetworkResponses } =
       await import("../apps/geolibre-desktop/src/lib/diagnostics");
