@@ -170,7 +170,7 @@ def render_project_html(
             raise ValueError(f"to_html: unknown chrome keys {sorted(unknown)}")
         for key, value in chrome.items():
             if value is not None and not isinstance(value, bool):
-                raise ValueError(f"to_html: chrome[{key!r}] must be True, False, or None")
+                raise TypeError(f"to_html: chrome[{key!r}] must be True, False, or None")
         flags.extend(_chrome_query_flags(chrome))
     base, hash_sep, fragment = base_url.partition("#")
     # A layout/theme key the app_url already sets wins, like the in-app

@@ -454,8 +454,12 @@ async function render({ model, el }) {
   // change reloads the iframe. The reloaded app signals geolibre:ready again,
   // which re-sends the project and UI state; commands wait in the queue.
   const onChromeChange = () => {
+    // `toolbar` None and True both emit no param, so a trait change can leave
+    // the URL as it was; reloading then would only drop unsynced UI state.
+    const src = appSrc();
+    if (src === iframe.getAttribute("src")) return;
     ready = false;
-    iframe.src = appSrc();
+    iframe.src = src;
   };
   // One registration per event: hosts other than Jupyter (e.g. marimo) do not
   // split Backbone-style space-separated event names.

@@ -312,9 +312,15 @@ describe("widget control replay (GeoLibre#3241)", () => {
       },
       removeEventListener: () => {},
     };
-    const iframe: { style: object; contentWindow: typeof contentWindow; src?: string } = {
+    const iframe: {
+      style: object;
+      contentWindow: typeof contentWindow;
+      src?: string;
+      getAttribute: (name: string) => string | undefined;
+    } = {
       style: {},
       contentWindow,
+      getAttribute: (name) => (name === "src" ? iframe.src : undefined),
     };
     (globalThis as Record<string, unknown>).document = {
       createElement: () => iframe,
@@ -331,6 +337,11 @@ describe("widget control replay (GeoLibre#3241)", () => {
     assert.ok(!iframe.src?.includes("layerPanel"));
     ready();
     posted.length = 0;
+
+    // toolbar None -> True emits no param, so the app must not reload.
+    const before = iframe.src;
+    model.update("toolbar", true);
+    assert.equal(iframe.src, before);
 
     model.update("layer_panel", false);
     assert.match(iframe.src ?? "", /layerPanel=hidden/);
