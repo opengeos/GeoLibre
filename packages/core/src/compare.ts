@@ -111,10 +111,11 @@ function formatDelta(
   config: PopupFieldConfig | undefined,
   locale: string | undefined,
 ): string {
+  // One formatter per delta, reused for the body and the zero check.
+  const plain =
+    config?.kind === "number" ? null : new Intl.NumberFormat(locale, { maximumFractionDigits: 2 });
   const format = (value: number) =>
-    config?.kind === "number"
-      ? formatPopupValue(value, config, { locale })
-      : new Intl.NumberFormat(locale, { maximumFractionDigits: 2 }).format(value);
+    plain ? plain.format(value) : formatPopupValue(value, config, { locale });
   const body = format(Math.abs(difference));
   // A difference that rounds to nothing at the displayed precision has no
   // sign. Compared with a formatted zero rather than by looking for digits,

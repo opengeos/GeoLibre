@@ -271,10 +271,11 @@ export function createHistoryOptions(): ZundoOptions<AppState, HistoryState> {
  * After an undo/redo restores the tracked slice, mark the project dirty and
  * drop references the step left pointing at a layer that no longer exists:
  * the selection, the compare pin, per-pane layer visibility, and Print
- * Layout data/atlas blocks. None of those is tracked in history (selection is UI state; panes
- * carry their own camera and must stay in step with the untracked grid
- * layout; the Print Layout composer keeps a local copy it writes back), so
- * they are scrubbed the way deleting the layer would have scrubbed them.
+ * Layout data/atlas blocks. None of those is tracked in history (selection is
+ * UI state; panes carry their own camera and must stay in step with the
+ * untracked grid layout; the Print Layout composer keeps a local copy it
+ * writes back), so they are scrubbed the way deleting the layer would have
+ * scrubbed them.
  */
 function finishHistoryStep(previousBasemapStyleUrl: string): void {
   const s = boundStore().getState();

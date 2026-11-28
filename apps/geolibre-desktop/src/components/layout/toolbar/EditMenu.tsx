@@ -206,7 +206,8 @@ export function EditMenu({ chrome, mapControllerRef }: EditMenuProps) {
             <span className="whitespace-nowrap">{t("toolbar.item.showEdgeLengths")}</span>
           </DropdownMenuCheckboxItem>
         )}
-        {show("edit.pinToCompare") &&
+        {/* An active pin can always be cleared, even with the item hidden. */}
+        {(comparing || show("edit.pinToCompare")) &&
           (comparing ? (
             <DropdownMenuItem onSelect={() => setComparePin(null)}>
               <PinOff className={iconClass} />

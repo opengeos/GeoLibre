@@ -39,6 +39,14 @@ describe("the compare pin", () => {
     assert.equal(useAppStore.temporal.getState().pastStates.length, 0);
   });
 
+  it("turns Identify off, which would hide the comparison", () => {
+    store().selectLayer(layerId);
+    store().selectFeatures(["a"]);
+    store().setIdentifyLayer(layerId);
+    assert.equal(pinSelectedFeature(), true);
+    assert.equal(store().identifyLayerId, null);
+  });
+
   it("pins nothing unless exactly one feature is selected", () => {
     store().selectLayer(layerId);
     assert.equal(pinSelectedFeature(), false);

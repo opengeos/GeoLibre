@@ -96,6 +96,9 @@ export function pinSelectedFeature(): boolean {
     // A snapshot: the comparison is with the feature as it was when pinned.
     properties: { ...(feature.properties ?? {}) },
   });
+  // Identify suppresses hover tips on every renderer, so an armed Identify
+  // would hide the comparison the user just asked for.
+  if (useAppStore.getState().identifyLayerId) useAppStore.getState().setIdentifyLayer(null);
   return true;
 }
 

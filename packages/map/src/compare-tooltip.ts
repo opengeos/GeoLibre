@@ -81,6 +81,8 @@ export function createCompareTooltipElement(
   heading.textContent = title;
   const subheading = document.createElement("div");
   subheading.className = "mb-0.5 text-muted-foreground";
+  // The pin keeps only attributes, so its title is resolved without geometry:
+  // a title expression reading `["geometry-type"]` falls back for it.
   subheading.textContent = labels.comparedWith(
     resolveConfiguredPopupTitle(pin.properties, popup, { zoom, fieldVisibility }),
   );
