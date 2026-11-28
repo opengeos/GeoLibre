@@ -3,6 +3,7 @@ import { afterEach, describe, it } from "node:test";
 
 import widget, {
   appQuery,
+  CHROME_RELOAD_DELAY_MS,
   canProxyLocalFiles,
   rewriteProxiedLocalFileUrls,
 } from "../python/src/geolibre/_frontend.js";
@@ -312,16 +313,23 @@ describe("widget control replay (GeoLibre#3241)", () => {
       },
       removeEventListener: () => {},
     };
-    const iframe: {
-      style: object;
-      contentWindow: typeof contentWindow;
-      src?: string;
-      getAttribute: (name: string) => string | undefined;
-    } = {
+    // Count navigations: assigning src on a real iframe reloads it even when
+    // the value is unchanged.
+    let currentSrc: string | undefined;
+    let navigations = 0;
+    const iframe = {
       style: {},
       contentWindow,
-      getAttribute: (name) => (name === "src" ? iframe.src : undefined),
+      get src() {
+        return currentSrc;
+      },
+      set src(value: string | undefined) {
+        currentSrc = value;
+        navigations += 1;
+      },
+      getAttribute: (name: string) => (name === "src" ? currentSrc : undefined),
     };
+    const settle = () => new Promise((resolve) => setTimeout(resolve, CHROME_RELOAD_DELAY_MS + 20));
     (globalThis as Record<string, unknown>).document = {
       createElement: () => iframe,
       getElementById: () => null,
@@ -338,13 +346,20 @@ describe("widget control replay (GeoLibre#3241)", () => {
     ready();
     posted.length = 0;
 
-    // toolbar None -> True emits no param, so the app must not reload.
-    const before = iframe.src;
-    model.update("toolbar", true);
-    assert.equal(iframe.src, before);
+    assert.equal(navigations, 1);
 
+    // toolbar None -> True emits no param, so the app must not reload.
+    model.update("toolbar", true);
+    await settle();
+    assert.equal(navigations, 1);
+
+    // Several changes in one cell reload once, with the final URL.
     model.update("layer_panel", false);
+    model.update("status_bar", false);
+    await settle();
+    assert.equal(navigations, 2);
     assert.match(iframe.src ?? "", /layerPanel=hidden/);
+    assert.match(iframe.src ?? "", /statusBar=hidden/);
     // Not ready until the reloaded app says so: nothing is posted yet.
     model.update("project", { layers: [{ id: "a" }] });
     assert.equal(posted.length, 0);

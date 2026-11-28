@@ -246,6 +246,11 @@ export function appQuery(get) {
   return params.toString();
 }
 
+// How long a chrome change waits before reloading the app, so a cell that sets
+// several chrome traits (`m.toolbar = True; m.status_bar = True`) reloads
+// once with the final URL instead of once per trait.
+export const CHROME_RELOAD_DELAY_MS = 50;
+
 async function render({ model, el }) {
   const iframe = document.createElement("iframe");
   iframe.style.width = "100%";
@@ -453,13 +458,19 @@ async function render({ model, el }) {
   // The chrome toggles are URL params the app reads once at startup, so a
   // change reloads the iframe. The reloaded app signals geolibre:ready again,
   // which re-sends the project and UI state; commands wait in the queue.
-  const onChromeChange = () => {
+  let chromeReloadTimer = null;
+  const reloadForChrome = () => {
+    chromeReloadTimer = null;
     // `toolbar` None and True both emit no param, so a trait change can leave
     // the URL as it was; reloading then would only drop unsynced UI state.
     const src = appSrc();
     if (src === iframe.getAttribute("src")) return;
     ready = false;
     iframe.src = src;
+  };
+  const onChromeChange = () => {
+    if (chromeReloadTimer !== null) clearTimeout(chromeReloadTimer);
+    chromeReloadTimer = setTimeout(reloadForChrome, CHROME_RELOAD_DELAY_MS);
   };
   // One registration per event: hosts other than Jupyter (e.g. marimo) do not
   // split Backbone-style space-separated event names.
@@ -476,6 +487,7 @@ async function render({ model, el }) {
     model.off("change:height", onHeight);
     model.off("change:_ui", onUiChange);
     for (const event of chromeEvents) model.off(event, onChromeChange);
+    if (chromeReloadTimer !== null) clearTimeout(chromeReloadTimer);
   };
 }
 
