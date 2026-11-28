@@ -668,7 +668,7 @@
 - [x] **A viewshed that sees the horizon**: the right-click viewshed models Earth curvature and atmospheric refraction, like the Line of Sight tool. See [Map controls](user-guide/map-controls.md)
 - [x] **Live MCP in every desktop build**: the Live MCP relay now runs in the Tauri shell itself, so AI agents can drive the open map with no Python runtime, including the Mac App Store build. See [MCP server](mcp.md)
 - [x] **More from Python and MCP**: `Map` and environment variables show or hide the toolbar, Layers and Style panels, and status bar, `GEOLIBRE_RENDERER` picks the rendering engine, and styled ArcGIS VectorTileServer layers and validated ArcGIS raster caches can be authored from Python and MCP. See [Python package](python.md)
-- [x] **Rasters and data cubes that just open**: an overview-less GeoTIFF explains why it is slow and offers a one-click COG conversion, and saved Icechunk layers reopen on MapLibre, ArcGIS, and Cesium with their variable, slice, and styling
+- [x] **Rasters and data cubes that just open**: an overview-less GeoTIFF explains why it is slow and offers a one-click COG conversion, and saved Icechunk layers reopen on MapLibre, ArcGIS, and Cesium with their variable, slice, and styling. See [Web services](user-guide/web-services.md)
 - [x] **Pin and compare, and SQL help from the assistant**: **Edit → Pin feature to compare** shows how each hovered feature differs from the pinned one, and the SQL Workspace's **Fix** and **Explain** buttons draft a request to the AI Assistant with the query, the error, and the engine. See [Attribute Table](user-guide/attribute-table.md) and [SQL Workspace](user-guide/sql-workspace.md)
 
 ## Plugin marketplace and registry (design)
