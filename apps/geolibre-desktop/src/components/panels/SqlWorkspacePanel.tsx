@@ -11,6 +11,7 @@ import {
   Loader2,
   MapPlus,
   Play,
+  Sparkles,
   X,
 } from "lucide-react";
 import { type MouseEvent as ReactMouseEvent, useEffect, useMemo, useRef, useState } from "react";
@@ -27,12 +28,21 @@ import {
 import { runPostgisQuery } from "../../lib/pglite-workspace";
 import { runSedonaQuery } from "../../lib/sedona-workspace";
 import { sqlQueryLayerMetadata } from "../../lib/sql-query-layer";
+import { requestAssistantPrompt } from "../../lib/assistant-prompt-request";
+import {
+  assistantRunsEngine,
+  buildSqlExplainPrompt,
+  buildSqlFixPrompt,
+  sqlEngineName,
+  type SqlPromptText,
+} from "../../lib/sql-assistant-prompts";
 import {
   consumePendingSqlWorkspaceQuery,
   SQL_WORKSPACE_PREFILL_EVENT,
 } from "../../lib/sql-workspace-prefill";
 import { saveBinaryFileWithFallback } from "../../lib/tauri-io";
 import { useSqlCompletion } from "../../lib/useSqlCompletion";
+import { useAssistantOffered } from "../../hooks/useAssistantOffered";
 import { PANEL_RESIZE_END_EVENT, PANEL_RESIZE_START_EVENT } from "../../lib/panel-resize";
 
 const CSV_MIME_TYPE = "text/csv";
@@ -284,6 +294,10 @@ export function SqlWorkspacePanel({
   const tableSources = useLayerSlices(useMemo(selectSqlTableSources, []));
   const addGeoJsonLayer = useAppStore((s) => s.addGeoJsonLayer);
   const updateLayer = useAppStore((s) => s.updateLayer);
+  const setAssistantOpen = useAppStore((s) => s.setAssistantOpen);
+  // Fix and Explain are shortcuts into the assistant, so they are only shown
+  // where the assistant itself is offered.
+  const assistantOffered = useAssistantOffered();
 
   const { t } = useTranslation();
 
@@ -316,6 +330,15 @@ export function SqlWorkspacePanel({
   // run time so "Add as query layer" stores the SQL that was actually executed
   // even if the editor has been modified since. Set together with setResult.
   const [lastRun, setLastRun] = useState<{
+    sql: string;
+    engine: SqlEngine;
+  } | null>(null);
+  // The statement (and engine) behind the query error on screen, captured at
+  // run time for the same reason as `lastRun`: "Fix" must send the SQL that
+  // actually failed, not whatever the editor holds by the time it is clicked.
+  // Only runQuery sets it; an export that fails clears it, since a query may
+  // have run and failed while the export was in flight.
+  const [failedRun, setFailedRun] = useState<{
     sql: string;
     engine: SqlEngine;
   } | null>(null);
@@ -425,6 +448,7 @@ export function SqlWorkspacePanel({
     runningRef.current = true;
     setRunning(true);
     setError(null);
+    setFailedRun(null);
     setNotice(null);
     // Clear the previous result so a long-running query does not leave stale
     // rows on screen while the spinner runs.
@@ -443,10 +467,54 @@ export function SqlWorkspacePanel({
     } catch (err) {
       setResult(null);
       setError(describeQueryError(err));
+      setFailedRun({ sql: trimmed, engine });
     } finally {
       runningRef.current = false;
       setRunning(false);
     }
+  };
+
+  // The catalog strings a prompt is built from. PostGIS and Sedona queries get
+  // a note that they do not run on DuckDB, the only engine the assistant's own
+  // SQL tool can run, so it keeps the dialect instead of rewriting it.
+  const assistantPromptText = (kind: "fix" | "explain", forEngine: SqlEngine): SqlPromptText => {
+    const name = sqlEngineName(forEngine);
+    return {
+      instruction: t(
+        kind === "fix" ? "toolbar.sqlWorkspace.fixPrompt" : "toolbar.sqlWorkspace.explainPrompt",
+        { engine: name },
+      ),
+      engineNote: assistantRunsEngine(forEngine)
+        ? undefined
+        : t("toolbar.sqlWorkspace.promptEngineNote", { engine: name }),
+      queryLabel: t("toolbar.sqlWorkspace.promptQuery"),
+      errorLabel: t("toolbar.sqlWorkspace.promptError"),
+      truncated: t("toolbar.sqlWorkspace.promptTruncated"),
+    };
+  };
+
+  // Hand a drafted prompt to the assistant and open it. The prompt lands in the
+  // composer rather than being sent, so the user reads it (and spends their
+  // provider credits) on their own Send.
+  const askAssistant = (prompt: string | null) => {
+    if (!prompt) return;
+    completion.close();
+    requestAssistantPrompt(prompt);
+    setAssistantOpen(true);
+  };
+
+  const handleFixWithAssistant = () => {
+    if (!failedRun || !error) return;
+    askAssistant(
+      buildSqlFixPrompt(
+        { sql: failedRun.sql, error },
+        assistantPromptText("fix", failedRun.engine),
+      ),
+    );
+  };
+
+  const handleExplainWithAssistant = () => {
+    askAssistant(buildSqlExplainPrompt({ sql }, assistantPromptText("explain", engine)));
   };
 
   const clearWorkspace = () => {
@@ -526,6 +594,9 @@ export function SqlWorkspacePanel({
         "CSV",
       );
     } catch (err) {
+      // A query can run and fail while the export is in flight; the export
+      // error replaces it, so drop its context or Fix would send that query.
+      setFailedRun(null);
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       exportingRef.current = false;
@@ -548,6 +619,9 @@ export function SqlWorkspacePanel({
       // exportBinaryVectorLayer already sets the GeoParquet mimeType.
       await saveBinary(exported, "GeoParquet");
     } catch (err) {
+      // A query can run and fail while the export is in flight; the export
+      // error replaces it, so drop its context or Fix would send that query.
+      setFailedRun(null);
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       exportingRef.current = false;
@@ -880,7 +954,7 @@ export function SqlWorkspacePanel({
             />
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Button
               size="sm"
               onClick={() => void runQuery()}
@@ -903,6 +977,18 @@ export function SqlWorkspacePanel({
               <Eraser className="h-4 w-4" />
               {t("toolbar.sqlWorkspace.clear")}
             </Button>
+            {assistantOffered ? (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleExplainWithAssistant}
+                disabled={!sql.trim()}
+                title={t("toolbar.sqlWorkspace.explainHint")}
+              >
+                <Sparkles className="h-4 w-4" />
+                {t("toolbar.sqlWorkspace.explain")}
+              </Button>
+            ) : null}
             {result ? (
               <span className="text-xs text-muted-foreground">
                 {t("toolbar.sqlWorkspace.rowsCount", { count: result.rowCount })} ·{" "}
@@ -982,6 +1068,18 @@ export function SqlWorkspacePanel({
                 <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
                 <span className="whitespace-pre-wrap font-mono">{error}</span>
               </p>
+              {assistantOffered && failedRun ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="mt-2"
+                  onClick={handleFixWithAssistant}
+                  title={t("toolbar.sqlWorkspace.fixHint")}
+                >
+                  <Sparkles className="h-4 w-4" />
+                  {t("toolbar.sqlWorkspace.fix")}
+                </Button>
+              ) : null}
             </div>
           ) : null}
 

@@ -67,6 +67,17 @@ The **SQL engine** menu (top right) selects which SQL engine runs your query. Al
 - The **Sample queries…** and **Sample query for layer…** menus drop ready-made queries into the editor to get you started.
 - Your previous queries are kept under **History…** so you can rerun them.
 
+## Asking the AI Assistant about a query
+
+Two buttons hand a query to the [AI Assistant](ai-assistant.md):
+
+- **Explain**, beside **Run**, asks what the query in the editor does.
+- **Fix**, under the error when a query fails, sends the statement that failed together with the engine's error message and asks for a corrected query.
+
+Either one opens the assistant panel with the request written in its message box. Nothing is sent until you press **Send**, so you can read or edit the request first. The request names the engine the query was written for, and asks the assistant to reply with SQL rather than change the map. Copy the corrected query back into the editor to run it.
+
+The buttons are hidden where the assistant is not offered: when a deployment or your role does not grant it, or when your [interface profile](settings.md#interface) hides its menu entry.
+
 ## Using the results
 
 When a query returns geometry, **Add as layer** adds the result to the map as a new layer (with an optional layer name). The result layer behaves like any vector layer, with [identify, selection, and the attribute table](attribute-table.md). With the DuckDB engine, **Add as query layer** instead adds a live layer that re-runs the SQL when you refresh it from the Layers panel. **Export CSV** and **Export GeoParquet** save the results to a file (GeoParquet needs a geometry column).
