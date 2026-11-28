@@ -4,7 +4,8 @@ import {
   createPointerElevationResolver,
   effectiveLayerRenderState,
   getActiveEllipsoid,
-  isPopupHoverEnabled,
+  comparePinFor,
+  wantsHoverTooltip,
   normalizeArcgisWkid,
   resolvePopupMaxWidth,
   useAppStore,
@@ -658,6 +659,11 @@ export function ArcgisCanvas({
           const surface = mapView.container.querySelector<HTMLElement>(".esri-view-surface");
           if (surface) surface.style.cursor = cursor;
         };
+        /** The pinned feature a hovered one of `layerId` is compared with, if any. */
+        const compareFor = (layerId: string) => {
+          const pin = comparePinFor(layerId, useAppStore.getState());
+          return pin ? { pin, labels: identifyAllLabelsRef.current.compare } : null;
+        };
         /** Visible layers that show a hover tip, and the geotagged-photo layers. */
         const pointerTargets = () => {
           const next = useAppStore.getState();
@@ -668,7 +674,7 @@ export function ArcgisCanvas({
           return {
             hover: new Map(
               visible
-                .filter((layer) => next.hoverTooltipsEnabled && isPopupHoverEnabled(layer.popup))
+                .filter((layer) => wantsHoverTooltip(layer, next))
                 .map((layer) => [layer.id, layer]),
             ),
             photos: new Set(
@@ -732,6 +738,7 @@ export function ArcgisCanvas({
                     ? { type: "Feature", properties: hit.properties, geometry: hit.geometry }
                     : null,
                   zoom: current.readView().zoom,
+                  compare: compareFor(layer.id),
                 })
               : null;
           if (!content) {

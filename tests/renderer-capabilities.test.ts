@@ -158,3 +158,13 @@ describe("edgeLengthLabels", () => {
     }
   });
 });
+
+describe("featureCompare", () => {
+  it("is offered on the engines whose hover tooltip draws the comparison", () => {
+    for (const renderer of RENDERERS) {
+      for (const capabilities of variants(renderer)) {
+        assert.equal(capabilities.featureCompare, renderer !== "cesium", renderer);
+      }
+    }
+  });
+});

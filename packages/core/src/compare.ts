@@ -86,11 +86,15 @@ function isImageRow(row: PopupRow): boolean {
  * The number a value holds for the comparison: a finite number, or, for a
  * field the author formats as a number, a numeric string. Other strings stay
  * text even when they look numeric, so a zero-padded parcel number like
- * "00123" is never subtracted from another.
+ * "00123" is never subtracted from another. A field the author gave another
+ * kind is not a quantity whatever it holds: a date stored as epoch
+ * milliseconds compares as the two dates, not as a count of milliseconds.
  */
 function numericValue(value: unknown, config: PopupFieldConfig | undefined): number | null {
+  const kind = config?.kind ?? "auto";
+  if (kind !== "auto" && kind !== "number") return null;
   if (typeof value === "number") return Number.isFinite(value) ? value : null;
-  if (config?.kind === "number" && typeof value === "string" && value.trim() !== "") {
+  if (kind === "number" && typeof value === "string" && value.trim() !== "") {
     const parsed = Number(value);
     return Number.isFinite(parsed) ? parsed : null;
   }
@@ -107,13 +111,15 @@ function formatDelta(
   config: PopupFieldConfig | undefined,
   locale: string | undefined,
 ): string {
-  const magnitude = Math.abs(difference);
-  const body =
+  const format = (value: number) =>
     config?.kind === "number"
-      ? formatPopupValue(magnitude, config, { locale })
-      : new Intl.NumberFormat(locale, { maximumFractionDigits: 2 }).format(magnitude);
-  // A difference that rounds to nothing at the displayed precision has no sign.
-  if (/^[^1-9]*$/.test(body)) return body;
+      ? formatPopupValue(value, config, { locale })
+      : new Intl.NumberFormat(locale, { maximumFractionDigits: 2 }).format(value);
+  const body = format(Math.abs(difference));
+  // A difference that rounds to nothing at the displayed precision has no
+  // sign. Compared with a formatted zero rather than by looking for digits,
+  // which are not 1-9 in every locale's numbering system.
+  if (body === format(0)) return body;
   return `${difference > 0 ? "+" : MINUS}${body}`;
 }
 

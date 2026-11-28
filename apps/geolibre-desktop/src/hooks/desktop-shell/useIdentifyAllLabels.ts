@@ -38,6 +38,15 @@ export function identifyAllLabels(t: TFunction): MapCanvasIdentifyAllLabels {
       viewFullscreen: t("map.identifyAll.photoViewFullscreen"),
       close: t("map.identifyAll.photoClose"),
     },
+    compare: {
+      comparedWith: (title: string | null) =>
+        title ? t("map.compare.comparedWith", { title }) : t("map.compare.comparedWithPinned"),
+      pinnedValue: (value: string) => t("map.compare.pinnedValue", { value }),
+      noValue: t("map.compare.noValue"),
+      identical: t("map.compare.identical"),
+      moreDifferences: (count: number) => t("map.compare.moreDifferences", { count }),
+      sameFields: (count: number) => t("map.compare.sameFields", { count }),
+    },
   };
 }
 

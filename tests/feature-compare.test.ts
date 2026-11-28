@@ -112,6 +112,34 @@ describe("compareFeatureProperties", () => {
     assert.equal(result.rows[0].delta, "0");
   });
 
+  it("keeps the sign where the locale's digits are not 0-9", () => {
+    const locale = "ar-EG-u-nu-arab";
+    const five = new Intl.NumberFormat(locale).format(5);
+    assert.equal(
+      compareFeatureProperties({ area: 15 }, { area: 10 }, { locale }).rows[0].delta,
+      `+${five}`,
+    );
+    assert.equal(
+      compareFeatureProperties({ area: 10 }, { area: 15 }, { locale }).rows[0].delta,
+      `\u2212${five}`,
+    );
+  });
+
+  it("compares a date stored as a number as dates, not as a count", () => {
+    const popup: LayerPopupConfig = {
+      fields: [{ field: "sold", kind: "date", format: { dateFormat: "iso" } }],
+    };
+    const result = compareFeatureProperties(
+      { sold: 1704153600000 },
+      { sold: 1704067200000 },
+      { popup, locale: "en-US" },
+    );
+    assert.deepEqual(
+      result.rows.map((row) => [row.text, row.pinnedText, row.delta]),
+      [["2024-01-02T00:00:00.000Z", "2024-01-01T00:00:00.000Z", undefined]],
+    );
+  });
+
   it("skips image fields", () => {
     const image = "data:image/png;base64,iVBORw0KGgo=";
     const result = compareFeatureProperties({ photo: image }, { photo: `${image}AA` });

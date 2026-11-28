@@ -10,7 +10,8 @@ import {
   isDuckDBQueryLayer,
   isMapClickClaimed,
   isPopupClickEnabled,
-  isPopupHoverEnabled,
+  comparePinFor,
+  wantsHoverTooltip,
   NETCDF_IMAGE_SOURCE_KIND,
   redactUrlCredentials,
   resolveLayerCapabilities,
@@ -486,6 +487,11 @@ export function MapboxCanvas({
           photoCursor = active;
           map.getCanvas().style.cursor = active ? "pointer" : "";
         };
+        /** The pinned feature a hovered one of `layerId` is compared with, if any. */
+        const compareFor = (layerId: string) => {
+          const pin = comparePinFor(layerId, useAppStore.getState());
+          return pin ? { pin, labels: identifyAllLabelsRef.current.compare } : null;
+        };
         /** Visible layers that show a hover tip, and the geotagged-photo layers. */
         const pointerTargets = () => {
           const next = useAppStore.getState();
@@ -496,7 +502,7 @@ export function MapboxCanvas({
           return {
             hover: new Map(
               visible
-                .filter((layer) => next.hoverTooltipsEnabled && isPopupHoverEnabled(layer.popup))
+                .filter((layer) => wantsHoverTooltip(layer, next))
                 .map((layer) => [layer.id, layer]),
             ),
             photos: new Set(
@@ -544,6 +550,7 @@ export function MapboxCanvas({
                     ? { type: "Feature", properties: hit.properties, geometry: hit.geometry }
                     : null,
                   zoom: map.getZoom(),
+                  compare: compareFor(layer.id),
                 })
               : null;
           if (!content) {

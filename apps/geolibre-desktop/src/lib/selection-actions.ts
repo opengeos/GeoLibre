@@ -77,6 +77,27 @@ export function openLayerAttributeTable(layerId: string): void {
 }
 
 /** Clear the selection (keeps the layer active). */
+/**
+ * Pin the one selected feature for comparison: hovering another feature of
+ * its layer then shows how that feature differs (see `compareFeatureProperties`
+ * in `@geolibre/core`). Does nothing unless exactly one feature is selected.
+ *
+ * @returns Whether a feature was pinned.
+ */
+export function pinSelectedFeature(): boolean {
+  const selection = selectedFeatures();
+  if (!selection || selection.features.length !== 1) return false;
+  const [feature] = selection.features;
+  const featureId = useAppStore.getState().selectedFeatureIds[0];
+  useAppStore.getState().setComparePin({
+    layerId: selection.layer.id,
+    featureId,
+    // A snapshot: the comparison is with the feature as it was when pinned.
+    properties: { ...(feature.properties ?? {}) },
+  });
+  return true;
+}
+
 export function clearFeatureSelection(): void {
   useAppStore.getState().selectFeature(null);
 }

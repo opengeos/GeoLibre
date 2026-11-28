@@ -2682,6 +2682,17 @@
     "dataUrl3dTilesStyleUnsupported": "A style cannot be applied to a 3D Tiles tileset.",
     "boundsRestricted": "Bounds locked",
     "boundsRestrictedTooltip": "Map bounds are restricted. You can change this in Settings.",
+    "compare": {
+      "comparedWith": "Compared with {{title}}",
+      "comparedWithPinned": "Compared with the pinned feature",
+      "pinnedValue": "pinned: {{value}}",
+      "noValue": "(none)",
+      "identical": "Same as the pinned feature in every field",
+      "moreDifferences_one": "{{count}} more difference",
+      "moreDifferences_other": "{{count}} more differences",
+      "sameFields_one": "{{count}} field the same",
+      "sameFields_other": "{{count}} fields the same"
+    },
     "identifyAll": {
       "title": "Identified results ({{count}})",
       "resultCount_one": "{{count}} result",
@@ -4518,6 +4529,10 @@
       "zoomToSelection": "Zoom to selection",
       "showEdgeLengths": "Show edge lengths",
       "showEdgeLengthsUnsupported": "Edge lengths are shown on the MapLibre and Mapbox maps only.",
+      "pinToCompare": "Pin feature to compare",
+      "pinToCompareHint": "Select one feature to pin it, then hover others on its layer to compare.",
+      "pinToCompareUnsupported": "Comparing features works on the MapLibre, Mapbox and ArcGIS maps.",
+      "stopComparing": "Stop comparing",
       "invertSelection": "Invert selection",
       "clearSelection": "Clear selection",
       "exportSelection": "Export selected features as layer",

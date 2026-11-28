@@ -15,6 +15,7 @@ import {
   documentLocale,
 } from "@geolibre/core";
 import type { Feature } from "geojson";
+import { createCompareTooltipElement, type HoverCompareOptions } from "./compare-tooltip";
 
 /**
  * The author's popup design for a layer, plus what the renderer needs to apply
@@ -385,17 +386,33 @@ export function createIdentifyPopupRows(
   return rows;
 }
 
+/** Options for {@link createHoverTooltipElement}. */
+export interface HoverTooltipOptions extends IdentifyPopupOptions {
+  /**
+   * A feature of this layer is pinned for comparison: the tip shows how the
+   * hovered feature differs from it instead of the hover fields.
+   */
+  compare?: HoverCompareOptions | null;
+}
+
 /**
  * The hover tooltip's content: the layer's popup title over the fields the
  * author flagged for hover. Kept deliberately small — this follows the pointer,
  * so it shows the one or two fields that name the feature, never the table.
+ * With a pinned feature it is the comparison instead.
  */
 export function createHoverTooltipElement(
   layerName: string,
   properties: Record<string, unknown>,
-  options: IdentifyPopupOptions = {},
+  options: HoverTooltipOptions = {},
 ): HTMLElement | null {
-  const { popup, fieldVisibility, feature, zoom } = options;
+  const { popup, fieldVisibility, feature, zoom, compare } = options;
+  if (compare) {
+    const title =
+      resolveConfiguredPopupTitle(properties, popup, { feature, zoom, fieldVisibility }) ??
+      layerName;
+    return createCompareTooltipElement(title, properties, compare, options);
+  }
   const rows = resolvePopupRows(properties, {
     popup,
     fieldVisibility,

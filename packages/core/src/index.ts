@@ -45,6 +45,7 @@ export * from "./qgis-expression";
 export * from "./layer-descriptive-metadata";
 export * from "./map-click-claims";
 export * from "./popup";
+export * from "./compare";
 export * from "./joins";
 export * from "./virtual-fields";
 export * from "./quick-filters";

@@ -28,7 +28,7 @@ import {
 } from "../imported-document-paths";
 import { withRasterSourceDefaults } from "../raster-source-defaults";
 import { scrubPrintLayoutForRemovedLayers } from "../print-layout-config";
-import { identifyStateWithoutLayers } from "./session-slice";
+import { comparePinWithoutLayers, identifyStateWithoutLayers } from "./session-slice";
 import {
   DEFAULT_LAYER_STYLE,
   shouldUseTiledRendering,
@@ -335,6 +335,7 @@ export const createLayersSlice: SliceCreator<LayersSlice> = (set, get) => ({
       selectedFeatureId: s.selectedLayerId === id ? null : s.selectedFeatureId,
       selectedFeatureIds: s.selectedLayerId === id ? [] : s.selectedFeatureIds,
       ...identifyStateWithoutLayers(s, new Set([id])),
+      comparePin: comparePinWithoutLayers(s, new Set([id])),
       ui: {
         ...s.ui,
         attributeTableDrafts: scrubAttributeTableDrafts(s.ui.attributeTableDrafts, id),

@@ -17,7 +17,7 @@ import {
   scrubWidgetsForRemovedLayers,
 } from "../layer-ref-scrub";
 import { scrubPrintLayoutForRemovedLayers } from "../print-layout-config";
-import { identifyStateWithoutLayers } from "./session-slice";
+import { comparePinWithoutLayers, identifyStateWithoutLayers } from "./session-slice";
 import type { LayerGroup } from "../types";
 import {
   cascadeJoinRefreshForRemoved,
@@ -151,6 +151,7 @@ export const createLayerGroupsSlice: SliceCreator<LayerGroupsSlice> = (set, get)
           : s.selectedLayerId,
         selectedFeatureId: selectionRemoved ? null : s.selectedFeatureId,
         selectedFeatureIds: selectionRemoved ? [] : s.selectedFeatureIds,
+        comparePin: removeChildren ? comparePinWithoutLayers(s, removedIds) : s.comparePin,
         // Children kept at the top level are still in the project, so they
         // keep their place in the Identify target.
         ...(removeChildren

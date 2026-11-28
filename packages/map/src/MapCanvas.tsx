@@ -13,7 +13,8 @@ import {
   isDuckDBQueryLayer,
   isMapClickClaimed,
   isPopupClickEnabled,
-  isPopupHoverEnabled,
+  comparePinFor,
+  wantsHoverTooltip,
   NETCDF_IMAGE_SOURCE_KIND,
   resolveLayerCapabilities,
   resolvePopupMaxWidth,
@@ -241,6 +242,7 @@ export const MapCanvas = memo(function MapCanvas({
   const mapView = useAppStore((s) => s.mapView);
   const layers = useAppStore((s) => s.layers);
   const hoverTooltipsEnabled = useAppStore((s) => s.hoverTooltipsEnabled);
+  const comparePinLayerId = useAppStore((s) => s.comparePin?.layerId ?? null);
   const layerGroups = useAppStore((s) => s.layerGroups);
   const layerGroupsRef = useRef(layerGroups);
   // Read by the photo-popup effect, which rebinds only on photo-layer changes.
@@ -1302,28 +1304,31 @@ export const MapCanvas = memo(function MapCanvas({
 
   // Hover tooltips (#2113): a lightweight tip following the pointer over the
   // layers whose author turned one on, showing the fields they flagged for
-  // hover. Keyed on the ids AND the popup blocks, so editing the tooltip's
-  // fields in the Style panel rebinds immediately.
-  const hoverTooltipKey = useMemo(
-    () =>
-      !hoverTooltipsEnabled
-        ? ""
-        : layers
-            // Group-aware, like the Identify handler and the selection query: a
-            // layer whose own switch is on can still be hidden by its group, and
-            // binding pointer handlers to it would be binding to something the
-            // user cannot see. `applyGroupEffects` also sets the synced MapLibre
-            // layer's visibility to `none`, so nothing fires today either way —
-            // this keeps the two from drifting if that ever stops being true.
-            .filter(
-              (layer) =>
-                effectiveLayerRenderState(layer, layerGroups).visible &&
-                isPopupHoverEnabled(layer.popup),
-            )
-            .map((layer) => `${layer.id}\u0000${JSON.stringify(layer.popup ?? {})}`)
-            .join("\u0001"),
-    [layers, layerGroups, hoverTooltipsEnabled],
-  );
+  // hover, and over the layer of a feature pinned for comparison, showing how
+  // the hovered feature differs. Keyed on the ids AND the popup blocks, so
+  // editing the tooltip's fields in the Style panel rebinds immediately.
+  const hoverTooltipKey = useMemo(() => {
+    const state = {
+      hoverTooltipsEnabled,
+      comparePin: comparePinLayerId ? useAppStore.getState().comparePin : null,
+    };
+    return (
+      layers
+        // Group-aware, like the Identify handler and the selection query: a
+        // layer whose own switch is on can still be hidden by its group, and
+        // binding pointer handlers to it would be binding to something the
+        // user cannot see. `applyGroupEffects` also sets the synced MapLibre
+        // layer's visibility to `none`, so nothing fires today either way —
+        // this keeps the two from drifting if that ever stops being true.
+        .filter(
+          (layer) =>
+            effectiveLayerRenderState(layer, layerGroups).visible &&
+            wantsHoverTooltip(layer, state),
+        )
+        .map((layer) => `${layer.id}\u0000${JSON.stringify(layer.popup ?? {})}`)
+        .join("\u0001")
+    );
+  }, [layers, layerGroups, hoverTooltipsEnabled, comparePinLayerId]);
 
   useEffect(() => {
     const map = controller.current?.getMap();
@@ -1378,16 +1383,19 @@ export const MapCanvas = memo(function MapCanvas({
       }
       // Read the layer from the store rather than from a captured array, so an
       // edit to the tooltip's fields shows on the very next pointer move.
-      const layer = useAppStore.getState().layers.find((item) => item.id === next.layerId);
-      if (!layer) {
+      const state = useAppStore.getState();
+      const layer = state.layers.find((item) => item.id === next.layerId);
+      if (!layer || !wantsHoverTooltip(layer, state)) {
         removeTooltip();
         return;
       }
+      const pin = comparePinFor(layer.id, state);
       const content = createHoverTooltipElement(layer.name, next.feature.properties ?? {}, {
         popup: layer.popup,
         fieldVisibility: layer.fieldVisibility,
         feature: next.feature,
         zoom: map.getZoom(),
+        compare: pin ? { pin, labels: identifyLabelsRef.current.compare } : null,
       });
       if (!content) {
         removeTooltip();

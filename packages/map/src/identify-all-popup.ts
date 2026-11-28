@@ -6,6 +6,7 @@ import {
   type MapCanvasIdentifyEditActions,
 } from "./identify-edit-actions";
 import { DEFAULT_PHOTO_POPUP_LABELS, type PhotoPopupLabels } from "./photo-popup";
+import { DEFAULT_COMPARE_TOOLTIP_LABELS, type CompareTooltipLabels } from "./compare-tooltip";
 
 // The grouped, all-layer Identify popup. Engine-neutral DOM, shared by the
 // MapLibre and Mapbox canvases so both show the same chooser.
@@ -40,6 +41,8 @@ export interface MapCanvasIdentifyAllLabels {
   editAttributes: string;
   /** The geotagged-photo popup's strings; see `createPhotoPopupElement`. */
   photo: PhotoPopupLabels;
+  /** The pin-and-compare hover tooltip's strings; see `createCompareTooltipElement`. */
+  compare: CompareTooltipLabels;
 }
 
 /** English fallbacks; the app passes translated labels. */
@@ -63,6 +66,7 @@ export const DEFAULT_IDENTIFY_ALL_LABELS: MapCanvasIdentifyAllLabels = {
   editGeometry: "Edit geometry",
   editAttributes: "Edit attributes",
   photo: DEFAULT_PHOTO_POPUP_LABELS,
+  compare: DEFAULT_COMPARE_TOOLTIP_LABELS,
 };
 
 /** One entry in the grouped, all-layer Identify popup. */

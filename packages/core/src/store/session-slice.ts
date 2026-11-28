@@ -4,6 +4,7 @@
  * GPS readouts the status bar shows. None of it is saved with the project or
  * tracked by undo history.
  */
+import type { ComparePin } from "../compare";
 import type { SliceCreator } from "./types";
 
 /**
@@ -106,10 +107,25 @@ export function identifyStateWithoutLayers(
   return { identifyLayerId: state.identifyLayerId, identifyLayerIds: ids };
 }
 
+/** The compare pin, or `null` when its layer is among `removed`. */
+export function comparePinWithoutLayers(
+  state: { comparePin: ComparePin | null },
+  removed: ReadonlySet<string>,
+): ComparePin | null {
+  return state.comparePin && removed.has(state.comparePin.layerId) ? null : state.comparePin;
+}
+
 export interface SessionSlice {
   /** Local viewing switch; saved layer popup settings are left untouched. */
   hoverTooltipsEnabled: boolean;
   setHoverTooltipsEnabled: (enabled: boolean) => void;
+  /**
+   * The feature hovered features of its layer are compared with (Edit → Pin
+   * feature to compare), or `null`. Session state like the selection: not
+   * saved, cleared when its layer goes or another project opens.
+   */
+  comparePin: ComparePin | null;
+  setComparePin: (pin: ComparePin | null) => void;
   selectedLayerId: string | null;
   selectedFeatureId: string | null;
   /**
@@ -179,6 +195,8 @@ export interface SessionSlice {
 export const createSessionSlice: SliceCreator<SessionSlice> = (set) => ({
   hoverTooltipsEnabled: true,
   setHoverTooltipsEnabled: (enabled) => set({ hoverTooltipsEnabled: enabled }),
+  comparePin: null,
+  setComparePin: (pin) => set({ comparePin: pin }),
   selectedLayerId: null,
   selectedFeatureId: null,
   selectedFeatureIds: [],

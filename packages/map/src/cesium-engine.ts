@@ -94,6 +94,8 @@ export const CESIUM_CAPABILITIES: MapEngineCapabilities = Object.freeze({
   measureTool: true,
   // Side labels are a MapLibre/Mapbox symbol layer; the globe has no analogue yet.
   edgeLengthLabels: false,
+  // The globe's hover tip does not take part in pin and compare yet.
+  featureCompare: false,
   controlLayerPanels: true,
   supportedLayerKinds: CESIUM_SUPPORTED_LAYER_KINDS,
 });
