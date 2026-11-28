@@ -398,6 +398,12 @@ export interface MapEngineCapabilities {
    */
   readonly edgeLengthLabels: boolean;
   /**
+   * The hover tooltip compares a hovered feature with the one pinned for
+   * comparison (`comparePin` in the store), so "Pin feature to compare" is
+   * offered.
+   */
+  readonly featureCompare: boolean;
+  /**
    * The raster and PMTiles add-layer panels (`IControl`s the plugins mount on
    * the map) work here. Without it those formats, and Zarr, are added through
    * the Add Data dialog's forms instead.
@@ -449,6 +455,7 @@ export const MAPLIBRE_CAPABILITIES: MapEngineCapabilities = Object.freeze({
   deferredEngineReady: false,
   measureTool: true,
   edgeLengthLabels: true,
+  featureCompare: true,
   controlLayerPanels: true,
   supportedLayerKinds: MAPLIBRE_SUPPORTED_LAYER_KINDS,
 });

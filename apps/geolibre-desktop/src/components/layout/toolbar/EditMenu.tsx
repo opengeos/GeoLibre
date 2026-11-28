@@ -22,6 +22,8 @@ import {
   FilePlus2,
   Locate,
   Pencil,
+  Pin,
+  PinOff,
   Redo2,
   Ruler,
   Shuffle,
@@ -39,6 +41,7 @@ import {
   clearFeatureSelection,
   exportSelectionAsLayer,
   invertLayerSelection,
+  pinSelectedFeature,
   zoomToSelection,
 } from "../../../lib/selection-actions";
 import { editMenuItemCapability } from "../../../lib/deployment-gates";
@@ -92,7 +95,13 @@ export function EditMenu({ chrome, mapControllerRef }: EditMenuProps) {
   const hasSelection = activeLayerSelectable && selectionCount > 0;
   const showEdgeLengths = useAppStore((s) => s.ui.showEdgeLengths);
   const setShowEdgeLengths = useAppStore((s) => s.setShowEdgeLengths);
-  const edgeLengthsSupported = useMapCapabilities(mapControllerRef).edgeLengthLabels;
+  const capabilities = useMapCapabilities(mapControllerRef);
+  const edgeLengthsSupported = capabilities.edgeLengthLabels;
+  const compareSupported = capabilities.featureCompare;
+  const comparing = useAppStore((s) => s.comparePin !== null);
+  const setComparePin = useAppStore((s) => s.setComparePin);
+  // A comparison is with one feature, so pinning needs exactly one selected.
+  const canPin = activeLayerSelectable && selectionCount === 1;
   const uiProfile = useDesktopSettingsStore((s) => s.desktopSettings.uiProfile);
   const deploymentCapabilities = useAppStore((s) => s.deploymentCapabilities);
   // Same dual gate as ProjectMenu: the deployment's capability first (not on
@@ -197,6 +206,27 @@ export function EditMenu({ chrome, mapControllerRef }: EditMenuProps) {
             <span className="whitespace-nowrap">{t("toolbar.item.showEdgeLengths")}</span>
           </DropdownMenuCheckboxItem>
         )}
+        {/* An active pin can always be cleared, even with the item hidden. */}
+        {(comparing || show("edit.pinToCompare")) &&
+          (comparing ? (
+            <DropdownMenuItem onSelect={() => setComparePin(null)}>
+              <PinOff className={iconClass} />
+              <span className="whitespace-nowrap">{t("toolbar.item.stopComparing")}</span>
+            </DropdownMenuItem>
+          ) : (
+            <DropdownMenuItem
+              disabled={!compareSupported || !canPin}
+              title={
+                compareSupported
+                  ? t("toolbar.item.pinToCompareHint")
+                  : t("toolbar.item.pinToCompareUnsupported")
+              }
+              onSelect={pinSelectedFeature}
+            >
+              <Pin className={iconClass} />
+              <span className="whitespace-nowrap">{t("toolbar.item.pinToCompare")}</span>
+            </DropdownMenuItem>
+          ))}
         {show("edit.exportSelection") && (
           <DropdownMenuItem disabled={!hasSelection} onSelect={handleExportSelection}>
             <FilePlus2 className={iconClass} />

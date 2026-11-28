@@ -472,6 +472,12 @@ export const MENU_ITEM_CATALOG: readonly MenuItemCatalogEntry[] = [
     tier: "intermediate",
   },
   {
+    id: "edit.pinToCompare",
+    menuId: "edit",
+    labelKey: "toolbar.item.pinToCompare",
+    tier: "intermediate",
+  },
+  {
     id: "edit.exportSelection",
     menuId: "edit",
     labelKey: "toolbar.item.exportSelection",

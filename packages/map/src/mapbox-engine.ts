@@ -105,6 +105,7 @@ export const MAPBOX_CAPABILITIES: MapEngineCapabilities = Object.freeze({
   deferredEngineReady: true,
   measureTool: true,
   edgeLengthLabels: true,
+  featureCompare: true,
   controlLayerPanels: true,
   supportedLayerKinds: MAPBOX_SUPPORTED_LAYER_KINDS,
 });

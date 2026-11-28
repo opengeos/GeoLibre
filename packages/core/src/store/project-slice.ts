@@ -218,6 +218,7 @@ export const createProjectSlice: SliceCreator<ProjectSlice> = (set, get) => ({
       selectedLayerId: null,
       selectedFeatureId: null,
       selectedFeatureIds: [],
+      comparePin: null,
       identifyLayerId: null,
       identifyLayerIds: null,
       featureSelectionActive: false,
@@ -308,6 +309,7 @@ export const createProjectSlice: SliceCreator<ProjectSlice> = (set, get) => ({
       selectedLayerId,
       selectedFeatureId: null,
       selectedFeatureIds: [],
+      comparePin: null,
       featureSelectionActive: false,
       // A project that saved an Identify target (issue #2688) opens with it
       // armed; any other load disarms Identify, since the previous target

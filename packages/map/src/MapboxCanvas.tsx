@@ -10,7 +10,8 @@ import {
   isDuckDBQueryLayer,
   isMapClickClaimed,
   isPopupClickEnabled,
-  isPopupHoverEnabled,
+  comparePinFor,
+  wantsHoverTooltip,
   NETCDF_IMAGE_SOURCE_KIND,
   redactUrlCredentials,
   resolveLayerCapabilities,
@@ -391,6 +392,9 @@ export function MapboxCanvas({
         cleanupTasks.push(unsubscribe);
         const stopHoverWatch = useAppStore.subscribe((state, previous) => {
           if (!state.hoverTooltipsEnabled && previous.hoverTooltipsEnabled) removeHoverTooltip();
+          // A comparison drawn against the old pin (or none) must not outlive
+          // the change under a motionless cursor; the next move redraws.
+          else if (state.comparePin !== previous.comparePin) removeHoverTooltip();
         });
         cleanupTasks.push(stopHoverWatch);
         if (!viewId) {
@@ -486,6 +490,11 @@ export function MapboxCanvas({
           photoCursor = active;
           map.getCanvas().style.cursor = active ? "pointer" : "";
         };
+        /** The pinned feature a hovered one of `layerId` is compared with, if any. */
+        const compareFor = (layerId: string) => {
+          const pin = comparePinFor(layerId, useAppStore.getState());
+          return pin ? { pin, labels: identifyAllLabelsRef.current.compare } : null;
+        };
         /** Visible layers that show a hover tip, and the geotagged-photo layers. */
         const pointerTargets = () => {
           const next = useAppStore.getState();
@@ -496,7 +505,7 @@ export function MapboxCanvas({
           return {
             hover: new Map(
               visible
-                .filter((layer) => next.hoverTooltipsEnabled && isPopupHoverEnabled(layer.popup))
+                .filter((layer) => wantsHoverTooltip(layer, next))
                 .map((layer) => [layer.id, layer]),
             ),
             photos: new Set(
@@ -544,6 +553,7 @@ export function MapboxCanvas({
                     ? { type: "Feature", properties: hit.properties, geometry: hit.geometry }
                     : null,
                   zoom: map.getZoom(),
+                  compare: compareFor(layer.id),
                 })
               : null;
           if (!content) {

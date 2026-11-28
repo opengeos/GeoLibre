@@ -76,6 +76,32 @@ export function openLayerAttributeTable(layerId: string): void {
   useAppStore.getState().setAttributeTableOpen(true);
 }
 
+/**
+ * Pin the one selected feature for comparison: hovering another feature of
+ * its layer then shows how that feature differs (see `compareFeatureProperties`
+ * in `@geolibre/core`). Does nothing unless exactly one feature is selected.
+ *
+ * @returns Whether a feature was pinned.
+ */
+export function pinSelectedFeature(): boolean {
+  const selection = selectedFeatures();
+  if (!selection || selection.features.length !== 1) return false;
+  const [feature] = selection.features;
+  // The id of the matched feature itself: `selectedFeatureIds` can still hold
+  // a stale id next to it, in any order.
+  const index = selection.layer.geojson?.features.indexOf(feature) ?? -1;
+  useAppStore.getState().setComparePin({
+    layerId: selection.layer.id,
+    featureId: featureSelectionId(feature, index),
+    // A snapshot: the comparison is with the feature as it was when pinned.
+    properties: { ...(feature.properties ?? {}) },
+  });
+  // Identify suppresses hover tips on every renderer, so an armed Identify
+  // would hide the comparison the user just asked for.
+  if (useAppStore.getState().identifyLayerId) useAppStore.getState().setIdentifyLayer(null);
+  return true;
+}
+
 /** Clear the selection (keeps the layer active). */
 export function clearFeatureSelection(): void {
   useAppStore.getState().selectFeature(null);
