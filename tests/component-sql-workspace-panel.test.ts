@@ -9,8 +9,16 @@ const { SqlWorkspacePanel } =
 type Services =
   import("../apps/geolibre-desktop/src/components/panels/SqlWorkspacePanel").SqlWorkspaceServices;
 type Result = Awaited<ReturnType<Services["runSqlQuery"]>>;
+const { consumePendingAssistantPrompt } =
+  await import("../apps/geolibre-desktop/src/lib/assistant-prompt-request");
+const { useDesktopSettingsStore } =
+  await import("../apps/geolibre-desktop/src/hooks/useDesktopSettings");
 
-afterEach(() => window.localStorage.clear());
+afterEach(() => {
+  window.localStorage.clear();
+  // A prompt a test parked but never read must not reach the next one.
+  consumePendingAssistantPrompt();
+});
 
 const GEOMETRY_RESULT: Result = {
   columns: ["name", "pop"],
@@ -165,6 +173,131 @@ describe("SqlWorkspacePanel", () => {
     runSql("SELECT * FROM citys");
     await waitFor(() => assert.ok(text().includes("does not exist")));
     assert.ok(text().includes("Queryable layers: cities"));
+  });
+
+  it("hands a failed query and its error to the assistant from Fix", async () => {
+    const { services } = fakeServices({
+      fail: 'Catalog Error: Table with name "citys" does not exist!',
+    });
+    renderPanel(services);
+    assert.equal(screen.queryByRole("button", { name: "Fix" }), null);
+    runSql("SELECT * FROM citys");
+    const fix = await screen.findByRole("button", { name: "Fix" });
+    // The prompt quotes the statement that failed, not a later edit.
+    fireEvent.change(editor(), { target: { value: "SELECT 2" } });
+    fireEvent.click(fix);
+    assert.equal(useAppStore.getState().ui.assistantOpen, true);
+    assert.equal(
+      consumePendingAssistantPrompt(),
+      [
+        "This DuckDB query failed in the SQL workspace. Say what is wrong and reply with a " +
+          "corrected query I can paste back in. Don't add anything to the map.",
+        "",
+        "Query:",
+        "```sql",
+        "SELECT * FROM citys",
+        "```",
+        "",
+        "Error:",
+        "```",
+        'Catalog Error: Table with name "citys" does not exist!',
+        "```",
+      ].join("\n"),
+    );
+  });
+
+  it("tells the assistant when a failed query is not a DuckDB one", async () => {
+    const { services } = fakeServices({ fail: "syntax error at or near FORM" });
+    renderPanel(services);
+    fireEvent.change(screen.getByLabelText("SQL engine"), { target: { value: "postgis" } });
+    runSql("SELECT * FORM cities");
+    fireEvent.click(await screen.findByRole("button", { name: "Fix" }));
+    const prompt = consumePendingAssistantPrompt();
+    assert.ok(prompt?.startsWith("This PostGIS query failed in the SQL workspace."));
+    assert.ok(prompt?.includes("It runs on PostGIS, not DuckDB, so keep to PostGIS syntax."));
+  });
+
+  it("drops Fix once the query runs, and does not offer it for an export error", async () => {
+    const failing = fakeServices({ fail: "boom" });
+    const working = fakeServices();
+    working.services.saveBinaryFile = async () => {
+      throw new Error("Disk is full");
+    };
+    const { rerender } = renderPanel(failing.services);
+    runSql("SELECT * FROM cities");
+    await screen.findByRole("button", { name: "Fix" });
+    rerender(createElement(SqlWorkspacePanel, { services: working.services }));
+    fireEvent.click(screen.getByRole("button", { name: "Run" }));
+    await waitFor(() => assert.ok(text().includes("2 rows")));
+    assert.equal(screen.queryByRole("button", { name: "Fix" }), null);
+    fireEvent.click(screen.getByRole("button", { name: "Export CSV" }));
+    await waitFor(() => assert.ok(text().includes("Disk is full")));
+    assert.equal(screen.queryByRole("button", { name: "Fix" }), null);
+  });
+
+  it("hands the editor's query to the assistant from Explain", () => {
+    const { services, runs } = fakeServices();
+    renderPanel(services);
+    fireEvent.change(editor(), { target: { value: "  SELECT name FROM cities  " } });
+    fireEvent.click(screen.getByRole("button", { name: "Explain" }));
+    assert.equal(useAppStore.getState().ui.assistantOpen, true);
+    assert.equal(
+      consumePendingAssistantPrompt(),
+      [
+        "Explain what this DuckDB query from the SQL workspace does, step by step. " +
+          "Don't run it or change the map.",
+        "",
+        "Query:",
+        "```sql",
+        "SELECT name FROM cities",
+        "```",
+      ].join("\n"),
+    );
+    // Explaining a query does not run it.
+    assert.deepEqual(runs, []);
+    fireEvent.change(editor(), { target: { value: "   " } });
+    assert.equal(
+      (screen.getByRole("button", { name: "Explain" }) as HTMLButtonElement).disabled,
+      true,
+    );
+  });
+
+  it("hides Fix and Explain where the assistant is not offered", async () => {
+    const { services } = fakeServices({ fail: "boom" });
+    renderPanel(services);
+    runSql("SELECT * FROM cities");
+    await screen.findByRole("button", { name: "Fix" });
+    assert.ok(screen.getByRole("button", { name: "Explain" }));
+
+    // The session's role withholds the assistant.
+    const granted = useAppStore.getState().capabilities.privileges;
+    act(() =>
+      useAppStore
+        .getState()
+        .setAppPrivileges(granted.filter((privilege) => privilege !== "assistant:use")),
+    );
+    assert.equal(screen.queryByRole("button", { name: "Fix" }), null);
+    assert.equal(screen.queryByRole("button", { name: "Explain" }), null);
+    assert.ok(text().includes("boom"));
+    act(() => useAppStore.getState().setAppPrivileges([...granted]));
+    assert.ok(screen.getByRole("button", { name: "Fix" }));
+
+    // The interface profile hides the assistant's menu entry.
+    const settings = useDesktopSettingsStore.getState().desktopSettings;
+    act(() =>
+      useDesktopSettingsStore.setState({
+        desktopSettings: {
+          ...settings,
+          uiProfile: {
+            ...settings.uiProfile,
+            enabled: true,
+            hiddenMenuItems: ["processing.assistant"],
+          },
+        },
+      }),
+    );
+    assert.equal(screen.queryByRole("button", { name: "Fix" }), null);
+    assert.equal(screen.queryByRole("button", { name: "Explain" }), null);
   });
 
   it("reports a statement with no rows, and clears the editor", async () => {

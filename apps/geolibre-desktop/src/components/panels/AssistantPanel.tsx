@@ -28,6 +28,10 @@ import {
 } from "react";
 import { useTranslation } from "react-i18next";
 import { AssistantSession } from "../../lib/assistant/agent";
+import {
+  ASSISTANT_PROMPT_EVENT,
+  consumePendingAssistantPrompt,
+} from "../../lib/assistant-prompt-request";
 import { renderAssistantMarkdown } from "../../lib/assistant/markdown";
 import { isOllamaNetworkFailure, withOllamaOriginHint } from "../../lib/assistant/ollama";
 import { configForProfile, selectActiveAssistantProfile } from "../../lib/assistant/profiles";
@@ -444,6 +448,45 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
     };
   }, []);
 
+  // Mirror of `input` for the mount-once hand-off listener below, so it can
+  // read the composer's draft without re-registering on every keystroke.
+  const inputValueRef = useRef(input);
+  useEffect(() => {
+    inputValueRef.current = input;
+  }, [input]);
+  // Set when a handed-off prompt was just placed in the composer, so the effect
+  // after it can focus the composer once React has rendered the new text.
+  const revealDraftRef = useRef(false);
+
+  // Take a prompt drafted elsewhere (the SQL Workspace's Fix and Explain
+  // buttons): consume a parked prompt on mount (the panel was closed when it was
+  // requested) and apply later requests while mounted via the event. The prompt
+  // becomes the composer's draft and is not sent — a run spends the user's
+  // provider credits, so sending stays their call. With no provider configured
+  // the composer is not rendered yet; the draft waits in state and is there once
+  // the setup card gives way to it.
+  useEffect(() => {
+    const applyPending = () => {
+      const pending = consumePendingAssistantPrompt();
+      if (pending === null) return;
+      // The prompt replaces the composer's content, so park a draft in progress
+      // in the prompt history first: Arrow Up brings it back.
+      const draft = inputValueRef.current.trim();
+      const history = promptHistoryRef.current;
+      if (draft && draft !== pending.trim() && history.at(-1) !== draft) history.push(draft);
+      promptHistoryIndexRef.current = null;
+      promptDraftRef.current = pending;
+      revealDraftRef.current = true;
+      setInput(pending);
+      // Covers a repeat request for the draft already in the composer, which
+      // changes no state and so never reaches the reveal effect.
+      inputRef.current?.focus();
+    };
+    applyPending();
+    window.addEventListener(ASSISTANT_PROMPT_EVENT, applyPending);
+    return () => window.removeEventListener(ASSISTANT_PROMPT_EVENT, applyPending);
+  }, []);
+
   /**
    * Runs one prompt through the agent and streams it into the transcript.
    *
@@ -781,6 +824,21 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
     if (prevShowSetupRef.current && !showSetup) inputRef.current?.focus();
     prevShowSetupRef.current = showSetup;
   }, [showSetup]);
+
+  // Focus the composer on a handed-off draft and show it from its first line.
+  // Re-checked when the setup card gives way to the composer, which is when a
+  // draft handed off before a provider was configured first has a textarea.
+  // Focusing a textarea scrolls to the caret at the end, which would leave only
+  // the closing lines of the quoted query in the two visible rows; the opening
+  // instruction is what tells the user what they are about to send.
+  useEffect(() => {
+    if (!revealDraftRef.current) return;
+    const el = inputRef.current;
+    if (!el) return;
+    revealDraftRef.current = false;
+    el.focus();
+    el.scrollTop = 0;
+  }, [input, showSetup]);
 
   return (
     <section
