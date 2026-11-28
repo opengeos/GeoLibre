@@ -433,17 +433,20 @@ describe("diagnostics startup transient suppression", () => {
     const messages = [
       'Image "office" could not be loaded. Please make sure you have added the image before it is needed with map.addImage(), resolved it with map.setMissingStyleImageResolver(), or included it in a "sprite" property in your style.',
       'Image "toll_booth" could not be loaded. Please make sure you have added the image with map.addImage() or a "sprite" property in your style. You can provide missing images by listening for the "styleimagemissing" map event.',
+      // A data-driven image name can contain a line break.
+      'Image "line\nbreak" could not be loaded. Please make sure you have added the image before it is needed with map.addImage().',
     ];
     for (const message of messages) console.warn(message);
     console.warn("a normal warning");
     assert.deepEqual(echoed, [...messages.map((message) => [message]), ["a normal warning"]]);
     const snapshot = getDiagnosticsSnapshot();
-    assert.equal(snapshot.totalCount, 3);
+    assert.equal(snapshot.totalCount, 4);
     assert.equal(snapshot.warningCount, 1);
     assert.deepEqual(
       snapshot.records.map((record) => [record.category, record.level]),
       [
         ["console", "warning"],
+        ["console", "info"],
         ["console", "info"],
         ["console", "info"],
       ],

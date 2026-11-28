@@ -106,9 +106,12 @@ function isBenignConsoleWarning(args: unknown[]): boolean {
 // street-level view adds a few. The map draws those labels without an icon, and
 // the warning also fires when a `styleimagemissing` listener adds the image right
 // after it. Neither is something the user can act on, so it is recorded as info:
-// listed in the panel, not counted in the status bar.
+// listed in the panel, not counted in the status bar. The text mirrors
+// MapLibre's `ImageManager` warning (src/render/image_manager.ts); if upstream
+// rewords it, these entries fall back to counting as warnings. The `s` flag lets
+// a data-driven image name contain a line break.
 const MISSING_STYLE_IMAGE_WARNING =
-  /^Image ".*" could not be loaded\. Please make sure you have added the image/;
+  /^Image ".*" could not be loaded\. Please make sure you have added the image/s;
 
 /** Whether a console.warn message is recorded as info rather than a warning. */
 function isInformationalConsoleWarning(args: unknown[]): boolean {
