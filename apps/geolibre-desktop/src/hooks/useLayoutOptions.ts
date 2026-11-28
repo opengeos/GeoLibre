@@ -3,6 +3,7 @@ import { useMemo } from "react";
 import { useShallow } from "zustand/react/shallow";
 import {
   arePanelsHidden,
+  chromeToggle,
   isDrawRequested,
   isMapOnly,
   isToolbarHidden,
@@ -109,8 +110,18 @@ export function layoutOptionsFromLocation(
   const toolbarLabels =
     !compact && !ICON_TOOLBAR_VALUES.has(toolbar) ? layoutSettings.toolbarLabels : false;
   const showProjectInfo = compact ? false : layoutSettings.showProjectInfo;
-  const layerPanelVisible = panelsHidden ? false : viewer ? true : layoutSettings.layerPanelVisible;
-  const stylePanelVisible = panelsHidden || viewer ? false : layoutSettings.stylePanelVisible;
+  // `?layerPanel=` / `?stylePanel=` override the persisted settings toggle for
+  // this page, in either direction; `maponly`/`panels=hidden` and the viewer's
+  // fixed chrome still win.
+  const layerPanelVisible = panelsHidden
+    ? false
+    : viewer
+      ? true
+      : (chromeToggle(params, "layerPanel") ?? layoutSettings.layerPanelVisible);
+  const stylePanelVisible =
+    panelsHidden || viewer
+      ? false
+      : (chromeToggle(params, "stylePanel") ?? layoutSettings.stylePanelVisible);
   // The attribute table is hidden by default and opened on demand from a
   // vector layer's context menu, so it has no persisted settings toggle; it
   // only needs to be unmounted when the embed chrome is hidden.
@@ -124,7 +135,7 @@ export function layoutOptionsFromLocation(
     panelsHidden,
     panelsCollapsed,
     showProjectInfo,
-    statusBarVisible: !mapOnly,
+    statusBarVisible: !mapOnly && chromeToggle(params, "statusBar") !== false,
     stylePanelVisible,
     toolbarLabels,
     toolbarVisible: !isToolbarHidden(params),

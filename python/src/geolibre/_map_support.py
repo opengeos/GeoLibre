@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import pathlib
 import warnings
 from typing import Any
@@ -22,6 +23,95 @@ _VALID_LAYOUTS = frozenset({"embed", "full", "maponly"})
 
 
 _VALID_THEMES = frozenset({"light", "dark"})
+
+
+#: App chrome a :class:`Map` can show or hide, keyed by constructor argument:
+#: ``(app query param, environment variable)``. The query params are read by
+#: ``useLayoutOptions`` in ``apps/geolibre-desktop/src/hooks/useLayoutOptions.ts``.
+CHROME_TOGGLES: dict[str, tuple[str, str]] = {
+    "toolbar": ("toolbar", "GEOLIBRE_TOOLBAR"),
+    "layer_panel": ("layerPanel", "GEOLIBRE_LAYER_PANEL"),
+    "style_panel": ("stylePanel", "GEOLIBRE_STYLE_PANEL"),
+    "status_bar": ("statusBar", "GEOLIBRE_STATUS_BAR"),
+}
+
+#: Environment variables that supply a default ``app_layout`` / ``theme``.
+APP_LAYOUT_ENV = "GEOLIBRE_APP_LAYOUT"
+THEME_ENV = "GEOLIBRE_THEME"
+#: Environment variable that supplies a default ``renderer``.
+RENDERER_ENV = "GEOLIBRE_RENDERER"
+
+_TRUE_ENV_VALUES = frozenset({"1", "true", "yes", "on", "show", "shown", "visible"})
+_FALSE_ENV_VALUES = frozenset({"0", "false", "no", "off", "hide", "hidden", "none"})
+
+
+def _env_flag(name: str) -> bool | None:
+    """Read a boolean chrome toggle from the environment.
+
+    Args:
+        name: The environment variable to read.
+
+    Returns:
+        ``True`` or ``False`` for a recognized value, or ``None`` when the
+        variable is unset, empty, or unrecognized (which also warns).
+    """
+    raw = os.environ.get(name, "").strip().lower()
+    if not raw:
+        return None
+    if raw in _TRUE_ENV_VALUES:
+        return True
+    if raw in _FALSE_ENV_VALUES:
+        return False
+    warnings.warn(
+        f"Ignoring {name}={os.environ[name]!r}: expected a value such as true/false, "
+        "1/0, on/off, or show/hide",
+        # _env_flag -> _resolve_chrome -> Map.__init__ -> the caller.
+        stacklevel=4,
+    )
+    return None
+
+
+def _resolve_chrome(values: dict[str, bool | None]) -> dict[str, bool | None]:
+    """Fill unset chrome toggles from their environment variables.
+
+    Args:
+        values: Constructor arguments keyed by :data:`CHROME_TOGGLES` name;
+            ``None`` means "not given".
+
+    Returns:
+        The same keys, each an explicit argument, else its environment
+        variable's value, else ``None`` (the app's own default).
+
+    Raises:
+        TypeError: If an argument is neither a bool nor ``None``.
+    """
+    resolved: dict[str, bool | None] = {}
+    for key, (_param, env) in CHROME_TOGGLES.items():
+        value = values.get(key)
+        if value is not None and not isinstance(value, bool):
+            raise TypeError(f"{key} must be True, False, or None, got {value!r}")
+        resolved[key] = value if value is not None else _env_flag(env)
+    return resolved
+
+
+def _chrome_query_flags(chrome: dict[str, bool | None]) -> list[str]:
+    """Translate chrome toggles into the app's query-string flags.
+
+    Args:
+        chrome: Toggles keyed by :data:`CHROME_TOGGLES` name. ``None`` adds no
+            flag. The toolbar has no "force visible" value, so ``True`` adds
+            nothing for it.
+
+    Returns:
+        ``key=value`` strings such as ``"layerPanel=hidden"``.
+    """
+    flags: list[str] = []
+    for key, (param, _env) in CHROME_TOGGLES.items():
+        value = chrome.get(key)
+        if value is None or (key == "toolbar" and value):
+            continue
+        flags.append(f"{param}={'visible' if value else 'hidden'}")
+    return flags
 
 
 #: Toolbar panels :meth:`Map.show_control` opens. Mirrors ``SCRIPTABLE_PANELS``

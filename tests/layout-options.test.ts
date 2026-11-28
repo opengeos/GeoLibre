@@ -251,4 +251,53 @@ describe("layoutOptionsFromLocation", () => {
       assert.equal(options.attributePanelVisible, false);
     });
   });
+
+  describe("per-element chrome toggles", () => {
+    const defaults = DEFAULT_DESKTOP_LAYOUT_SETTINGS;
+
+    it("hides the Layers panel, Style panel, and status bar one at a time", () => {
+      withSearch("?layerPanel=hidden");
+      let options = layoutOptionsFromLocation(defaults, ALL_DEPLOYMENT_CAPABILITIES);
+      assert.equal(options.layerPanelVisible, false);
+      assert.equal(options.stylePanelVisible, true);
+      assert.equal(options.statusBarVisible, true);
+      assert.equal(options.toolbarVisible, true);
+
+      withSearch("?stylePanel=off&statusBar=0");
+      options = layoutOptionsFromLocation(defaults, ALL_DEPLOYMENT_CAPABILITIES);
+      assert.equal(options.layerPanelVisible, true);
+      assert.equal(options.stylePanelVisible, false);
+      assert.equal(options.statusBarVisible, false);
+    });
+
+    it("shows a panel the saved settings hide", () => {
+      withSearch("?layerPanel=visible&stylePanel=true");
+      const options = layoutOptionsFromLocation(
+        { ...defaults, layerPanelVisible: false, stylePanelVisible: false },
+        ALL_DEPLOYMENT_CAPABILITIES,
+      );
+      assert.equal(options.layerPanelVisible, true);
+      assert.equal(options.stylePanelVisible, true);
+    });
+
+    it("ignores unrecognized values", () => {
+      withSearch("?layerPanel=maybe&statusBar=");
+      const options = layoutOptionsFromLocation(defaults, ALL_DEPLOYMENT_CAPABILITIES);
+      assert.equal(options.layerPanelVisible, true);
+      assert.equal(options.statusBarVisible, true);
+    });
+
+    it("cannot reveal chrome that maponly or the viewer hides", () => {
+      withSearch("?maponly&layerPanel=visible&stylePanel=visible&statusBar=visible");
+      let options = layoutOptionsFromLocation(defaults, ALL_DEPLOYMENT_CAPABILITIES);
+      assert.equal(options.layerPanelVisible, false);
+      assert.equal(options.stylePanelVisible, false);
+      assert.equal(options.statusBarVisible, false);
+
+      withSearch("?layout=viewer&stylePanel=visible&layerPanel=hidden");
+      options = layoutOptionsFromLocation(defaults, ALL_DEPLOYMENT_CAPABILITIES);
+      assert.equal(options.stylePanelVisible, false);
+      assert.equal(options.layerPanelVisible, true);
+    });
+  });
 });

@@ -234,6 +234,14 @@ describe("viewerChromeParams (#2764)", () => {
     ]);
   });
 
+  it("carries the per-element chrome toggles", () => {
+    assert.deepEqual(viewerChromeParams("?layerPanel=hidden&statusBar=hidden&stylePanel=visible"), [
+      ["layerPanel", "hidden"],
+      ["stylePanel", "visible"],
+      ["statusBar", "hidden"],
+    ]);
+  });
+
   it("drops a launch-time panels=collapsed the user has since expanded", () => {
     assert.deepEqual(viewerChromeParams("?panels=collapsed", { layersCollapsed: false }), []);
   });

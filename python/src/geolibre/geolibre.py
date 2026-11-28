@@ -74,6 +74,13 @@ from ._map_support import (
     _VALID_THEMES as _VALID_THEMES,
 )
 from ._map_support import (
+    APP_LAYOUT_ENV,
+    CHROME_TOGGLES,
+    RENDERER_ENV,
+    THEME_ENV,
+    _resolve_chrome,
+)
+from ._map_support import (
     MAP_CONTROLS as MAP_CONTROLS,
 )
 from ._map_support import (
@@ -98,6 +105,9 @@ from ._server import (
     serve_app,
 )
 from .basemaps import resolve_basemap
+
+# Primary renderers a project can name; mirrors build_empty_project's check.
+_VALID_RENDERERS = frozenset({"maplibre", "cesium", "mapbox", "arcgis"})
 
 # The public names this module has always exposed; several now live in the
 # private modules above and are re-exported here.
@@ -167,6 +177,13 @@ class Map(
     # widget every frontend resolves when it displays the view.
     app_layout = traitlets.Unicode("embed").tag(sync=True)
     theme = traitlets.Unicode("light").tag(sync=True)
+    # Single pieces of app chrome: True shows, False hides, None keeps the app's
+    # default (the layout preset and the viewer's saved settings). They become
+    # URL params on the app iframe, so changing one after display reloads it.
+    toolbar = traitlets.Bool(None, allow_none=True).tag(sync=True)
+    layer_panel = traitlets.Bool(None, allow_none=True).tag(sync=True)
+    style_panel = traitlets.Bool(None, allow_none=True).tag(sync=True)
+    status_bar = traitlets.Bool(None, allow_none=True).tag(sync=True)
     # Bumped on every Python-initiated project change; echoed by the app.
     _seq = traitlets.Int(0).tag(sync=True)
     # Last error reported by the app (e.g. an invalid project).
@@ -184,12 +201,16 @@ class Map(
         zoom: float | None = None,
         *,
         basemap: str | None = None,
-        renderer: str = "maplibre",
+        renderer: str | None = None,
         height: str = "800px",
         app_layout: str | None = None,
         layout: Any = None,
-        theme: str = "light",
+        theme: str | None = None,
         server_proxy: bool | str = "auto",
+        toolbar: bool | None = None,
+        layer_panel: bool | None = None,
+        style_panel: bool | None = None,
+        status_bar: bool | None = None,
         **kwargs: Any,
     ) -> None:
         """Create a GeoLibre map.
@@ -198,14 +219,18 @@ class Map(
             center: Initial ``[lng, lat]`` map center.
             zoom: Initial zoom level.
             basemap: A basemap name or MapLibre style URL for the background.
-            renderer: ``"maplibre"`` (default), ``"cesium"``, ``"mapbox"``, or ``"arcgis"``.
+            renderer: ``"maplibre"`` (default), ``"cesium"``, ``"mapbox"``, or
+                ``"arcgis"``. Defaults to the ``GEOLIBRE_RENDERER`` environment
+                variable when set. Switch a live map with :meth:`set_renderer`.
             height: CSS height of the widget (e.g. ``"800px"``).
             app_layout: ``"embed"`` (compact UI, the default), ``"full"`` (full
-                desktop UI), or ``"maponly"`` (map without chrome).
+                desktop UI), or ``"maponly"`` (map without chrome). Defaults to
+                the ``GEOLIBRE_APP_LAYOUT`` environment variable when set.
             layout: An ``ipywidgets.Layout`` for the widget, as on any other
                 ipywidgets widget. Its ``height`` overrides ``height``. Passing
                 an ``app_layout`` string here is deprecated.
-            theme: ``"light"`` or ``"dark"``.
+            theme: ``"light"`` (the default) or ``"dark"``. Defaults to the
+                ``GEOLIBRE_THEME`` environment variable when set.
             server_proxy: How the browser reaches the bundled app.
                 ``"auto"`` (default) serves the app directly from localhost for
                 local Jupyter and VS Code, and switches to a remote-aware path
@@ -220,6 +245,20 @@ class Map(
                 remote server (Binder, remote JupyterLab), or ``False`` to force
                 the direct localhost path. Google Colab is detected separately and
                 always uses its own port proxy.
+            toolbar: Show (``True``) or hide (``False``) the top toolbar and
+                its menus. ``None`` (default) reads ``GEOLIBRE_TOOLBAR``, else
+                keeps the layout's default.
+            layer_panel: Show or hide the Layers panel. ``None`` reads
+                ``GEOLIBRE_LAYER_PANEL``, else keeps the viewer's saved setting.
+            style_panel: Show or hide the Style (symbology) panel. ``None``
+                reads ``GEOLIBRE_STYLE_PANEL``, else keeps the saved setting.
+            status_bar: Show or hide the bottom status bar. ``None`` reads
+                ``GEOLIBRE_STATUS_BAR``, else keeps the layout's default.
+
+                Environment variables accept ``true``/``false``, ``1``/``0``,
+                ``on``/``off``, ``yes``/``no``, and ``show``/``hide``. An
+                explicit argument always wins over the environment, and
+                ``app_layout="maponly"`` hides all chrome whatever these say.
             **kwargs: Forwarded to ``anywidget.AnyWidget``.
         """
         if isinstance(layout, str):
@@ -232,20 +271,50 @@ class Map(
                 stacklevel=2,
             )
             app_layout, layout = layout, None
+        # Name the environment variable in the error when the value came from it.
+        layout_source = "app_layout"
         if app_layout is None:
-            app_layout = "embed"
+            app_layout = os.environ.get(APP_LAYOUT_ENV, "").strip().lower()
+            layout_source = APP_LAYOUT_ENV if app_layout else layout_source
+            app_layout = app_layout or "embed"
+        theme_source = "theme"
+        if theme is None:
+            theme = os.environ.get(THEME_ENV, "").strip().lower()
+            theme_source = THEME_ENV if theme else theme_source
+            theme = theme or "light"
+        renderer_source = "renderer"
+        if renderer is None:
+            renderer = os.environ.get(RENDERER_ENV, "").strip().lower()
+            renderer_source = RENDERER_ENV if renderer else renderer_source
+            renderer = renderer or "maplibre"
+        if renderer not in _VALID_RENDERERS:
+            raise ValueError(
+                f"{renderer_source} must be one of {sorted(_VALID_RENDERERS)}, got {renderer!r}"
+            )
+        chrome = _resolve_chrome(
+            {
+                "toolbar": toolbar,
+                "layer_panel": layer_panel,
+                "style_panel": style_panel,
+                "status_bar": status_bar,
+            }
+        )
         if app_layout not in _VALID_LAYOUTS:
             raise ValueError(
-                f"app_layout must be one of {sorted(_VALID_LAYOUTS)}, got {app_layout!r}"
+                f"{layout_source} must be one of {sorted(_VALID_LAYOUTS)}, got {app_layout!r}"
             )
         if theme not in _VALID_THEMES:
-            raise ValueError(f"theme must be one of {sorted(_VALID_THEMES)}, got {theme!r}")
+            raise ValueError(
+                f"{theme_source} must be one of {sorted(_VALID_THEMES)}, got {theme!r}"
+            )
         if layout is not None:
             kwargs["layout"] = layout
         super().__init__(**kwargs)
         self.height = height
         self.app_layout = app_layout
         self.theme = theme
+        for key, value in chrome.items():
+            setattr(self, key, value)
         self._watch_layout_height(self.layout)
         self._remote_mode = self._resolve_remote_mode(server_proxy)
         # Always start the localhost bundle server. Locally it is the app origin;
@@ -620,7 +689,8 @@ class Map(
         The page embeds the GeoLibre app in an ``<iframe>`` and injects the
         current project into it over the same ``postMessage`` bridge the widget
         uses, so it renders the map exactly as configured here, in this map's
-        :attr:`app_layout` and :attr:`theme`. Unlike
+        :attr:`app_layout`, :attr:`theme`, and chrome toggles (such as
+        :attr:`toolbar` and :attr:`layer_panel`). Unlike
         :meth:`to_image` this needs no running kernel to view; by default it
         loads the hosted GeoLibre app over the network so the file stays
         portable.
@@ -654,6 +724,7 @@ class Map(
             app_url=app_url,
             layout=self.app_layout,
             theme=self.theme,
+            chrome={key: getattr(self, key) for key in CHROME_TOGGLES},
         )
         if path is not None:
             out = pathlib.Path(path).expanduser()
