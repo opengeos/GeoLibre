@@ -53,6 +53,11 @@ categories:
 | `network` | Failed requests: an HTTP error status such as `GET 404 Not Found`, or a request that never completed (`request failed (network/TLS/CORS)` or `timed out`), with a hint about the likely cause. |
 | `runtime` | Uncaught exceptions and promise rejections, a part of the interface that crashed, and plugin failures. |
 
+When a map style asks for an icon its sprite lacks, as the default basemap does
+for some places at street level, MapLibre warns `Image "…" could not be loaded`
+and the map draws that label without an icon. Those entries are recorded as
+info: they are listed, but not counted in the status bar.
+
 The filter buttons along the top show all entries, errors, warnings, or network
 entries. By default only failed requests are logged; tick
 **Log all network requests** to record successful and aborted requests too from
