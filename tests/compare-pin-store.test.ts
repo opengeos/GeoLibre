@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { beforeEach, describe, it } from "node:test";
 import type { FeatureCollection } from "geojson";
 import { setHistoryCoalesceMs } from "../packages/core/src/history";
-import { type AppState, useAppStore } from "../packages/core/src/store";
+import { type AppState, redo, undo, useAppStore } from "../packages/core/src/store";
 import { pinSelectedFeature } from "../apps/geolibre-desktop/src/lib/selection-actions";
 
 function store(): AppState {
@@ -63,6 +63,30 @@ describe("the compare pin", () => {
     assert.equal(store().comparePin?.layerId, layerId, "ungrouping keeps the layer");
     const regrouped = store().addLayerGroup("Lots", [layerId]);
     store().removeLayerGroup(regrouped, { removeChildren: true });
+    assert.equal(store().comparePin, null);
+  });
+
+  it("records the matched feature's id when a stale id is selected too", () => {
+    store().selectLayer(layerId);
+    store().selectFeatures(["gone", "b"]);
+    assert.equal(pinSelectedFeature(), true);
+    assert.equal(store().comparePin?.featureId, "b");
+  });
+
+  it("is cleared when undo removes its layer, and stays cleared on redo", () => {
+    const added = store().addGeoJsonLayer("Roads", parcels);
+    store().setComparePin({ layerId: added, featureId: "a", properties: {} });
+    undo();
+    assert.equal(
+      store().layers.some((layer) => layer.id === added),
+      false,
+    );
+    assert.equal(store().comparePin, null);
+    redo();
+    assert.equal(
+      store().layers.some((layer) => layer.id === added),
+      true,
+    );
     assert.equal(store().comparePin, null);
   });
 

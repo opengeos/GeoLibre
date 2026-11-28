@@ -1484,8 +1484,12 @@ export const MapCanvas = memo(function MapCanvas({
     // popup opened beside it. Same off->on guard as the photo-popup effect:
     // this listener runs on every store change, so testing the current value
     // alone would keep clearing a tip the user is still reading.
+    // A pin change re-keys this effect only when it changes which layers want a
+    // tip, so a comparison could outlive "Stop comparing" (or show the old pin)
+    // under a motionless cursor. Drop it; the next move draws the right tip.
     const unsubscribeIdentify = useAppStore.subscribe((state, prev) => {
       if (state.identifyLayerId && !prev.identifyLayerId) removeTooltip();
+      else if (state.comparePin !== prev.comparePin) removeTooltip();
     });
 
     return () => {

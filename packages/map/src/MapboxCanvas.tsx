@@ -392,6 +392,9 @@ export function MapboxCanvas({
         cleanupTasks.push(unsubscribe);
         const stopHoverWatch = useAppStore.subscribe((state, previous) => {
           if (!state.hoverTooltipsEnabled && previous.hoverTooltipsEnabled) removeHoverTooltip();
+          // A comparison drawn against the old pin (or none) must not outlive
+          // the change under a motionless cursor; the next move redraws.
+          else if (state.comparePin !== previous.comparePin) removeHoverTooltip();
         });
         cleanupTasks.push(stopHoverWatch);
         if (!viewId) {

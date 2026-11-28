@@ -143,11 +143,14 @@ export function compareFeatureProperties(
   const pinnedRows = resolvePopupRows(pinned, rowOptions).filter((row) => !isImageRow(row));
   const pinnedByField = new Map(pinnedRows.map((row) => [row.field, row]));
   const hoveredFields = new Set(hoveredRows.map((row) => row.field));
-  const configs = new Map(
-    (Array.isArray(popup?.fields) ? popup.fields : [])
-      .filter((config): config is PopupFieldConfig => typeof config?.field === "string")
-      .map((config) => [config.field, config]),
-  );
+  // The first configuration of a field wins, as in `resolvePopupRows`, so the
+  // delta follows the same kind the row is displayed with.
+  const configs = new Map<string, PopupFieldConfig>();
+  for (const config of Array.isArray(popup?.fields) ? popup.fields : []) {
+    if (typeof config?.field === "string" && !configs.has(config.field)) {
+      configs.set(config.field, config);
+    }
+  }
 
   const differing: CompareRow[] = [];
   let sameCount = 0;
@@ -166,7 +169,11 @@ export function compareFeatureProperties(
       label,
       text,
       pinnedText,
-      ...(a !== null && b !== null ? { delta: formatDelta(a - b, config, locale) } : {}),
+      // Only rows that will be listed get a delta: formatting one builds
+      // number formatters, and this runs on every hovered frame.
+      ...(differing.length < maxRows && a !== null && b !== null
+        ? { delta: formatDelta(a - b, config, locale) }
+        : {}),
     });
   };
   for (const row of hoveredRows) compare(row.field, row.label, row, pinnedByField.get(row.field));

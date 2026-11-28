@@ -803,6 +803,15 @@ export function ArcgisCanvas({
           // its popup but is defined before these closures exist.
           const stopIdentifyWatch = useAppStore.subscribe((state, previous) => {
             if (!state.hoverTooltipsEnabled && previous.hoverTooltipsEnabled) removeHoverTip();
+            // A comparison drawn against the old pin (or none) must not outlive
+            // the change under a motionless cursor, nor a frame already queued
+            // redraw it; the next pointer move draws the right tip.
+            if (state.comparePin !== previous.comparePin) {
+              if (hoverFrame) cancelAnimationFrame(hoverFrame);
+              hoverFrame = 0;
+              hoverPending = null;
+              removeHoverTip();
+            }
             if (state.identifyLayerId && !previous.identifyLayerId) {
               removePhotoPopup();
               removeHoverTip();

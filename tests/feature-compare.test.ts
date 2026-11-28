@@ -153,6 +153,19 @@ describe("compareFeatureProperties", () => {
     assert.equal(result.rows.length, 8);
     assert.equal(result.moreCount, 4);
   });
+
+  it("follows a field's first popup configuration, as the popup does", () => {
+    const popup: LayerPopupConfig = {
+      fields: [
+        { field: "sold", kind: "date" },
+        { field: "sold", kind: "number" },
+      ],
+    };
+    const day = 86_400_000;
+    const result = compareFeatureProperties({ sold: 2 * day }, { sold: day }, { popup });
+    assert.equal(result.rows.length, 1);
+    assert.equal(result.rows[0].delta, undefined, "dates are not subtracted");
+  });
 });
 
 describe("wantsHoverTooltip", () => {
