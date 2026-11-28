@@ -371,6 +371,9 @@ jobs:
           github_token: ${{ github.token }}
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           allowed_non_write_users: "*"
+          # claude-code-action 1.0.288 and later skip a fork's pull request unless this is set;
+          # the job above already decides when a fork is handled (see the header).
+          allow_fork_prs: "true"
           prompt: |
             You are resolving merge conflicts on pull request ${{ github.repository }}#${{ github.event.pull_request.number }}. Its base branch `${{ github.event.pull_request.base.ref }}` has been merged into its head, and the files listed in `.autofix/conflicts.txt` have conflicts. The working directory is that unfinished merge.
 
@@ -458,6 +461,9 @@ jobs:
           github_token: ${{ github.token }}
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           allowed_non_write_users: "*"
+          # claude-code-action 1.0.288 and later skip a fork's pull request unless this is set;
+          # the job above already decides when a fork is handled (see the header).
+          allow_fork_prs: "true"
           prompt: |
             You are addressing the open review threads on pull request ${{ github.repository }}#${{ github.event.pull_request.number }}. The working directory is the pull request's head${{ steps.merge.outputs.conflicts != '0' && ', with its base branch just merged in' || '' }}.
 
