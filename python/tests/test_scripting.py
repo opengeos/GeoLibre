@@ -21,6 +21,23 @@ import geolibre.geolibre as gmod
 from geolibre.geolibre import Feature, Layer, Map
 from geolibre.project import redact_credentials
 
+_CHROME_ENV = (
+    "GEOLIBRE_TOOLBAR",
+    "GEOLIBRE_LAYER_PANEL",
+    "GEOLIBRE_STYLE_PANEL",
+    "GEOLIBRE_STATUS_BAR",
+    "GEOLIBRE_APP_LAYOUT",
+    "GEOLIBRE_THEME",
+    "GEOLIBRE_RENDERER",
+)
+
+
+@pytest.fixture(autouse=True)
+def _no_geolibre_env(monkeypatch):
+    """Keep GEOLIBRE_* defaults in the developer's shell out of every test."""
+    for name in _CHROME_ENV:
+        monkeypatch.delenv(name, raising=False)
+
 
 @pytest.fixture
 def m(monkeypatch):
@@ -1175,8 +1192,9 @@ def test_layout_is_the_ipywidgets_layout_not_the_app_chrome(stub_app_server):
 
 def test_frontend_reads_the_renamed_app_layout_trait():
     source = (pathlib.Path(gmod.__file__).parent / "_frontend.js").read_text(encoding="utf-8")
-    assert 'model.get("app_layout")' in source
-    assert 'model.get("layout")' not in source
+    assert "appQuery((name) => model.get(name))" in source
+    assert 'get("app_layout")' in source
+    assert 'get("layout")' not in source
 
 
 def test_layout_string_is_a_deprecated_alias_for_app_layout(stub_app_server):
@@ -1253,3 +1271,106 @@ def test_rejected_constructor_does_not_leave_a_layout_widget():
         Map(app_layout="sidebar")
     gc.collect()
     assert set(ipywidgets.widgets.widget._instances) == before
+
+
+def test_chrome_toggles_default_to_the_app_defaults(stub_app_server, monkeypatch):
+    m = Map()
+    assert (m.toolbar, m.layer_panel, m.style_panel, m.status_bar) == (None,) * 4
+    assert (m.app_layout, m.theme) == ("embed", "light")
+
+
+def test_chrome_toggles_from_arguments_sync_to_the_frontend(stub_app_server, monkeypatch):
+    m = Map(toolbar=False, layer_panel=False, style_panel=True, status_bar=False)
+    state = m.get_state()
+    assert state["toolbar"] is False
+    assert state["layer_panel"] is False
+    assert state["style_panel"] is True
+    assert state["status_bar"] is False
+
+
+def test_chrome_toggles_read_environment_variables(stub_app_server, monkeypatch):
+    monkeypatch.setenv("GEOLIBRE_TOOLBAR", "off")
+    monkeypatch.setenv("GEOLIBRE_LAYER_PANEL", "Hidden")
+    monkeypatch.setenv("GEOLIBRE_STYLE_PANEL", "1")
+    monkeypatch.setenv("GEOLIBRE_APP_LAYOUT", "full")
+    monkeypatch.setenv("GEOLIBRE_THEME", "dark")
+    m = Map()
+    assert (m.toolbar, m.layer_panel, m.style_panel, m.status_bar) == (False, False, True, None)
+    assert (m.app_layout, m.theme) == ("full", "dark")
+
+
+def test_chrome_arguments_win_over_environment_variables(stub_app_server, monkeypatch):
+    monkeypatch.setenv("GEOLIBRE_LAYER_PANEL", "false")
+    monkeypatch.setenv("GEOLIBRE_APP_LAYOUT", "maponly")
+    m = Map(layer_panel=True, app_layout="full")
+    assert m.layer_panel is True
+    assert m.app_layout == "full"
+
+
+def test_unrecognized_chrome_environment_value_warns_and_is_ignored(stub_app_server, monkeypatch):
+    monkeypatch.setenv("GEOLIBRE_STATUS_BAR", "sometimes")
+    with pytest.warns(UserWarning, match="GEOLIBRE_STATUS_BAR"):
+        m = Map()
+    assert m.status_bar is None
+
+
+def test_invalid_layout_environment_variable_is_named(stub_app_server, monkeypatch):
+    monkeypatch.setenv("GEOLIBRE_APP_LAYOUT", "tiny")
+    with pytest.raises(ValueError, match="GEOLIBRE_APP_LAYOUT"):
+        Map()
+
+
+def test_chrome_toggle_rejects_non_bool(stub_app_server, monkeypatch):
+    with pytest.raises(TypeError, match="layer_panel"):
+        Map(layer_panel="no")
+
+
+def test_to_html_carries_the_chrome_toggles(monkeypatch):
+    monkeypatch.setattr(gmod, "serve_app", lambda *_a, **_k: "http://127.0.0.1:0/")
+    monkeypatch.setattr(gmod, "app_port", lambda: 0)
+    html = Map(
+        app_layout="full", toolbar=False, layer_panel=False, style_panel=True, status_bar=None
+    ).to_html(app_url="https://example.com/app")
+    assert (
+        'src="https://example.com/app?embed=1&amp;theme=light&amp;toolbar=hidden'
+        '&amp;layerPanel=hidden&amp;stylePanel=visible"'
+    ) in html
+
+
+def test_render_project_html_rejects_unknown_chrome_keys():
+    with pytest.raises(ValueError, match="unknown chrome keys"):
+        gmod.render_project_html({"layers": []}, chrome={"menus": False})
+
+
+def test_renderer_reads_its_environment_variable(stub_app_server, monkeypatch):
+    assert Map().get_renderer() == "maplibre"
+    monkeypatch.setenv("GEOLIBRE_RENDERER", "Cesium")
+    assert Map().get_renderer() == "cesium"
+    assert Map(renderer="maplibre").get_renderer() == "maplibre"
+
+
+def test_invalid_renderer_environment_variable_is_named(stub_app_server, monkeypatch):
+    monkeypatch.setenv("GEOLIBRE_RENDERER", "leaflet")
+    with pytest.raises(ValueError, match="GEOLIBRE_RENDERER"):
+        Map()
+
+
+def test_chrome_toggle_lists_agree_across_python_js_and_the_app():
+    # The same toggle list lives in three files; adding one in only some of
+    # them would fail silently, so pin them together here.
+    import re
+
+    from geolibre._map_support import CHROME_TOGGLES
+
+    frontend = (pathlib.Path(gmod.__file__).parent / "_frontend.js").read_text(encoding="utf-8")
+    block = re.search(r"export const CHROME_TOGGLES = \{(.*?)\};", frontend, re.S).group(1)
+    js = dict(re.findall(r"(\w+): \"(\w+)\"", block))
+    assert js == {key: param for key, (param, _env) in CHROME_TOGGLES.items()}
+
+    app = pathlib.Path(gmod.__file__).parents[3] / "apps/geolibre-desktop/src/lib/layout-params.ts"
+    if not app.exists():
+        pytest.skip("app sources are not next to this checkout")
+    match = re.search(r"CHROME_TOGGLE_PARAMS = \[(.*?)\]", app.read_text(encoding="utf-8"), re.S)
+    app_params = set(re.findall(r'"(\w+)"', match.group(1)))
+    # The toolbar predates the per-element toggles and has its own param.
+    assert app_params == {param for param, _env in CHROME_TOGGLES.values()} - {"toolbar"}

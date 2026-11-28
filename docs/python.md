@@ -215,8 +215,61 @@ Map(
     height="800px",
     app_layout="embed",  # "embed" (compact UI), "full" (desktop UI), or "maponly"
     theme="light",       # "light" or "dark"
+    toolbar=True,        # top toolbar and its menus
+    layer_panel=True,    # Layers panel
+    style_panel=True,    # Style (symbology) panel
+    status_bar=True,     # bottom status bar
 )
 ```
+
+### Show or hide parts of the UI
+
+`toolbar`, `layer_panel`, `style_panel`, and `status_bar` each take `True` (show),
+`False` (hide), or `None` (the default: keep the layout's default and the
+viewer's saved settings). For example, a map with menus but no side panels:
+
+```python
+m = Map(layer_panel=False, style_panel=False)
+```
+
+They are also traits, so changing one on a displayed map reloads the app with
+the new chrome and replays the project into it:
+
+```python
+m.toolbar = False
+```
+
+A reload starts the app fresh, so change these between interactions rather than
+mid-edit: a UI edit from the last moment before the change may not have synced
+back to Python yet, and a `get_*` query still waiting on the old app times out.
+
+`app_layout="maponly"` hides all chrome no matter what these say. Exports from
+`to_html()` carry the same settings.
+
+Each option, plus `app_layout`, `theme`, and `renderer`, falls back to an environment
+variable when it is not passed, so a deployment can set the look of every map
+without changing notebook code. An explicit argument always wins.
+
+| Argument      | Environment variable   | Values                                                          |
+| ------------- | ---------------------- | --------------------------------------------------------------- |
+| `toolbar`     | `GEOLIBRE_TOOLBAR`     | `true`/`false`, `1`/`0`, `on`/`off`, `yes`/`no`, `show`/`hide` |
+| `layer_panel` | `GEOLIBRE_LAYER_PANEL` | as above                                                        |
+| `style_panel` | `GEOLIBRE_STYLE_PANEL` | as above                                                        |
+| `status_bar`  | `GEOLIBRE_STATUS_BAR`  | as above                                                        |
+| `app_layout`  | `GEOLIBRE_APP_LAYOUT`  | `embed`, `full`, or `maponly`                                   |
+| `theme`       | `GEOLIBRE_THEME`       | `light` or `dark`                                               |
+| `renderer`    | `GEOLIBRE_RENDERER`    | `maplibre`, `cesium`, `mapbox`, or `arcgis`                     |
+
+```bash
+export GEOLIBRE_LAYER_PANEL=hide
+export GEOLIBRE_STYLE_PANEL=hide
+jupyter lab
+```
+
+An unrecognized value for one of the four toggles is ignored with a warning; an
+invalid `GEOLIBRE_APP_LAYOUT`, `GEOLIBRE_THEME`, or `GEOLIBRE_RENDERER` raises
+`ValueError`. To switch the rendering engine of a displayed map, call
+`m.set_renderer("cesium")`.
 
 ## Interactive scripting
 
@@ -298,7 +351,7 @@ m.on_layer_change(lambda e: print("layers", e["layerIds"]))
 
 | Method | Description |
 | --- | --- |
-| `Map(center, zoom, basemap=, renderer=, height=, app_layout=, layout=, theme=, server_proxy=)` | Create a map. `app_layout` picks the app chrome; `layout` takes an `ipywidgets.Layout`, as on any widget, and its `height` also sizes the map. Passing a chrome string as `layout=` still works but is deprecated. |
+| `Map(center, zoom, basemap=, renderer=, height=, app_layout=, layout=, theme=, server_proxy=, toolbar=, layer_panel=, style_panel=, status_bar=)` | Create a map. `app_layout` picks the app chrome, and `toolbar`/`layer_panel`/`style_panel`/`status_bar` show or hide single parts of it (see [Show or hide parts of the UI](#show-or-hide-parts-of-the-ui)); `layout` takes an `ipywidgets.Layout`, as on any widget, and its `height` also sizes the map. Passing a chrome string as `layout=` still works but is deprecated. |
 | `add_geojson(data, name=, **style)` | Add GeoJSON from a dict, file path, URL, JSON string, or GeoDataFrame. |
 | `add_gdf(gdf, name=, column=None, **style)` | Add a GeoDataFrame, optionally as a choropleth. |
 | `add_csv(data, x="longitude", y="latitude", name=, **style)` / `add_xy_data(...)` | Add points from a CSV path, URL, text, DataFrame, or row mappings. |

@@ -11,6 +11,7 @@ from typing import Any
 from . import project as _project
 from ._map_support import _VALID_LAYOUTS as _VALID_LAYOUTS
 from ._map_support import _VALID_THEMES as _VALID_THEMES
+from ._map_support import CHROME_TOGGLES, _chrome_query_flags
 
 
 def _html_escape(value: str) -> str:
@@ -87,6 +88,7 @@ def render_project_html(
     app_url: str | None = None,
     layout: str | None = None,
     theme: str | None = None,
+    chrome: dict[str, bool | None] | None = None,
 ) -> str:
     """Render a project dict as a standalone HTML page.
 
@@ -109,6 +111,10 @@ def render_project_html(
             ``"maponly"``, as for :class:`Map`. ``None`` leaves the app's
             default chrome.
         theme: ``"light"`` or ``"dark"``; ``None`` follows the viewer's OS.
+        chrome: Show (``True``) or hide (``False``) single pieces of chrome,
+            keyed ``toolbar``, ``layer_panel``, ``style_panel``, and
+            ``status_bar``, as for :class:`Map`. A missing or ``None`` entry
+            keeps the app's default. Environment variables are not consulted.
 
     Returns:
         The HTML document as a string.
@@ -158,6 +164,14 @@ def render_project_html(
         flags.append("layout=embed")
     if theme is not None:
         flags.append(f"theme={theme}")
+    if chrome:
+        unknown = set(chrome) - set(CHROME_TOGGLES)
+        if unknown:
+            raise ValueError(f"to_html: unknown chrome keys {sorted(unknown)}")
+        for key, value in chrome.items():
+            if value is not None and not isinstance(value, bool):
+                raise TypeError(f"to_html: chrome[{key!r}] must be True, False, or None")
+        flags.extend(_chrome_query_flags(chrome))
     base, hash_sep, fragment = base_url.partition("#")
     # A layout/theme key the app_url already sets wins, like the in-app
     # exporter's flags. embed=1 is forced: without embed mode the app never

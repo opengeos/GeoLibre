@@ -12,7 +12,12 @@ import {
   INLINE_PROJECT_FRAGMENT_KEY,
   INLINE_VIEWER_FRAGMENT_KEY,
 } from "./inline-project-fragment";
-import { arePanelsHidden, HIDDEN_PANEL_VALUES, normalizedParam } from "./layout-params";
+import {
+  arePanelsHidden,
+  CHROME_TOGGLE_PARAMS,
+  HIDDEN_PANEL_VALUES,
+  normalizedParam,
+} from "./layout-params";
 
 // Hosted viewer used as the default embed target (matches Python's default).
 export const DEFAULT_VIEWER_BASE_URL = "https://web.geolibre.app/";
@@ -91,7 +96,14 @@ function withViewerFlags(
 
 // Query params that pick the app's chrome (see useLayoutOptions); an export
 // carries the exporting app's values so it opens looking the same (#2764).
-const CHROME_PARAMS = ["layout", "maponly", "toolbar", "panels", "hidePanels"] as const;
+const CHROME_PARAMS = [
+  "layout",
+  "maponly",
+  "toolbar",
+  "panels",
+  "hidePanels",
+  ...CHROME_TOGGLE_PARAMS,
+] as const;
 
 export interface ViewerChromeState {
   /** The theme the exporting app is showing. */
@@ -102,7 +114,8 @@ export interface ViewerChromeState {
 
 /**
  * The viewer query params that reproduce the exporting app's chrome: its own
- * layout params (`layout`, `maponly`, `toolbar`, `panels`, `hidePanels`), the
+ * layout params (`layout`, `maponly`, `toolbar`, `panels`, `hidePanels`,
+ * `layerPanel`, `stylePanel`, `statusBar`), the
  * current theme, and `panels=collapsed` while the Layers panel is collapsed.
  *
  * Args:

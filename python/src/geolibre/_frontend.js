@@ -216,6 +216,41 @@ async function appReachable(base, signal) {
   }
 }
 
+// Chrome toggles synced from Python (trait name -> app query param). `true`
+// shows and `false` hides that piece of chrome; `null` leaves the app's default.
+// Mirrors CHROME_TOGGLES in _map_support.py.
+export const CHROME_TOGGLES = {
+  toolbar: "toolbar",
+  layer_panel: "layerPanel",
+  style_panel: "stylePanel",
+  status_bar: "statusBar",
+};
+
+// The app's query string for this model: embed mode, theme, layout preset, and
+// the chrome toggles. `get` reads a trait (model.get).
+export function appQuery(get) {
+  const layout = get("app_layout") || "embed";
+  const params = new URLSearchParams({ embed: "1", theme: get("theme") || "light" });
+  if (layout === "maponly") {
+    params.set("maponly", "1");
+  } else if (layout !== "full") {
+    params.set("layout", "embed");
+  }
+  for (const [trait, param] of Object.entries(CHROME_TOGGLES)) {
+    const value = get(trait);
+    if (value === null || value === undefined) continue;
+    // The app has no "force visible" toolbar value; it is visible by default.
+    if (trait === "toolbar" && value) continue;
+    params.set(param, value ? "visible" : "hidden");
+  }
+  return params.toString();
+}
+
+// How long a chrome change waits before reloading the app, so a cell that sets
+// several chrome traits (`m.toolbar = True; m.status_bar = True`) reloads
+// once with the final URL instead of once per trait.
+export const CHROME_RELOAD_DELAY_MS = 50;
+
 async function render({ model, el }) {
   const iframe = document.createElement("iframe");
   iframe.style.width = "100%";
@@ -245,14 +280,8 @@ async function render({ model, el }) {
     return;
   }
 
-  const layout = model.get("app_layout") || "embed";
-  const params = new URLSearchParams({ embed: "1", theme: model.get("theme") || "light" });
-  if (layout === "maponly") {
-    params.set("maponly", "1");
-  } else if (layout !== "full") {
-    params.set("layout", "embed");
-  }
-  iframe.src = `${base}index.html?${params.toString()}`;
+  const appSrc = () => `${base}index.html?${appQuery((name) => model.get(name))}`;
+  iframe.src = appSrc();
   // replaceChildren clears any placeholder text set above before mounting.
   el.replaceChildren(iframe);
 
@@ -360,6 +389,10 @@ async function render({ model, el }) {
       pushUiState({ identify: false });
       flushCommands();
     } else if (data.type === "geolibre:state") {
+      // A chrome change reloads the iframe and clears `ready`. Until the new
+      // document says ready, a snapshot can only come from the departing one,
+      // and writing it could overwrite a project Python set during the reload.
+      if (!ready) return;
       // Record the project object that came from the app, then write it back to
       // Python. onProjectChange skips pushing whatever value is still identical
       // to this reference, so the app's own state is never echoed back.
@@ -422,9 +455,30 @@ async function render({ model, el }) {
     iframe.style.height = model.get("height") || "800px";
   };
   const onUiChange = () => pushUiState();
+  // The chrome toggles are URL params the app reads once at startup, so a
+  // change reloads the iframe. The reloaded app signals geolibre:ready again,
+  // which re-sends the project and UI state; commands wait in the queue.
+  let chromeReloadTimer = null;
+  const reloadForChrome = () => {
+    chromeReloadTimer = null;
+    // `toolbar` None and True both emit no param, so a trait change can leave
+    // the URL as it was; reloading then would only drop unsynced UI state.
+    const src = appSrc();
+    if (src === iframe.getAttribute("src")) return;
+    ready = false;
+    iframe.src = src;
+  };
+  const onChromeChange = () => {
+    if (chromeReloadTimer !== null) clearTimeout(chromeReloadTimer);
+    chromeReloadTimer = setTimeout(reloadForChrome, CHROME_RELOAD_DELAY_MS);
+  };
+  // One registration per event: hosts other than Jupyter (e.g. marimo) do not
+  // split Backbone-style space-separated event names.
+  const chromeEvents = Object.keys(CHROME_TOGGLES).map((trait) => `change:${trait}`);
   model.on("change:project", onProjectChange);
   model.on("change:height", onHeight);
   model.on("change:_ui", onUiChange);
+  for (const event of chromeEvents) model.on(event, onChromeChange);
 
   return () => {
     window.removeEventListener("message", onMessage);
@@ -432,6 +486,8 @@ async function render({ model, el }) {
     model.off("change:project", onProjectChange);
     model.off("change:height", onHeight);
     model.off("change:_ui", onUiChange);
+    for (const event of chromeEvents) model.off(event, onChromeChange);
+    if (chromeReloadTimer !== null) clearTimeout(chromeReloadTimer);
   };
 }
 

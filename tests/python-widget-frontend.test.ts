@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { afterEach, describe, it } from "node:test";
 
 import widget, {
+  appQuery,
+  CHROME_RELOAD_DELAY_MS,
   canProxyLocalFiles,
   rewriteProxiedLocalFileUrls,
 } from "../python/src/geolibre/_frontend.js";
@@ -138,6 +140,44 @@ describe("rewriteProxiedLocalFileUrls", () => {
   });
 });
 
+describe("appQuery", () => {
+  const query = (values: Record<string, unknown>) =>
+    Object.fromEntries(new URLSearchParams(appQuery((key: string) => values[key])));
+
+  it("leaves the app's chrome defaults alone when no toggle is set", () => {
+    assert.deepEqual(query({ app_layout: "embed", theme: "dark", toolbar: null }), {
+      embed: "1",
+      theme: "dark",
+      layout: "embed",
+    });
+  });
+
+  it("maps the chrome toggles to the app's query params", () => {
+    assert.deepEqual(
+      query({
+        app_layout: "full",
+        theme: "light",
+        toolbar: false,
+        layer_panel: false,
+        style_panel: true,
+        status_bar: false,
+      }),
+      {
+        embed: "1",
+        theme: "light",
+        toolbar: "hidden",
+        layerPanel: "hidden",
+        stylePanel: "visible",
+        statusBar: "hidden",
+      },
+    );
+  });
+
+  it("adds nothing for a shown toolbar, which is the app default", () => {
+    assert.equal(query({ app_layout: "full", toolbar: true }).toolbar, undefined);
+  });
+});
+
 describe("canProxyLocalFiles", () => {
   const setWindow = (extras: Record<string, unknown> = {}) => {
     (globalThis as Record<string, unknown>).window = {
@@ -263,5 +303,74 @@ describe("widget control replay (GeoLibre#3241)", () => {
     assert.deepEqual(controlCommands(), [
       { control: "measure", visible: true, options: { collapsed: false } },
     ]);
+  });
+
+  it("reloads the app with new chrome params and replays state on ready", async () => {
+    (globalThis as Record<string, unknown>).window = {
+      location: { href: "http://localhost:8888/lab" },
+      addEventListener: (_type: string, handler: (event: unknown) => void) => {
+        onMessage = handler;
+      },
+      removeEventListener: () => {},
+    };
+    // Count navigations: assigning src on a real iframe reloads it even when
+    // the value is unchanged.
+    let currentSrc: string | undefined;
+    let navigations = 0;
+    const iframe = {
+      style: {},
+      contentWindow,
+      get src() {
+        return currentSrc;
+      },
+      set src(value: string | undefined) {
+        currentSrc = value;
+        navigations += 1;
+      },
+      getAttribute: (name: string) => (name === "src" ? currentSrc : undefined),
+    };
+    const settle = () => new Promise((resolve) => setTimeout(resolve, CHROME_RELOAD_DELAY_MS + 20));
+    (globalThis as Record<string, unknown>).document = {
+      createElement: () => iframe,
+      getElementById: () => null,
+    };
+    const model = fakeModel({
+      _app_url: appUrl,
+      app_layout: "full",
+      project: { layers: [] },
+      _ui: {},
+      layer_panel: null,
+    });
+    await widget.render({ model, el: { replaceChildren: () => {} } } as never);
+    assert.ok(!iframe.src?.includes("layerPanel"));
+    ready();
+    posted.length = 0;
+
+    assert.equal(navigations, 1);
+
+    // toolbar None -> True emits no param, so the app must not reload.
+    model.update("toolbar", true);
+    await settle();
+    assert.equal(navigations, 1);
+
+    // Several changes in one cell reload once, with the final URL.
+    model.update("layer_panel", false);
+    model.update("status_bar", false);
+    await settle();
+    assert.equal(navigations, 2);
+    assert.match(iframe.src ?? "", /layerPanel=hidden/);
+    assert.match(iframe.src ?? "", /statusBar=hidden/);
+    // Not ready until the reloaded app says so: nothing is posted yet.
+    model.update("project", { layers: [{ id: "a" }] });
+    assert.equal(posted.length, 0);
+    // A late snapshot from the departing document must not clobber it.
+    onMessage?.({
+      source: contentWindow,
+      origin: new URL(appUrl).origin,
+      data: { type: "geolibre:state", project: { layers: [] } },
+    });
+    assert.deepEqual(model.get("project"), { layers: [{ id: "a" }] });
+    ready();
+    assert.ok(posted.some((message) => message.type === "geolibre:load-project"));
   });
 });
